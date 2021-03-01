@@ -149,7 +149,7 @@ instance Annotate Prim where
 instance Annotate FileUUID.Prim where
   annotate _ = error "annotate not implemented for FileUUID patches"
 
-annotatePIAP :: AnnotateRP p => PatchInfoAnd rt p wX wY -> AnnotatedM ()
+annotatePIAP :: AnnotateRP p => PatchInfoAnd p wX wY -> AnnotatedM ()
 annotatePIAP =
   sequence_ . mapFL annotate . invert . effect . patchcontents . hopefully
 
@@ -198,7 +198,7 @@ complete :: Annotated -> Bool
 complete x = V.all (isJust . fst) $ annotated x
 
 annotate' :: AnnotateRP p
-          => RL (PatchInfoAnd rt p) wX wY
+          => RL (PatchInfoAnd p) wX wY
           -> Annotated
           -> Annotated
 annotate' NilRL ann = ann
@@ -207,7 +207,7 @@ annotate' (ps :<: p) ann
     | otherwise = annotate' ps $ execState (annotatePIAP p) (ann { currentInfo = info p })
 
 annotateFile :: AnnotateRP p
-             => RL (PatchInfoAnd rt p) wX wY
+             => RL (PatchInfoAnd p) wX wY
              -> AnchoredPath
              -> B.ByteString
              -> AnnotateResult
@@ -221,7 +221,7 @@ annotateFile patches inipath inicontent = annotated $ annotate' patches initial
                         }
 
 annotateDirectory :: AnnotateRP p
-                  => RL (PatchInfoAnd rt p) wX wY
+                  => RL (PatchInfoAnd p) wX wY
                   -> AnchoredPath
                   -> [AnchoredPath]
                   -> AnnotateResult

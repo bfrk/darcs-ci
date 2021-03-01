@@ -196,9 +196,9 @@ prepareBundle opts repodir repository = do
   runSelection us' selection_config
                    >>= bundlePatches opts common
 
-prePushChatter :: forall rt p a wX wY wT . (RepoPatch p, ShowPatch a) =>
-                 [DarcsFlag] -> PatchSet rt p Origin wX ->
-                 RL a wT wX -> PatchSet rt p Origin wY -> IO ()
+prePushChatter :: forall p a wX wY wT . (RepoPatch p, ShowPatch a) =>
+                 [DarcsFlag] -> PatchSet p Origin wX ->
+                 RL a wT wX -> PatchSet p Origin wY -> IO ()
 prePushChatter opts us us' them = do
   checkUnrelatedRepos (parseFlags O.allowUnrelatedRepos opts) us them
   let num_to_pull = snd $ countUsThem us them
@@ -211,9 +211,9 @@ prePushChatter opts us us' them = do
   when (nullRL us') $ do putInfo opts $ text "No recorded local patches to push!"
                          exitSuccess
 
-bundlePatches :: forall t rt p wZ wW wA. (RepoPatch p, ApplyState p ~ Tree)
-              => [DarcsFlag] -> PatchSet rt p wA wZ
-              -> (FL (PatchInfoAnd rt p) :> t) wZ wW
+bundlePatches :: forall t p wZ wW wA. (RepoPatch p, ApplyState p ~ Tree)
+              => [DarcsFlag] -> PatchSet p wA wZ
+              -> (FL (PatchInfoAnd p) :> t) wZ wW
               -> IO Doc
 bundlePatches opts common (to_be_pushed :> _) =
     do

@@ -24,7 +24,7 @@ import Darcs.Util.Prompt ( promptYorn )
 import Darcs.Util.Tree ( Tree )
 
 writeUnrevert :: (RepoPatch p, ApplyState p ~ Tree)
-              => PatchSet rt p Origin wR
+              => PatchSet p Origin wR
               -> Tree IO
               -> FL (PrimOf p) wR wX
               -> IO ()
@@ -37,8 +37,8 @@ writeUnrevert recorded pristine ps = do
   writeDocBinFile unrevertPath bundle
 
 unrevertPatchBundle :: RepoPatch p
-                    => PatchSet rt p Origin wR
-                    -> IO (SealedPatchSet rt p Origin)
+                    => PatchSet p Origin wR
+                    -> IO (SealedPatchSet p Origin)
 unrevertPatchBundle us = do
   pf <- readBinFile unrevertPath
         `catchall` fail "There's nothing to unrevert!"
@@ -49,9 +49,9 @@ unrevertPatchBundle us = do
           Right ps -> return (Sealed ps)
       Left err -> fail $ "Couldn't parse unrevert patch:\n" ++ err
 
-removeFromUnrevertContext :: forall rt p wT wX. (RepoPatch p, ApplyState p ~ Tree)
-                          => PatchSet rt p Origin wT
-                          -> FL (PatchInfoAnd rt p) wX wT
+removeFromUnrevertContext :: forall p wT wX. (RepoPatch p, ApplyState p ~ Tree)
+                          => PatchSet p Origin wT
+                          -> FL (PatchInfoAnd p) wX wT
                           -> IO ()
 removeFromUnrevertContext _ NilFL = return () -- nothing to do
 removeFromUnrevertContext ref ps = do

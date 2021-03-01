@@ -44,7 +44,7 @@ dontReadContents whch =
        launchNuclearMissilesPatches = unsafeCoerceP $ lnmPatches [ "P " ++ show i | i <- [1..5::Int] ]
        lnmPatches [] = NilFL
        lnmPatches (n:names) = buildPatch n  :>: lnmPatches names
-       buildPatch :: String -> PatchInfoAnd rt Patch wX wY
+       buildPatch :: String -> PatchInfoAnd Patch wX wY
        buildPatch name = patchInfoAndPatch (rawPatchInfo "1999" name "harness" [] False) (error "Patch content read!")
        pso = PatchSelectionOptions
            { verbosity = Quiet

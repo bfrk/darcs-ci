@@ -50,7 +50,7 @@ import Darcs.Util.IsoDate ( readUTCDateOldFashioned, showIsoDateTime )
 
 import Control.Exception ( catch, IOException )
 
-readOldRepo :: RepoPatch p => String -> IO (SealedPatchSet rt p Origin)
+readOldRepo :: RepoPatch p => String -> IO (SealedPatchSet p Origin)
 readOldRepo repo_dir = do
   realdir <- toPath `fmap` ioAbsoluteOrRemote repo_dir
   let task = "Reading inventory of repository "++repo_dir
@@ -60,7 +60,7 @@ readOldRepo repo_dir = do
                                   ioError e)
 
 readRepoPrivate :: RepoPatch p
-                => String -> FilePath -> FilePath -> IO (SealedPatchSet rt p Origin)
+                => String -> FilePath -> FilePath -> IO (SealedPatchSet p Origin)
 readRepoPrivate task repo_dir inventory_name = do
     inventory <- gzFetchFilePS (repo_dir </> darcsdir </> inventory_name) Uncachable
     finishedOneIO task inventory_name
@@ -70,8 +70,8 @@ readRepoPrivate task repo_dir inventory_name = do
     Sealed ps <- unseal seal `fmap` unsafeInterleaveIO (read_patches parse is)
     return $ seal (PatchSet ts ps)
     where read_ts :: RepoPatch p =>
-                     (forall wB . PatchInfo -> IO (Sealed (PatchInfoAnd rt p wB)))
-                  -> Maybe PatchInfo -> IO (Sealed (RL (Tagged rt p) Origin))
+                     (forall wB . PatchInfo -> IO (Sealed (PatchInfoAnd p wB)))
+                  -> Maybe PatchInfo -> IO (Sealed (RL (Tagged p) Origin))
           read_ts _ Nothing = do endTedious task
                                  return $ seal NilRL
           read_ts parse (Just tag0) =
@@ -90,7 +90,7 @@ readRepoPrivate task repo_dir inventory_name = do
                  return $ seal $ ts :<: Tagged tag00 Nothing ps
           parse2 :: RepoPatch p
                  => PatchInfo -> FilePath
-                 -> IO (Sealed (PatchInfoAnd rt p wX))
+                 -> IO (Sealed (PatchInfoAnd p wX))
           parse2 i fn = do ps <- unsafeInterleaveIO $ gzFetchFilePS fn Cachable
                            return $ patchInfoAndPatch i
                              `mapSeal` hopefullyNoParseError (toPath fn) (readPatch ps)
@@ -100,8 +100,8 @@ readRepoPrivate task repo_dir inventory_name = do
           hopefullyNoParseError s (Left e) =
               seal $ unavailable $ unlines ["Couldn't parse file " ++ s, e]
           read_patches :: RepoPatch p =>
-                          (forall wB . PatchInfo -> IO (Sealed (PatchInfoAnd rt p wB)))
-                       -> [PatchInfo] -> IO (Sealed (RL (PatchInfoAnd rt p) wX))
+                          (forall wB . PatchInfo -> IO (Sealed (PatchInfoAnd p wB)))
+                       -> [PatchInfo] -> IO (Sealed (RL (PatchInfoAnd p) wX))
           read_patches _ [] = return $ seal NilRL
           read_patches parse (i:is) =
               lift2Sealed (flip (:<:))

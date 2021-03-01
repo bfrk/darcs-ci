@@ -68,9 +68,9 @@ class PatchApplier pa where
         -> String
         -> [DarcsFlag]
         -> Repository rt p wR wU wR
-        -> Fork (PatchSet rt p)
-                (FL (PatchInfoAnd rt p))
-                (FL (PatchInfoAnd rt p)) Origin wR wZ
+        -> Fork (PatchSet p)
+                (FL (PatchInfoAnd p))
+                (FL (PatchInfoAnd p)) Origin wR wZ
         -> IO ()
 
 data StandardPatchApplier = StandardPatchApplier
@@ -83,9 +83,9 @@ standardApplyPatches :: (RepoPatch p, ApplyState p ~ Tree)
                      => String
                      -> [DarcsFlag]
                      -> Repository rt p wR wU wR
-                     -> Fork (PatchSet rt p)
-                             (FL (PatchInfoAnd rt p))
-                             (FL (PatchInfoAnd rt p)) Origin wR wZ
+                     -> Fork (PatchSet p)
+                             (FL (PatchInfoAnd p))
+                             (FL (PatchInfoAnd p)) Origin wR wZ
                      -> IO ()
 standardApplyPatches cmdName opts repository patches@(Fork _ _ to_be_applied) = do
     applyPatchesStart cmdName opts to_be_applied
@@ -96,9 +96,9 @@ mergeAndTest :: (RepoPatch p, ApplyState p ~ Tree)
              => String
              -> [DarcsFlag]
              -> Repository rt p wR wU wR
-             -> Fork (PatchSet rt p)
-                     (FL (PatchInfoAnd rt p))
-                     (FL (PatchInfoAnd rt p)) Origin wR wZ
+             -> Fork (PatchSet p)
+                     (FL (PatchInfoAnd p))
+                     (FL (PatchInfoAnd p)) Origin wR wZ
              -> IO (Sealed (FL (PrimOf p) wU))
 mergeAndTest cmdName opts repository patches = do
     pw <- tentativelyMergePatches repository cmdName
@@ -113,7 +113,7 @@ mergeAndTest cmdName opts repository patches = do
     return pw
 
 applyPatchesStart :: (RepoPatch p, ApplyState p ~ Tree)
-                  => String -> [DarcsFlag] -> FL (PatchInfoAnd rt p) wX wY -> IO ()
+                  => String -> [DarcsFlag] -> FL (PatchInfoAnd p) wX wY -> IO ()
 applyPatchesStart cmdName opts to_be_applied = do
     printDryRunMessageAndExit cmdName
         (verbosity ? opts)

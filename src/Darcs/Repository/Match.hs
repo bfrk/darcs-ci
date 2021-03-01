@@ -59,7 +59,7 @@ getRecordedUpToMatch r = withRecordedMatch r . rollbackToPatchSetMatch
 getOnePatchset :: RepoPatch p
                => Repository rt p wR wU wR
                -> PatchSetMatch
-               -> IO (SealedPatchSet rt p Origin)
+               -> IO (SealedPatchSet p Origin)
 getOnePatchset repository pm =
   case pm of
     IndexMatch n -> patchSetDrop (n-1) <$> readPatches repository
@@ -71,7 +71,7 @@ getOnePatchset repository pm =
 
 withRecordedMatch :: RepoPatch p
                   => Repository rt p wR wU wT
-                  -> (PatchSet rt p Origin wR -> DefaultIO ())
+                  -> (PatchSet p Origin wR -> DefaultIO ())
                   -> IO ()
 withRecordedMatch r job
     = do createPristineDirectoryTree r "." WithWorkingDir

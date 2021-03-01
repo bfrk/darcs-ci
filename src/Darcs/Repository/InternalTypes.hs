@@ -31,7 +31,6 @@ import Darcs.Prelude
 
 import Darcs.Util.Cache ( Cache )
 import Darcs.Repository.Format ( RepoFormat )
-import Darcs.Patch ( RepoType )
 import Darcs.Util.File ( withCurrentDirectory )
 import Darcs.Util.Path ( AbsoluteOrRemotePath, toPath )
 import Unsafe.Coerce ( unsafeCoerce )
@@ -48,7 +47,7 @@ data PristineType
 -- the unrecorded state (what's in the working tree now),
 -- and the tentative state, which represents work in progress that will
 -- eventually become the new recorded state unless something goes wrong.
-data Repository (rt :: RepoType) (p :: * -> * -> *) wRecordedstate wUnrecordedstate wTentativestate =
+data Repository rt (p :: * -> * -> *) wRecordedstate wUnrecordedstate wTentativestate =
   Repo !String !RepoFormat !PristineType Cache deriving ( Show )
 
 type role Repository nominal nominal nominal nominal nominal

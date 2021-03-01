@@ -227,14 +227,14 @@ writeRebaseFile :: RepoPatch p
 writeRebaseFile path r sp =
   writeDocBinFile (repoLocation r </> path) (showSuspended ForStorage sp)
 
-type PiaW rt p = PatchInfoAndG rt (W.WrappedNamed rt p)
+type PiaW p = PatchInfoAndG (W.WrappedNamed p)
 
-extractOldStyleRebase :: forall rt p wA wB. RepoPatch p
-                      => RL (PiaW rt p) wA wB
-                      -> Maybe ((RL (PatchInfoAnd rt p) :> Dup (Suspended p)) wA wB)
+extractOldStyleRebase :: forall p wA wB. RepoPatch p
+                      => RL (PiaW p) wA wB
+                      -> Maybe ((RL (PatchInfoAnd p) :> Dup (Suspended p)) wA wB)
 extractOldStyleRebase ps = go (ps :> NilFL) where
-  go :: (RL (PiaW rt p) :> FL (PatchInfoAnd rt p)) wA wB
-     -> Maybe ((RL (PatchInfoAnd rt p) :> Dup (Suspended p)) wA wB)
+  go :: (RL (PiaW p) :> FL (PatchInfoAnd p)) wA wB
+     -> Maybe ((RL (PatchInfoAnd p) :> Dup (Suspended p)) wA wB)
   go (NilRL :> _) = Nothing
   go (xs :<: x :> ys)
     | W.RebaseP _ r <- hopefully x = do

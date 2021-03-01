@@ -70,9 +70,9 @@ import Darcs.Util.Index( treeFromIndex )
 
 import qualified Data.ByteString.Char8 as BC
 
-replaceInFL :: FL (PatchInfoAnd rt a) wX wY
-            -> [Sealed2 (WPatchInfo :||: PatchInfoAnd rt a)]
-            -> FL (PatchInfoAnd rt a) wX wY
+replaceInFL :: FL (PatchInfoAnd a) wX wY
+            -> [Sealed2 (WPatchInfo :||: PatchInfoAnd a)]
+            -> FL (PatchInfoAnd a) wX wY
 replaceInFL orig [] = orig
 replaceInFL NilFL _ = error "impossible case"
 replaceInFL (o:>:orig) ch@(Sealed2 (o':||:c):ch_rest)
@@ -83,8 +83,8 @@ applyAndFix
   :: forall rt p wR wU wT. (RepoPatch p, ApplyState p ~ Tree)
   => Repository rt p wR wU wT
   -> Compression
-  -> FL (PatchInfoAnd rt p) Origin wR
-  -> TreeIO (FL (PatchInfoAnd rt p) Origin wR, Bool)
+  -> FL (PatchInfoAnd p) Origin wR
+  -> TreeIO (FL (PatchInfoAnd p) Origin wR, Bool)
 applyAndFix _ _ NilFL = return (NilFL, True)
 applyAndFix r compr psin =
     do liftIO $ beginTedious k
@@ -94,8 +94,8 @@ applyAndFix r compr psin =
        orig <- liftIO $ patchSet2FL `fmap` readPatches r
        return (replaceInFL orig repaired, ok)
     where k = "Replaying patch"
-          aaf :: FL (PatchInfoAnd rt p) wW wZ
-              -> TreeIO ([Sealed2 (WPatchInfo :||: PatchInfoAnd rt p)], Bool)
+          aaf :: FL (PatchInfoAnd p) wW wZ
+              -> TreeIO ([Sealed2 (WPatchInfo :||: PatchInfoAnd p)], Bool)
           aaf NilFL = return ([], True)
           aaf (p:>:ps) = do
             mp' <- applyAndTryToFix p
@@ -114,10 +114,10 @@ applyAndFix r compr psin =
                   writeAndReadPatch (repoCache r) compr pp
                 return (Sealed2 (winfp :||: p'):ps', False)
 
-data RepositoryConsistency rt p wX =
+data RepositoryConsistency p wX =
     RepositoryConsistent
   | BrokenPristine (Tree IO)
-  | BrokenPatches (Tree IO) (PatchSet rt p Origin wX)
+  | BrokenPatches (Tree IO) (PatchSet p Origin wX)
 
 checkUniqueness :: RepoPatch p
                 => (Doc -> IO ())
@@ -147,7 +147,7 @@ replayRepository'
   -> Repository rt p wR wU wT
   -> Compression
   -> Verbosity
-  -> IO (RepositoryConsistency rt p wR)
+  -> IO (RepositoryConsistency p wR)
 replayRepository' dflag cache repo compr verbosity = do
   let putVerbose s = when (verbosity == Verbose) $ putDocLn s
       putInfo s = unless (verbosity == Quiet) $ putDocLn s
@@ -192,7 +192,7 @@ replayRepositoryInTemp
   -> Repository rt p wR wU wT
   -> Compression
   -> Verbosity
-  -> IO (RepositoryConsistency rt p wR)
+  -> IO (RepositoryConsistency p wR)
 replayRepositoryInTemp dflag r compr verb = do
   repodir <- getCurrentDirectory
   {- The reason we use withDelayedDir here, instead of withTempDir, is that
@@ -213,7 +213,7 @@ replayRepository
   -> Repository rt p wR wU wT
   -> Compression
   -> Verbosity
-  -> (RepositoryConsistency rt p wR -> IO a)
+  -> (RepositoryConsistency p wR -> IO a)
   -> IO a
 replayRepository dflag r compr verb f =
   run `finally` cleanupRepositoryReplay r

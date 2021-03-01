@@ -302,7 +302,7 @@ lookupFids' fn = do
 createPatchIndexDisk
   :: (RepoPatch p, ApplyState p ~ Tree)
   => Repository rt p wR wU wT
-  -> PatchSet rt p Origin wR
+  -> PatchSet p Origin wR
   -> IO ()
 createPatchIndexDisk repository ps = do
   let patches = mapFL Sealed2 $ progressFL "Create patch index" $ patchSet2FL ps
@@ -310,7 +310,7 @@ createPatchIndexDisk repository ps = do
 
 -- | convert patches to patchmods
 patches2patchMods :: (Apply p, PatchInspect p, ApplyState p ~ Tree)
-                  => [Sealed2 (PatchInfoAnd rt p)] -> Set AnchoredPath -> [(PatchId, [PatchMod AnchoredPath])]
+                  => [Sealed2 (PatchInfoAnd p)] -> Set AnchoredPath -> [(PatchId, [PatchMod AnchoredPath])]
 patches2patchMods patches fns = snd $ mapAccumL go fns patches
   where
     go filenames (Sealed2 p) = (filenames', (pid, pmods_effect ++ pmods_dup))
@@ -372,7 +372,7 @@ removePidSuffix pid2idx oldpids@(oldpid:_) (PatchIndex pids fidspans fpspans inf
 updatePatchIndexDisk
     :: (RepoPatch p, ApplyState p ~ Tree)
     => Repository rt p wR wU wT
-    -> PatchSet rt p Origin wR
+    -> PatchSet p Origin wR
     -> IO ()
 updatePatchIndexDisk repo patches = do
     let repodir = repoLocation repo
@@ -428,7 +428,7 @@ loadPatchIndex repodir = do
 -- | If patch-index is useful as it is now, read it. If not, create or update it, then read it.
 loadSafePatchIndex :: (RepoPatch p, ApplyState p ~ Tree)
                    => Repository rt p wR wU wT
-                   -> PatchSet rt p Origin wR     -- ^ PatchSet of the repository, used if we need to create the patch-index.
+                   -> PatchSet p Origin wR     -- ^ PatchSet of the repository, used if we need to create the patch-index.
                    -> IO PatchIndex
 loadSafePatchIndex repo ps = do
    let repodir = repoLocation repo
@@ -466,7 +466,7 @@ isPatchIndexDisabled repodir = doesFileExist (repodir </> darcsdir  </> noPatchI
 --   2. if patch index exists, update it
 --   3. if not, create it from scratch
 createOrUpdatePatchIndexDisk :: (RepoPatch p, ApplyState p ~ Tree)
-                             => Repository rt p wR wU wT -> PatchSet rt p Origin wR -> IO ()
+                             => Repository rt p wR wU wT -> PatchSet p Origin wR -> IO ()
 createOrUpdatePatchIndexDisk repo ps = do
    debugMessage "createOrUpdatePatchIndexDisk: start"
    let repodir = repoLocation repo
@@ -498,7 +498,7 @@ canUsePatchIndex repo = do
 -- | Creates patch-index (ignoring whether it is explicitely disabled).
 --   If it is ctrl-c'ed, then aborts, delete patch-index and mark it as disabled.
 createPIWithInterrupt :: (RepoPatch p, ApplyState p ~ Tree)
-                      => Repository rt p wR wU wT -> PatchSet rt p Origin wR -> IO ()
+                      => Repository rt p wR wU wT -> PatchSet p Origin wR -> IO ()
 createPIWithInterrupt repo ps = do
     let repodir = repoLocation repo
     putStrLn "Creating a patch index, please wait. To stop press Ctrl-C"
@@ -637,7 +637,7 @@ fpSpans2filePaths' fidSpans = [fp | (fp, _)  <- M.toList fidSpans]
 -- | Checks if patch index can be created and build it with interrupt.
 attemptCreatePatchIndex
   :: (RepoPatch p, ApplyState p ~ Tree)
-  => Repository rt p wR wU wT -> PatchSet rt p Origin wR -> IO ()
+  => Repository rt p wR wU wT -> PatchSet p Origin wR -> IO ()
 attemptCreatePatchIndex repo ps = do
   canCreate <- canCreatePI repo
   when canCreate $ createPIWithInterrupt repo ps
@@ -660,12 +660,12 @@ canCreatePI repo =
 -- disabled, silently create it. (Also, if it is out-of-sync, which should not
 -- happen, silently update it).
 getRelevantSubsequence
-    :: (RepoPatch p, ApplyState p ~ Tree, a ~ PatchInfoAnd rt p)
+    :: (RepoPatch p, ApplyState p ~ Tree, a ~ PatchInfoAnd p)
     => Sealed ((RL a) wK)
     -- ^ Sequence of patches you want to filter
     -> Repository rt p wR wU wR
     -- ^ The repository (to attempt loading patch-index from its path)
-    -> PatchSet rt p Origin wR
+    -> PatchSet p Origin wR
     -- ^ PatchSet of repository (in case we need to create patch-index)
     -> [AnchoredPath]
     -- ^ File(s) about which you want patches from given sequence
@@ -679,14 +679,14 @@ getRelevantSubsequence pxes repository ps fns = do
     let flpxes = reverseRL $ unseal unsafeCoercePEnd pxes
     return . seal $ keepElems flpxes NilRL pids
   where
-    keepElems :: (RepoPatch p, ApplyState p ~ Tree, a ~ PatchInfoAnd rt p)
+    keepElems :: (RepoPatch p, ApplyState p ~ Tree, a ~ PatchInfoAnd p)
               => FL a wX wY -> RL a wB wX -> S.Set Word32 -> RL a wP wQ
     keepElems NilFL acc _ = unsafeCoerceP acc
     keepElems (x :>: xs) acc pids
       | short (makePatchID $ info x) `S.member` pids = keepElems xs (acc :<: x) pids
       | otherwise = keepElems (unsafeCoerceP xs) acc pids
 
-type PatchFilter rt p = [AnchoredPath] -> [Sealed2 (PatchInfoAnd rt p)] -> IO [Sealed2 (PatchInfoAnd rt p)]
+type PatchFilter p = [AnchoredPath] -> [Sealed2 (PatchInfoAnd p)] -> IO [Sealed2 (PatchInfoAnd p)]
 
 -- | If a patch index is available, returns a filter that takes a list of files and returns
 --   a @PatchFilter@ that only keeps patches that modify the given list of files.
@@ -696,8 +696,8 @@ type PatchFilter rt p = [AnchoredPath] -> [Sealed2 (PatchInfoAnd rt p)] -> IO [S
 maybeFilterPatches
     :: (RepoPatch p, ApplyState p ~ Tree)
     => Repository rt p wR wU wT  -- ^ The repository
-    -> PatchSet rt p Origin wR   -- ^ PatchSet of patches of repository (in case patch-index needs to be created)
-    -> PatchFilter rt p          -- ^ PatchFilter ready to be used by SelectChanges.
+    -> PatchSet p Origin wR   -- ^ PatchSet of patches of repository (in case patch-index needs to be created)
+    -> PatchFilter p          -- ^ PatchFilter ready to be used by SelectChanges.
 maybeFilterPatches repo ps fps ops = do
     usePI <- canUsePatchIndex repo
     if usePI

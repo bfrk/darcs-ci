@@ -246,7 +246,7 @@ updatePatchHeader :: forall rt p wX wY wR wU wT . (RepoPatch p, ApplyState p ~ T
                   -- the identity of a patch. If necessary this can be achieved by calling @fmapFL_Named effect@
                   -- on an @Named p@ first, but some callers might already have @Named (PrimOf p)@ available.
                   -> FL (PrimOf p) wX wY -- ^new primitives to add
-                  -> HijackT IO (Maybe String, PatchInfoAnd rt p wT wY)
+                  -> HijackT IO (Maybe String, PatchInfoAnd p wT wY)
 updatePatchHeader verb ask_deps pSelOpts da nKeepDate nSelectAuthor nAuthor nPatchname nAskLongComment oldp chs = do
 
     let newchs = canonizeFL da (patchcontents oldp +>+ chs)

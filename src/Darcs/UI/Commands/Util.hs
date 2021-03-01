@@ -132,7 +132,7 @@ printDryRunMessageAndExit :: RepoPatch p
                           => String
                           -> Verbosity -> WithSummary -> DryRun -> XmlOutput
                           -> Bool -- interactive
-                          -> FL (PatchInfoAnd rt p) wX wY
+                          -> FL (PatchInfoAnd p) wX wY
                           -> IO ()
 printDryRunMessageAndExit action v s d x interactive patches = do
     when (d == YesDryRun) $ do
@@ -224,8 +224,8 @@ doesDirectoryReallyExist f = maybe False isDirectory `fmap` getFileStatus f
 
 checkUnrelatedRepos :: RepoPatch p
                     => Bool
-                    -> PatchSet rt p Origin wX
-                    -> PatchSet rt p Origin wY
+                    -> PatchSet p Origin wX
+                    -> PatchSet p Origin wY
                     -> IO ()
 checkUnrelatedRepos allowUnrelatedRepos us them =
     when ( not allowUnrelatedRepos && areUnrelatedRepos us them ) $
@@ -236,7 +236,7 @@ checkUnrelatedRepos allowUnrelatedRepos us them =
 remotePatches :: RepoPatch p
               => [DarcsFlag]
               -> Repository rt p wX wU wT -> [O.NotInRemote]
-              -> IO (SealedPatchSet rt p Origin)
+              -> IO (SealedPatchSet p Origin)
 remotePatches opts repository nirs = do
     nirsPaths <- mapM getNotInRemotePath nirs
     putInfo opts $
@@ -258,8 +258,8 @@ remotePatches opts repository nirs = do
         maybe err return defaultRepo
 
 getLastPatches :: RepoPatch p
-               => [O.MatchFlag] -> PatchSet rt p Origin wR
-               -> (PatchSet rt p :> FL (PatchInfoAnd rt p)) Origin wR
+               => [O.MatchFlag] -> PatchSet p Origin wR
+               -> (PatchSet p :> FL (PatchInfoAnd p)) Origin wR
 getLastPatches matchFlags ps =
   case matchFirstPatchset matchFlags ps of
     Just (Sealed p1s) -> findCommonWithThem ps p1s
@@ -269,7 +269,7 @@ preselectPatches
   :: RepoPatch p
   => [DarcsFlag]
   -> Repository rt p wR wU wT
-  -> IO ((PatchSet rt p :> FL (PatchInfoAnd rt p)) Origin wR)
+  -> IO ((PatchSet p :> FL (PatchInfoAnd p)) Origin wR)
 preselectPatches opts repo = do
   allpatches <- readPatches repo
   let matchFlags = O.matchSeveralOrLast ? opts
@@ -288,8 +288,8 @@ preselectPatches opts repo = do
 
 matchRange :: MatchableRP p
            => [MatchFlag]
-           -> PatchSet rt p Origin wY
-           -> Sealed2 (FL (PatchInfoAnd rt p))
+           -> PatchSet p Origin wY
+           -> Sealed2 (FL (PatchInfoAnd p))
 matchRange matchFlags ps =
   case (sp1s, sp2s) of
     (Sealed p1s, Sealed p2s) ->

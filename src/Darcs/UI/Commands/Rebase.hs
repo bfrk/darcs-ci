@@ -241,7 +241,7 @@ doSuspend
     => [DarcsFlag]
     -> Repository rt p wR wU wR
     -> Suspended p wR
-    -> FL (PatchInfoAnd rt p) wX wR
+    -> FL (PatchInfoAnd p) wX wR
     -> IO (Repository rt p wR wU wX)
 doSuspend opts _repository suspended psToSuspend = do
     pend <- unrecordedChanges (diffingOpts opts) _repository Nothing
@@ -673,9 +673,9 @@ applyPatchesForRebaseCmd
     => String
     -> [DarcsFlag]
     -> Repository rt p wR wU wR
-    -> Fork (PatchSet rt p)
-            (FL (PatchInfoAnd rt p))
-            (FL (PatchInfoAnd rt p)) Origin wR wZ
+    -> Fork (PatchSet p)
+            (FL (PatchInfoAnd p))
+            (FL (PatchInfoAnd p)) Origin wR wZ
     -> IO ()
 applyPatchesForRebaseCmd cmdName opts _repository (Fork common us' to_be_applied) = do
     applyPatchesStart cmdName opts to_be_applied

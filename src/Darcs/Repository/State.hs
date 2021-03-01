@@ -498,10 +498,10 @@ filterOutConflicts
                                   --  unrecorded changes
   -> UseIndex                     -- ^Whether to use the index when reading
                                   --  the working state
-  -> FL (PatchInfoAnd rt p) wX wR -- ^Recorded patches from repository, starting from
+  -> FL (PatchInfoAnd p) wX wR -- ^Recorded patches from repository, starting from
                                   --  same context as the patches to filter
-  -> FL (PatchInfoAnd rt p) wX wZ -- ^Patches to filter
-  -> IO (Bool, Sealed (FL (PatchInfoAnd rt p) wX))
+  -> FL (PatchInfoAnd p) wX wZ -- ^Patches to filter
+  -> IO (Bool, Sealed (FL (PatchInfoAnd p) wX))
                                   -- ^True iff any patches were removed,
                                   --  possibly filtered patches
 filterOutConflicts repository useidx us them

@@ -221,7 +221,7 @@ sendCmd _ _ _ = error "impossible case"
 
 sendToThem :: (RepoPatch p, ApplyState p ~ Tree)
            => Repository rt p wR wU wT -> [DarcsFlag] -> [WhatToDo] -> String
-           -> PatchSet rt p Origin wX -> IO ()
+           -> PatchSet p Origin wX -> IO ()
 sendToThem repo opts wtds their_name them = do
   us <- readPatches repo
   common :> us' <- return $ findCommonWithThem us them
@@ -267,10 +267,10 @@ sendToThem repo opts wtds their_name them = do
     Nothing     -> sendBundle opts to_be_sent bundle fname wtds their_name
 
 
-prepareBundle :: forall rt p wX wY wZ. (RepoPatch p, ApplyState p ~ Tree)
-              => [DarcsFlag] -> PatchSet rt p Origin wZ
-              -> Either (FL (PatchInfoAnd rt p) wX wY)
-                        (Tree IO, (FL (PatchInfoAnd rt p) :\/: FL (PatchInfoAnd rt p)) wX wY)
+prepareBundle :: forall p wX wY wZ. (RepoPatch p, ApplyState p ~ Tree)
+              => [DarcsFlag] -> PatchSet p Origin wZ
+              -> Either (FL (PatchInfoAnd p) wX wY)
+                        (Tree IO, (FL (PatchInfoAnd p) :\/: FL (PatchInfoAnd p)) wX wY)
               -> IO Doc
 prepareBundle opts common e = do
   unsig_bundle <-
@@ -285,12 +285,12 @@ prepareBundle opts common e = do
                                       (mapFL_FL hopefully to_be_sent)
   signString (parseFlags O.sign opts) unsig_bundle
 
-sendBundle :: forall rt p wX wY . (RepoPatch p, ApplyState p ~ Tree)
-           => [DarcsFlag] -> FL (PatchInfoAnd rt p) wX wY
+sendBundle :: forall p wX wY . (RepoPatch p, ApplyState p ~ Tree)
+           => [DarcsFlag] -> FL (PatchInfoAnd p) wX wY
              -> Doc -> String -> [WhatToDo] -> String -> IO ()
 sendBundle opts to_be_sent bundle fname wtds their_name=
          let
-           auto_subject :: forall pp wA wB . FL (PatchInfoAnd rt pp) wA wB -> String
+           auto_subject :: forall pp wA wB . FL (PatchInfoAnd pp) wA wB -> String
            auto_subject (p:>:NilFL)  = "darcs patch: " ++ trim (patchDesc p) 57
            auto_subject (p:>:ps) = "darcs patch: " ++ trim (patchDesc p) 43 ++
                             " (and " ++ show (lengthFL ps) ++ " more)"
@@ -373,8 +373,8 @@ cleanup opts (Just mailfile) = when (isNothing (hasLogfile opts) || willRemoveLo
                                       removeFileMayNotExist mailfile
 cleanup _ Nothing = return ()
 
-writeBundleToFile :: forall rt p wX wY . (RepoPatch p, ApplyState p ~ Tree)
-                  => [DarcsFlag] -> FL (PatchInfoAnd rt p) wX wY -> Doc ->
+writeBundleToFile :: forall p wX wY . (RepoPatch p, ApplyState p ~ Tree)
+                  => [DarcsFlag] -> FL (PatchInfoAnd p) wX wY -> Doc ->
                     AbsolutePathOrStd -> [WhatToDo] -> String -> IO ()
 writeBundleToFile opts to_be_sent bundle fname wtds their_name =
     do (d,f,_) <- getDescription opts their_name to_be_sent
@@ -435,7 +435,7 @@ collectTargets flags = [ f t | t <- O._to (O.headerFields ? flags) ] where
     f em = SendMail em
 
 getDescription :: RepoPatch p
-               => [DarcsFlag] -> String -> FL (PatchInfoAnd rt p) wX wY -> IO (Doc, Maybe String, Maybe String)
+               => [DarcsFlag] -> String -> FL (PatchInfoAnd p) wX wY -> IO (Doc, Maybe String, Maybe String)
 getDescription opts their_name patches =
     case get_filename of
         Just file -> do

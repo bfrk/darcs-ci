@@ -242,11 +242,10 @@ doAmend cfg files =
                            go NilFL
 
 
-addChangesToPatch :: forall rt p wR wU wT wX wY wP
-                   . (RepoPatch p, ApplyState p ~ Tree)
+addChangesToPatch :: (RepoPatch p, ApplyState p ~ Tree)
                   => Config
                   -> Repository rt p wR wU wT
-                  -> PatchInfoAnd rt p wX wT
+                  -> PatchInfoAnd p wX wT
                   -> FL (PrimOf p) wT wY
                   -> FL (PrimOf p) wT wP
                   -> FL (PrimOf p) wP wU
@@ -324,8 +323,8 @@ addChangesToPatch cfg _repository oldp chs pending working =
 filterNotInRemote :: RepoPatch p
                   => Config
                   -> Repository rt p wR wU wT
-                  -> PatchSet rt p Origin wR
-                  -> IO (FlippedSeal (RL (PatchInfoAnd rt p)) wR)
+                  -> PatchSet p Origin wR
+                  -> IO (FlippedSeal (RL (PatchInfoAnd p)) wR)
 filterNotInRemote cfg repository patchSet = do
     nirs <- mapM getNotInRemotePath (O.notInRemote ? cfg)
     if null nirs

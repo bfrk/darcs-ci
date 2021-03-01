@@ -18,8 +18,7 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Darcs.Patch
-    ( RepoType
-    , PrimPatchBase(..)
+    ( PrimPatchBase(..)
     , Named
     , ApplyState
     , rmfile
@@ -113,7 +112,6 @@ import Darcs.Patch.Prim ( canonize,
 import Darcs.Patch.Read ( readPatch, readPatchPartial )
 import Darcs.Patch.Repair ( isInconsistent )
 import Darcs.Patch.RepoPatch ( RepoPatch )
-import Darcs.Patch.RepoType ( RepoType )
 import Darcs.Patch.Show ( description, showPatch, content, displayPatch
                         , summary, summaryFL, thing, things, ShowPatchFor(..), ShowContextPatch(..) )
 import Darcs.Patch.Summary

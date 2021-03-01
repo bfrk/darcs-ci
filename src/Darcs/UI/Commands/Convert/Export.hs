@@ -184,12 +184,12 @@ fastExport' repo marks = do
   marksref <- newIORef marks
   let patches = patchSet2FL patchset
       tags = inOrderTags patchset
-      mark :: (PatchInfoAnd rt p) x y -> Int -> TreeIO ()
+      mark :: (PatchInfoAnd p) x y -> Int -> TreeIO ()
       mark p n = liftIO $ do putStrLn $ "mark :" ++ show n
                              modifyIORef marksref $ \m -> addMark m n (patchHash p)
       -- apply a single patch to build the working tree of the last exported version
       checkOne :: (RepoPatch p, ApplyState p ~ Tree)
-               => Int -> (PatchInfoAnd rt p) x y -> TreeIO ()
+               => Int -> (PatchInfoAnd p) x y -> TreeIO ()
       checkOne n p = do apply p
                         unless (inOrderTag tags p ||
                                 (getMark marks n == Just (patchHash p))) $
@@ -197,7 +197,7 @@ fastExport' repo marks = do
                                  show (getMark marks n) ++ ", got " ++ BC.unpack (patchHash p)
       -- build the working tree of the last version exported by convert --export
       check :: (RepoPatch p, ApplyState p ~ Tree)
-            => Int -> FL (PatchInfoAnd rt p) x y -> TreeIO (Int,  FlippedSeal( FL (PatchInfoAnd rt p)) y) 
+            => Int -> FL (PatchInfoAnd p) x y -> TreeIO (Int,  FlippedSeal( FL (PatchInfoAnd p)) y) 
       check _ NilFL = return (1, flipSeal NilFL)
       check n allps@(p:>:ps)
         | n <= lastMark marks = checkOne n p >> check (next tags n p) ps
@@ -216,8 +216,8 @@ fastExport' repo marks = do
 
 dumpPatches ::  (RepoPatch p, ApplyState p ~ Tree)
             =>  [PatchInfo]
-            -> (forall p0 x0 y0 . (PatchInfoAnd rt p0) x0 y0 -> Int -> TreeIO ())
-            -> Int -> FL (PatchInfoAnd rt p) x y -> TreeIO ()
+            -> (forall p0 x0 y0 . (PatchInfoAnd p0) x0 y0 -> Int -> TreeIO ())
+            -> Int -> FL (PatchInfoAnd p) x y -> TreeIO ()
 dumpPatches _ _ _ NilFL = liftIO $ putStrLn "progress (patches converted)"
 dumpPatches tags mark n (p:>:ps) = do
   apply p
@@ -227,7 +227,7 @@ dumpPatches tags mark n (p:>:ps) = do
              dumpFiles $ listTouchedFiles p
   dumpPatches tags mark (next tags n p) ps
 
-dumpTag :: (PatchInfoAnd rt p) x y  -> Int -> TreeIO () 
+dumpTag :: (PatchInfoAnd p) x y  -> Int -> TreeIO () 
 dumpTag p n =
   dumpBits [ BLU.fromString $ "progress TAG " ++ cleanTagName p
            , BLU.fromString $ "tag " ++ cleanTagName p -- FIXME is this valid?
@@ -287,8 +287,8 @@ dumpFiles files = forM_ files $ \file -> do
         _    -> ([c], False)
 
 
-dumpPatch ::  (forall p0 x0 y0 . (PatchInfoAnd rt p0) x0 y0 -> Int -> TreeIO ())
-          -> (PatchInfoAnd rt p) x y -> Int
+dumpPatch ::  (forall p0 x0 y0 . (PatchInfoAnd p0) x0 y0 -> Int -> TreeIO ())
+          -> (PatchInfoAnd p) x y -> Int
           -> TreeIO ()
 dumpPatch mark p n =
   do dumpBits [ BLU.fromString $ "progress " ++ show n ++ ": " ++ piName (info p)
@@ -310,7 +310,7 @@ dumpBits = liftIO . BLC.putStrLn . BL.intercalate "\n"
 -- john <john@home> -> john <john@home>
 -- john <john@home  -> john <john@home>
 -- <john>           -> john <unknown>
-patchAuthor :: (PatchInfoAnd rt p) x y -> String
+patchAuthor :: (PatchInfoAnd p) x y -> String
 patchAuthor p
  | null author = unknownEmail "unknown"
  | otherwise = case span (/='<') author of
@@ -335,20 +335,20 @@ patchAuthor p
    emailPad email = "<" ++ email ++ ">"
    mkAuthor name email = name ++ " " ++ email
 
-patchDate :: (PatchInfoAnd rt p) x y -> String
+patchDate :: (PatchInfoAnd p) x y -> String
 patchDate = formatDateTime "%s +0000" . fromClockTime . toClockTime .
   piDate . info
 
-patchMessage :: (PatchInfoAnd rt p) x y -> BLU.ByteString
+patchMessage :: (PatchInfoAnd p) x y -> BLU.ByteString
 patchMessage p = BL.concat [ BLU.fromString (piName $ info p)
                            , case unlines . piLog $ info p of
                                  "" -> BL.empty
                                  plog -> BLU.fromString ("\n\n" ++ plog)
                            ]
 
-inOrderTag :: (Effect p) => [PatchInfo] -> PatchInfoAnd rt p wX wZ -> Bool
+inOrderTag :: (Effect p) => [PatchInfo] -> PatchInfoAnd p wX wZ -> Bool
 inOrderTag tags p = isTag (info p) && info p `elem` tags && nullFL (effect p)
 
-next :: (Effect p) => [PatchInfo] -> Int ->  PatchInfoAnd rt p x y -> Int
+next :: (Effect p) => [PatchInfo] -> Int ->  PatchInfoAnd p x y -> Int
 next tags n p = if inOrderTag tags p then n else n + 1
 

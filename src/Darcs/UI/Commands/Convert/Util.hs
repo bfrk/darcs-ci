@@ -60,7 +60,7 @@ writeMarks fp m = do removeFile fp `catchall` return () -- unlink
 
 -- misc shared functions
 
-patchHash :: PatchInfoAnd rt p cX cY -> BC.ByteString
+patchHash :: PatchInfoAnd p cX cY -> BC.ByteString
 patchHash p = BC.pack $ show $ makePatchname (info p)
 
 updatePending :: [DarcsFlag] -> UpdatePending

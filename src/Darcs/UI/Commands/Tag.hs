@@ -170,10 +170,10 @@ tagCmd _ opts args =
 -- since the last tag, plus that tag itself.
 
 askAboutTagDepends
-     :: forall rt p wX wY . (RepoPatch p, ApplyState p ~ Tree)
+     :: forall p wX wY . (RepoPatch p, ApplyState p ~ Tree)
      => [DarcsFlag]
-     -> FL (PatchInfoAnd rt p) wX wY
-     -> IO (Sealed (FL (PatchInfoAnd rt p) wX))
+     -> FL (PatchInfoAnd p) wX wY
+     -> IO (Sealed (FL (PatchInfoAnd p) wX))
 askAboutTagDepends flags ps = do
   let opts = S.PatchSelectionOptions
              { S.verbosity = verbosity ? flags

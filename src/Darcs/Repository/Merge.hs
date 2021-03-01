@@ -230,9 +230,9 @@ tentativelyMergePatches_ :: (RepoPatch p, ApplyState p ~ Tree)
                          -> ExternalMerge -> WantGuiPause
                          -> Compression -> Verbosity -> Reorder
                          -> DiffOpts
-                         -> Fork (PatchSet rt p)
-                                 (FL (PatchInfoAnd rt p))
-                                 (FL (PatchInfoAnd rt p)) Origin wR wY
+                         -> Fork (PatchSet p)
+                                 (FL (PatchInfoAnd p))
+                                 (FL (PatchInfoAnd p)) Origin wR wY
                          -> IO (Sealed (FL (PrimOf p) wU))
 tentativelyMergePatches_ mc _repo cmd allowConflicts externalMerge wantGuiPause
   compression verbosity reorder diffingOpts@DiffOpts{..} (Fork context us them) = do
@@ -323,9 +323,9 @@ tentativelyMergePatches :: (RepoPatch p, ApplyState p ~ Tree)
                         -> ExternalMerge -> WantGuiPause
                         -> Compression -> Verbosity -> Reorder
                         -> DiffOpts
-                        -> Fork (PatchSet rt p)
-                                (FL (PatchInfoAnd rt p))
-                                (FL (PatchInfoAnd rt p)) Origin wR wY
+                        -> Fork (PatchSet p)
+                                (FL (PatchInfoAnd p))
+                                (FL (PatchInfoAnd p)) Origin wR wY
                         -> IO (Sealed (FL (PrimOf p) wU))
 tentativelyMergePatches = tentativelyMergePatches_ MakeChanges
 
@@ -336,8 +336,8 @@ considerMergeToWorking :: (RepoPatch p, ApplyState p ~ Tree)
                        -> ExternalMerge -> WantGuiPause
                        -> Compression -> Verbosity -> Reorder
                        -> DiffOpts
-                       -> Fork (PatchSet rt p)
-                               (FL (PatchInfoAnd rt p))
-                               (FL (PatchInfoAnd rt p)) Origin wR wY
+                       -> Fork (PatchSet p)
+                               (FL (PatchInfoAnd p))
+                               (FL (PatchInfoAnd p)) Origin wR wY
                        -> IO (Sealed (FL (PrimOf p) wU))
 considerMergeToWorking = tentativelyMergePatches_ DontMakeChanges

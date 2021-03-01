@@ -213,7 +213,7 @@ applyCmdCommon patchApplier patchProxy opts bundle repository = do
   Fork common us' them' <- return $ findCommonAndUncommon us them
 
   -- all patches in them' need to be available; check that
-  let check :: PatchInfoAnd rt p wX wY -> Maybe PatchInfo
+  let check :: PatchInfoAnd p wX wY -> Maybe PatchInfo
       check p = case hopefullyM p of
         Nothing -> Just (info p)
         Just _ -> Nothing
@@ -243,9 +243,9 @@ applyCmdCommon patchApplier patchProxy opts bundle repository = do
 
 getPatchBundle :: RepoPatch p
                => [DarcsFlag]
-               -> PatchSet rt p Origin wR
+               -> PatchSet p Origin wR
                -> B.ByteString
-               -> IO (Either String (SealedPatchSet rt p Origin))
+               -> IO (Either String (SealedPatchSet p Origin))
 getPatchBundle opts us fps = do
     let opt_verify = parseFlags O.verify opts
     mps <- verifyPS opt_verify $ readEmail fps
@@ -274,9 +274,9 @@ getPatchBundle opts us fps = do
                             | otherwise = p
 
 parseAndInterpretBundle :: RepoPatch p
-                        => PatchSet rt p Origin wR
+                        => PatchSet p Origin wR
                         -> B.ByteString
-                        -> Either String (SealedPatchSet rt p Origin)
+                        -> Either String (SealedPatchSet p Origin)
 parseAndInterpretBundle us content = do
     Sealed bundle <- parseBundle content
     Sealed <$> interpretBundle us bundle

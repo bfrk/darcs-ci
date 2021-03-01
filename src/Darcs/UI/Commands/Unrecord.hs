@@ -268,8 +268,8 @@ genericObliterateCmd cmdname _ opts _ =
 
 savetoBundle :: (RepoPatch p, ApplyState p ~ Tree)
              => [DarcsFlag]
-             -> FL (PatchInfoAnd rt p) wX wR
-             -> PatchSet rt p Origin wR
+             -> FL (PatchInfoAnd p) wX wR
+             -> PatchSet p Origin wR
              -> IO ()
 savetoBundle _ NilFL _ = return ()
 savetoBundle opts removed@(x :>: _) orig = do

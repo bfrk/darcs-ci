@@ -414,7 +414,7 @@ fetchPatchesIfNecessary toRepo =
           speculate | pipelineLength > 1 = [] : first : map (:[]) other
                     | otherwise = []
       mapM_ fetchAndSpeculate $ zip (hashes ppatches) (speculate ++ repeat [])
-  where hashes :: forall wX wY . RL (PatchInfoAnd rt p) wX wY -> [String]
+  where hashes :: forall wX wY . RL (PatchInfoAnd p) wX wY -> [String]
         hashes = catMaybes . mapRL (either (const Nothing) Just . extractHash)
         fetchAndSpeculate :: (String, [String]) -> IO ()
         fetchAndSpeculate (f, ss) = do
@@ -430,7 +430,7 @@ allowCtrlC :: CloneKind -> IO () -> IO () -> IO ()
 allowCtrlC CompleteClone _       action = action
 allowCtrlC _             cleanup action = action `catchInterrupt` cleanup
 
-hashedPatchFileName :: PatchInfoAnd rt p wA wB -> String
+hashedPatchFileName :: PatchInfoAnd p wA wB -> String
 hashedPatchFileName x = case extractHash x of
   Left _ -> fail "unexpected unhashed patch"
   Right h -> h

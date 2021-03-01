@@ -268,21 +268,21 @@ simpleLogInfo :: ( MatchableRP p
                  , ApplyState p ~ Tree
                  )
               => AnchoredPath
-              -> PatchFilter rt p
-              -> PatchSet rt p Origin wY
-              -> IO [Sealed2 (PatchInfoAnd rt p)]
+              -> PatchFilter p
+              -> PatchSet p Origin wY
+              -> IO [Sealed2 (PatchInfoAnd p)]
 simpleLogInfo path pf ps =
   map fst . liPatches <$> getLogInfo Nothing [] False (Just [path]) pf ps
 
-getLogInfo :: forall rt p wY.
+getLogInfo :: forall p wY.
               ( MatchableRP p
               , ApplyState p ~ Tree
               )
            => Maybe Int -> [MatchFlag] -> Bool
            -> Maybe [AnchoredPath]
-           -> PatchFilter rt p
-           -> PatchSet rt p Origin wY
-           -> IO (LogInfo (PatchInfoAnd rt p))
+           -> PatchFilter p
+           -> PatchSet p Origin wY
+           -> IO (LogInfo (PatchInfoAnd p))
 getLogInfo maxCountFlag matchFlags onlyToFilesFlag paths patchFilter ps =
   case matchRange matchFlags ps of
     Sealed2 range ->
@@ -318,14 +318,14 @@ getLogInfo maxCountFlag matchFlags onlyToFilesFlag paths patchFilter ps =
 -- "Just n" -- returns at most n patches touching the file (starting from the
 -- beginning of the patch list).
 filterPatchesByNames
-    :: forall rt p.
+    :: forall p.
        ( MatchableRP p
        , ApplyState p ~ Tree
        )
     => Maybe Int                      -- ^ maxcount
     -> [AnchoredPath]                 -- ^ paths
-    -> [Sealed2 (PatchInfoAnd rt p)]  -- ^ patches
-    -> LogInfo (PatchInfoAnd rt p)
+    -> [Sealed2 (PatchInfoAnd p)]  -- ^ patches
+    -> LogInfo (PatchInfoAnd p)
 filterPatchesByNames maxcount paths patches = removeNonRenames $
     evalState (filterPatchesByNamesM paths patches) (maxcount, initRenames) where
         removeNonRenames li = li { liRenames = removeIds (liRenames li) }
@@ -359,12 +359,12 @@ filterPatchesByNames maxcount paths patches = removeNonRenames $
                                 modify $ second (const renames')
                                 filterPatchesByNamesM fs' ps
 
-changelog :: forall rt p wStart wX
+changelog :: forall p wStart wX
            . ( ShowPatch p, PatchListFormat p
              , Summary p, HasDeps p, PrimDetails (PrimOf p)
              )
-          => [DarcsFlag] -> RL (PatchInfoAndG rt p) wStart wX
-          -> LogInfo (PatchInfoAndG rt p)
+          => [DarcsFlag] -> RL (PatchInfoAndG p) wStart wX
+          -> LogInfo (PatchInfoAndG p)
           -> Doc
 changelog opts patches li
     | O.changesFormat ? opts == Just O.CountPatches =
@@ -375,7 +375,7 @@ changelog opts patches li
     | otherwise = vsep (map (number_patch description') ps) $$ mbErr
     where ps_and_fs = liPatches li
           mbErr = fromMaybe mempty (liErrorMsg li)
-          change_with_summary :: Sealed2 (PatchInfoAndG rt p) -> Doc
+          change_with_summary :: Sealed2 (PatchInfoAndG p) -> Doc
           change_with_summary (Sealed2 hp)
             | Just p <- hopefullyM hp =
               if O.changesFormat ? opts == Just O.MachineReadable
@@ -390,7 +390,7 @@ changelog opts patches li
             , text "</changelog>"
             ]
 
-          xml_with_summary :: Sealed2 (PatchInfoAndG rt p) -> Doc
+          xml_with_summary :: Sealed2 (PatchInfoAndG p) -> Doc
           xml_with_summary (Sealed2 hp) | Just p <- hopefullyM hp =
                     let
                       deps = getdeps p
@@ -430,10 +430,10 @@ changelog opts patches li
                                   Nothing -> f x
                              else f x
 
-          get_number :: Sealed2 (PatchInfoAndG re p) -> Maybe Int
+          get_number :: Sealed2 (PatchInfoAndG p) -> Maybe Int
           get_number (Sealed2 y) = gn 1 patches
               where iy = info y
-                    gn :: Int -> RL (PatchInfoAndG rt p) wStart wY -> Maybe Int
+                    gn :: Int -> RL (PatchInfoAndG p) wStart wY -> Maybe Int
                     gn n (bs:<:b) | seq n (info b) == iy = Just n
                                   | otherwise = gn (n+1) bs
                     gn _ NilRL = Nothing

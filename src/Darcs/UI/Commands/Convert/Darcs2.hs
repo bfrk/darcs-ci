@@ -196,7 +196,7 @@ toDarcs2 _ opts' args = do
           convertFL :: FL RepoPatchV1 wX wY -> FL RepoPatchV2 wX wY
           convertFL = concatFL . mapFL_FL convertOne
           convertNamed :: Named RepoPatchV1 wX wY
-                       -> PatchInfoAnd rt RepoPatchV2 wX wY
+                       -> PatchInfoAnd RepoPatchV2 wX wY
           convertNamed n = n2pia $
                            NamedP
                             (convertInfo $ patch2patchinfo n)
@@ -219,7 +219,7 @@ toDarcs2 _ opts' args = do
     applyOne :: (RepoPatch p, ApplyState p ~ Tree)
              => [DarcsFlag]
              -> W2 (Repository rt p wR) wX
-             -> PatchInfoAnd rt p wX wY
+             -> PatchInfoAnd p wX wY
              -> IO (W2 (Repository rt p wR) wY)
     applyOne opts (W2 _repo) x = do
       _repo <- tentativelyAddPatch_ (updatePristine opts) _repo
@@ -237,7 +237,7 @@ toDarcs2 _ opts' args = do
     applyAll :: (RepoPatch p, ApplyState p ~ Tree)
              => [DarcsFlag]
              -> Repository rt p wX wX wX
-             -> FL (FL (PatchInfoAnd rt p)) wX wY
+             -> FL (FL (PatchInfoAnd p)) wX wY
              -> IO (Repository rt p wY wY wY)
     applyAll opts r xss = unW3 <$> foldFL_M (applySome opts) (W3 r) xss
 

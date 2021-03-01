@@ -247,12 +247,12 @@ fetchCmd (_,o) opts repos =
     withRepoLock (dryRun ? opts) (useCache ? opts) (umask ? opts) $ RepoJob $
         fetchPatches o opts repos "fetch" >=> makeBundle opts
 
-fetchPatches :: forall rt p wR wU . (RepoPatch p, ApplyState p ~ Tree)
+fetchPatches :: (RepoPatch p, ApplyState p ~ Tree)
              => AbsolutePath -> [DarcsFlag] -> [String] -> String
              -> Repository rt p wR wU wR
-             -> IO (Sealed (Fork (PatchSet rt p)
-                                 (FL (PatchInfoAnd rt p))
-                                 (FL (PatchInfoAnd rt p)) Origin wR))
+             -> IO (Sealed (Fork (PatchSet p)
+                                 (FL (PatchInfoAnd p))
+                                 (FL (PatchInfoAnd p)) Origin wR))
 fetchPatches o opts unfixedrepodirs@(_:_) jobname repository = do
   here <- getCurrentDirectory
   repodirs <- (nub . filter (/= here)) `fmap` mapM (fixUrl o) unfixedrepodirs
@@ -303,11 +303,11 @@ fetchPatches o opts unfixedrepodirs@(_:_) jobname repository = do
 fetchPatches _ _ [] jobname _ = fail $
   "No default repository to " ++ jobname ++ " from, please specify one"
 
-makeBundle :: forall rt p wR . (RepoPatch p, ApplyState p ~ Tree)
+makeBundle :: forall p wR . (RepoPatch p, ApplyState p ~ Tree)
            => [DarcsFlag]
-           -> (Sealed (Fork (PatchSet rt p)
-                      (FL (PatchInfoAnd rt p))
-                      (FL (PatchInfoAnd rt p)) Origin wR))
+           -> (Sealed (Fork (PatchSet p)
+                      (FL (PatchInfoAnd p))
+                      (FL (PatchInfoAnd p)) Origin wR))
            -> IO ()
 makeBundle opts (Sealed (Fork common _ to_be_fetched)) =
     do
@@ -339,7 +339,7 @@ the second patchset(s) to be complemented against Rc.
 
 readRepos :: RepoPatch p
           => Repository rt p wR wU wT -> [DarcsFlag] -> [String]
-          -> IO (SealedPatchSet rt p Origin,SealedPatchSet rt p Origin)
+          -> IO (SealedPatchSet p Origin,SealedPatchSet p Origin)
 readRepos _ _ [] = error "impossible case"
 readRepos to_repo opts us =
     do rs <- mapM (\u -> do r <- identifyRepositoryFor Reading to_repo (useCache ? opts) u

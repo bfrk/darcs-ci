@@ -98,7 +98,7 @@ deriving instance Show2 prim => Show (RebaseChange prim wX wY)
 
 -- |Get hold of the 'Named' patch inside a 'RebaseChange' and wrap it in a
 -- 'PatchInfoAnd'.
-rcToPia :: RebaseChange prim wX wY -> Sealed2 (PatchInfoAnd rt prim)
+rcToPia :: RebaseChange prim wX wY -> Sealed2 (PatchInfoAnd prim)
 rcToPia (RC _ toEdit) = Sealed2 (n2pia toEdit)
 
 instance PrimPatch prim => PrimPatchBase (RebaseChange prim) where
