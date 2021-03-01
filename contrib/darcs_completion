@@ -1,0 +1,73 @@
+#-*- mode: shell-script;-*-
+
+# darcs command line completion.
+# Copyright 2002 "David Roundy" <droundy@abridgegame.org>
+# This archive should be copied in the directory /etc/bash_completion.d/
+
+_darcs()
+{
+    local cur
+    cur=${COMP_WORDS[COMP_CWORD]}
+
+    COMPREPLY=()
+
+    if (($COMP_CWORD == 1)); then
+        COMPREPLY=( $( darcs --commands | command grep "^$cur" ) )
+        return 0
+    fi
+
+    # Top-level options do not accept any further options
+    case "${COMP_WORDS[1]}" in
+        (-*) COMPREPLY=''; return 0;;
+    esac
+
+    # Build a new command line copying all the tokens and inserting
+    # '--list-options' before the first option (a token starting with '-').
+    local -a cmdline
+    local i=0
+    local m=$(( ${#COMP_WORDS[@]} - 1 ))
+    for token in "${COMP_WORDS[@]:0:${m}}"
+    do
+        case "$token" in
+            (-*) cmdline+=("--list-options" "${COMP_WORDS[@]:${i}}");
+                 break;;
+             (*) cmdline+=("$token");
+                 i=$(( $i + 1 ));;
+        esac
+    done
+    test $i -eq $m && cmdline+=("--list-options")
+
+    # So that the following "command-output to array" operation splits only at
+    # newlines, not at each space, tab or newline.
+    local IFS=$'\n'
+    COMPREPLY=( $( "${cmdline[@]}" 2>/dev/null |\
+        command grep "^${cur//./\\.}" | cut -d ';' -f 1) )
+
+    # Then, we adapt the resulting strings to be reusable by bash. If we don't
+    # do this, in the case where we have two repositories named
+    # ~/space in there-0.1 and ~/space in there-0.2, the first completion will
+    # give us:
+    # bash> darcs push ~/space in there-0.
+    # ~/space in there-0.1 ~/space in there-0.2
+    # and we have introduced two spaces in the command line (if we try to
+    # recomplete that, it won't find anything, as it doesn't know anything
+    # starting with "there-0.").
+    # printf %q will gracefully add the necessary backslashes.
+    #
+    # Bash also interprets colon as a separator. If we didn't handle it
+    # specially, completing http://example.org/repo from http://e would
+    # give us:
+    # bash> darcs pull http:http://example.org/repo
+    # An option would be to require the user to escape : as \: and we
+    # would do the same here. Instead, we return only the part after
+    # the last colon that is already there, and thus fool bash. The
+    # downside is that bash only shows this part to the user.
+    local i=${#COMPREPLY[*]}
+    local colonprefixes=${cur%"${cur##*:}"}
+    while [ $((--i)) -ge 0 ]; do
+      COMPREPLY[$i]=`printf %q "${COMPREPLY[$i]}"`
+      COMPREPLY[$i]=${COMPREPLY[$i]#"$colonprefixes"}
+    done
+    return 0
+}
+complete -F _darcs -o default darcs
