@@ -241,10 +241,10 @@ suspendCmd _ opts _args =
 doSuspend
     :: (RepoPatch p, ApplyState p ~ Tree)
     => [DarcsFlag]
-    -> Repository 'RW p wR wU wR
+    -> Repository 'RW p wU wR
     -> Suspended p wR
     -> FL (PatchInfoAnd p) wX wR
-    -> IO (Repository 'RW p wR wU wX)
+    -> IO (Repository 'RW p wU wX)
 doSuspend opts _repository suspended psToSuspend = do
     pend <- unrecordedChanges (diffingOpts opts) _repository Nothing
     FlippedSeal psAfterPending <-
@@ -410,11 +410,11 @@ unsuspendCmd cmd reifyFixups _ opts _args =
       void $ applyToWorking _repository (verbosity ? opts) effect_to_apply
 
     where doAdd :: (RepoPatch p, ApplyState p ~ Tree)
-                => Repository 'RW p wR wU wT
-                -> FL (WDDNamed p) wT wT2
-                -> HijackT IO (Repository 'RW p wR wU wT2, FL RebaseName wT2 wT2)
+                => Repository 'RW p wU wR
+                -> FL (WDDNamed p) wR wR2
+                -> HijackT IO (Repository 'RW p wU wR2, FL RebaseName wR2 wR2)
           doAdd _repo NilFL = return (_repo, NilFL)
-          doAdd _repo ((p :: WDDNamed p wT wU) :>:ps) = do
+          doAdd _repo ((p :: WDDNamed p wR wU) :>:ps) = do
               case wddDependedOn p of
                   [] -> return ()
                   deps -> liftIO $ do
@@ -460,7 +460,7 @@ unsuspendCmd cmd reifyFixups _ opts _args =
               return (_repo, rename2 :>: renames)
 
           requireNoUnrecordedChanges :: (RepoPatch p, ApplyState p ~ Tree)
-                                     => Repository 'RW p wR wU wR
+                                     => Repository 'RW p wU wR
                                      -> IO (EqCheck wR wU)
           requireNoUnrecordedChanges repo = do
             pend <-
@@ -493,7 +493,7 @@ injectCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 injectCmd _ opts _args =
     withRepoLock (useCache ? opts) (umask ? opts) $
     RebaseJob $
-    \(_repository :: Repository 'RW p wR wU wR) -> do
+    \(_repository :: Repository 'RW p wU wR) -> do
     Items selects <- readTentativeRebase _repository
 
     -- TODO this selection doesn't need to respect dependencies
@@ -557,7 +557,7 @@ obliterateCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO (
 obliterateCmd _ opts _args =
     withRepoLock (useCache ? opts) (umask ? opts) $
     RebaseJob $
-    \(_repository :: Repository 'RW p wR wU wR) -> (do
+    \(_repository :: Repository 'RW p wU wR) -> (do
     Items selects <- readTentativeRebase _repository
 
     -- TODO this selection doesn't need to respect dependencies
@@ -680,7 +680,7 @@ applyPatchesForRebaseCmd
      . ( RepoPatch p, ApplyState p ~ Tree )
     => String
     -> [DarcsFlag]
-    -> Repository 'RW p wR wU wR
+    -> Repository 'RW p wU wR
     -> Fork (PatchSet p)
             (FL (PatchInfoAnd p))
             (FL (PatchInfoAnd p)) Origin wR wZ
@@ -819,7 +819,7 @@ upgrade = DarcsCommand
 upgradeCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 upgradeCmd _ opts _args =
   withRepoLock (useCache ? opts) (umask ? opts) $
-  OldRebaseJob $ \(_repo :: Repository 'RW p wR wU wR) ->
+  OldRebaseJob $ \(_repo :: Repository 'RW p wU wR) ->
     upgradeOldStyleRebase _repo (compress ? opts)
 
 {-

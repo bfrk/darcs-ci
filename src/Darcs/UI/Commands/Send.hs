@@ -190,7 +190,7 @@ sendCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 sendCmd fps opts [""] = sendCmd fps opts []
 sendCmd (_,o) opts [unfixedrepodir] =
  withRepository (useCache ? opts) $ RepoJob $
-  \(repository :: Repository 'RO p wR wU wR) -> do
+  \(repository :: Repository 'RO p wU wR) -> do
   when (O.mail ? opts && dryRun ? opts == O.NoDryRun) $ do
     -- If --mail is used and the user has not provided a --sendmail-command
     -- and we can detect that the system has no default way to send emails, 
@@ -199,7 +199,7 @@ sendCmd (_,o) opts [unfixedrepodir] =
     when (isNothing sm_cmd) checkDefaultSendmail
   case O.sendToContext ? opts of
     Just contextfile -> do
-        wtds <- decideOnBehavior opts (Nothing :: Maybe (Repository rt p wR wU wR))
+        wtds <- decideOnBehavior opts (Nothing :: Maybe (Repository rt p wU wR))
         ref <- readPatches repository
         Sealed them <- readContextFile ref (toFilePath contextfile)
         sendToThem repository opts wtds "CONTEXT" them
@@ -221,7 +221,7 @@ sendCmd (_,o) opts [unfixedrepodir] =
 sendCmd _ _ _ = error "impossible case"
 
 sendToThem :: (RepoPatch p, ApplyState p ~ Tree)
-           => Repository rt p wR wU wT -> [DarcsFlag] -> [WhatToDo] -> String
+           => Repository rt p wU wR -> [DarcsFlag] -> [WhatToDo] -> String
            -> PatchSet p Origin wX -> IO ()
 sendToThem repo opts wtds their_name them = do
   us <- readPatches repo
@@ -391,7 +391,7 @@ data WhatToDo
     = Post String        -- ^ POST the patch via HTTP
     | SendMail String    -- ^ send patch via email
 
-decideOnBehavior :: [DarcsFlag] -> Maybe (Repository rt p wR wU wT) -> IO [WhatToDo]
+decideOnBehavior :: [DarcsFlag] -> Maybe (Repository rt p wU wR) -> IO [WhatToDo]
 decideOnBehavior opts remote_repo =
     case the_targets of
     [] -> do wtds <- case remote_repo of

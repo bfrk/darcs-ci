@@ -136,7 +136,7 @@ manifestHelper opts prefixes =
         filesDirs True True t = anchoredRoot : map fst (list t)
 
 slurpUpto :: (RepoPatch p, ApplyState p ~ Tree)
-          => PatchSetMatch -> Repository rt p wR wU wR -> IO (Tree IO)
+          => PatchSetMatch -> Repository rt p wU wR -> IO (Tree IO)
 slurpUpto psm r = withDelayedDir "show.files" $ \_ -> do
   getRecordedUpToMatch r psm
   -- note: it is important that we expand the tree from inside the

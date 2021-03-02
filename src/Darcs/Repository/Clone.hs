@@ -269,9 +269,9 @@ putVerbose :: Verbosity -> Doc -> IO ()
 putVerbose Verbose d = putDocLn d
 putVerbose _ _ = return ()
 
-copyBasicRepoNotPacked  :: forall p wR wU wT.
-                           Repository 'RO p wR wU wT -- remote
-                        -> Repository 'RO p wR wU wT -- existing empty local
+copyBasicRepoNotPacked  :: forall p wU wR.
+                           Repository 'RO p wU wR -- remote
+                        -> Repository 'RO p wU wR -- existing empty local
                         -> Verbosity
                         -> RemoteDarcs
                         -> WithWorkingDir
@@ -282,9 +282,9 @@ copyBasicRepoNotPacked fromRepo toRepo verb rdarcs withWorkingDir = do
   putVerbose verb $ text "Writing pristine and working tree contents..."
   createPristineDirectoryTree toRepo "." withWorkingDir
 
-copyCompleteRepoNotPacked :: forall rt p wR wU wT. (RepoPatch p, ApplyState p ~ Tree)
-                        => Repository 'RO p wR wU wT -- remote
-                        -> Repository rt p wR wU wT -- existing basic local
+copyCompleteRepoNotPacked :: forall rt p wU wR. (RepoPatch p, ApplyState p ~ Tree)
+                        => Repository 'RO p wU wR -- remote
+                        -> Repository rt p wU wR -- existing basic local
                         -> Verbosity
                         -> CloneKind
                         -> IO ()
@@ -297,9 +297,9 @@ copyCompleteRepoNotPacked _ toRepo verb cloneKind = do
          when pi $ createPIWithInterrupt toRepo ps
 
 copyBasicRepoPacked ::
-  forall p wR wU wT.
-     Repository 'RO p wR wU wT -- remote
-  -> Repository 'RO p wR wU wT -- existing empty local repository
+  forall p wU wR.
+     Repository 'RO p wU wR -- remote
+  -> Repository 'RO p wU wR -- existing empty local repository
   -> Verbosity
   -> RemoteDarcs
   -> WithWorkingDir
@@ -326,9 +326,9 @@ copyBasicRepoPacked fromRepo toRepo verb rdarcs withWorkingDir =
                     copyNormally
 
 copyBasicRepoPacked2 ::
-  forall rt p wR wU wT.
-     Repository 'RO p wR wU wT -- remote
-  -> Repository rt p wR wU wT -- existing empty local repository
+  forall rt p wU wR.
+     Repository 'RO p wU wR -- remote
+  -> Repository rt p wU wR -- existing empty local repository
   -> Verbosity
   -> WithWorkingDir
   -> IO ()
@@ -342,9 +342,9 @@ copyBasicRepoPacked2 fromRepo toRepo verb withWorkingDir = do
   createPristineDirectoryTree toRepo "." withWorkingDir
 
 copyCompleteRepoPacked ::
-  forall rt p wR wU wT. (RepoPatch p, ApplyState p ~ Tree)
-  => Repository 'RO p wR wU wT -- remote
-  -> Repository rt p wR wU wT -- existing basic local repository
+  forall rt p wU wR. (RepoPatch p, ApplyState p ~ Tree)
+  => Repository 'RO p wU wR -- remote
+  -> Repository rt p wU wR -- existing basic local repository
   -> Verbosity
   -> CloneKind
   -> IO ()
@@ -357,9 +357,9 @@ copyCompleteRepoPacked from to verb cloneKind =
       copyCompleteRepoNotPacked from to verb cloneKind
 
 copyCompleteRepoPacked2 ::
-  forall rt p wR wU wT. (RepoPatch p, ApplyState p ~ Tree)
-  => Repository 'RO p wR wU wT
-  -> Repository rt p wR wU wT
+  forall rt p wU wR. (RepoPatch p, ApplyState p ~ Tree)
+  => Repository 'RO p wU wR
+  -> Repository rt p wU wR
   -> Verbosity
   -> CloneKind
   -> IO ()
@@ -377,9 +377,9 @@ copyCompleteRepoPacked2 fromRepo toRepo verb cloneKind = do
 cleanDir :: FilePath -> IO ()
 cleanDir d = mapM_ (\x -> removeFile $ d </> x) =<< listDirectory d
 
-copyRepoOldFashioned :: forall p wR wU wT. (RepoPatch p, ApplyState p ~ Tree)
-                        => Repository 'RO p wR wU wT  -- remote repo
-                        -> Repository 'RO p wR wU wT  -- local empty repo
+copyRepoOldFashioned :: forall p wU wR. (RepoPatch p, ApplyState p ~ Tree)
+                        => Repository 'RO p wU wR  -- remote repo
+                        -> Repository 'RO p wU wR  -- local empty repo
                         -> Verbosity
                         -> WithWorkingDir
                         -> IO ()
@@ -410,8 +410,8 @@ copyRepoOldFashioned fromrepository _toRepo verb withWorkingDir = do
 
 -- | This function fetches all patches that the given repository has
 --   with fetchFileUsingCache.
-fetchPatchesIfNecessary :: forall rt p wR wU wT. RepoPatch p
-                        => Repository rt p wR wU wT
+fetchPatchesIfNecessary :: forall rt p wU wR. RepoPatch p
+                        => Repository rt p wU wR
                         -> IO ()
 fetchPatchesIfNecessary toRepo =
   do  ps <- readPatches toRepo

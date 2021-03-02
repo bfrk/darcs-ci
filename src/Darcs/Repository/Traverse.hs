@@ -51,7 +51,7 @@ import Darcs.Util.Global ( darcsdir, debugMessage )
 import Darcs.Util.Lock ( removeFileMayNotExist )
 
 
-cleanRepository :: Repository rt p wR wU wT -> IO ()
+cleanRepository :: Repository rt p wU wR -> IO ()
 cleanRepository r = cleanPristine r >> cleanInventories r >> cleanPatches r
 
 -- | The way patchfiles, inventories, and pristine trees are stored.
@@ -63,7 +63,7 @@ cleanRepository r = cleanPristine r >> cleanInventories r >> cleanPatches r
 data DirLayout = PlainLayout | BucketedLayout
 
 -- | Remove unreferenced entries in the pristine cache.
-cleanPristine :: Repository rt p wR wU wT -> IO ()
+cleanPristine :: Repository rt p wU wR -> IO ()
 cleanPristine r = withRepoDir r $ do
     debugMessage "Cleaning out the pristine cache..."
     i <- gzReadFilePS hashedInventoryPath
@@ -77,7 +77,7 @@ diffHashLists xs ys = from_set $ (to_set xs) `Set.difference` (to_set ys)
     from_set = map BC.unpack . Set.toList
 
 -- | Remove unreferenced files in the inventories directory.
-cleanInventories :: Repository rt p wR wU wT -> IO ()
+cleanInventories :: Repository rt p wU wR -> IO ()
 cleanInventories _ = do
     debugMessage "Cleaning out inventories..."
     hs <- listInventoriesLocal
@@ -95,7 +95,7 @@ specialPatches :: [FilePath]
 specialPatches = ["unrevert", "pending", "pending.tentative"]
 
 -- | Remove unreferenced files in the patches directory.
-cleanPatches :: Repository rt p wR wU wT -> IO ()
+cleanPatches :: Repository rt p wU wR -> IO ()
 cleanPatches _ = do
     debugMessage "Cleaning out patches..."
     hs <- (specialPatches ++) <$> listPatchesLocal PlainLayout darcsdir darcsdir

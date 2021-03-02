@@ -53,7 +53,7 @@ module Darcs.Repository
     , tentativelyAddPatch
     , tentativelyRemovePatches
     , tentativelyAddToPending
-    , readTentativePatches
+    , tentativelyRemoveFromPW
     , withManualRebaseUpdate
     , tentativelyMergePatches
     , considerMergeToWorking
@@ -107,7 +107,6 @@ import Darcs.Repository.Identify
     )
 import Darcs.Repository.Hashed
     ( readPatches
-    , readTentativePatches
     , tentativelyAddPatch
     , tentativelyRemovePatches
     , revertRepositoryChanges
@@ -121,6 +120,7 @@ import Darcs.Repository.Pristine
 import Darcs.Repository.Traverse ( cleanRepository )
 import Darcs.Repository.Pending
     ( tentativelyAddToPending
+    , tentativelyRemoveFromPW
     )
 import Darcs.Repository.Working
     ( applyToWorking

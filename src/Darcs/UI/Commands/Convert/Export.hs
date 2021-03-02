@@ -177,7 +177,7 @@ fastExport _ opts _ = do
     Just f  -> writeMarks f newMarks
 
 fastExport' :: (RepoPatch p, ApplyState p ~ Tree)
-            => Repository rt p r u r -> Marks -> IO Marks
+            => Repository rt p wU wR -> Marks -> IO Marks
 fastExport' repo marks = do
   putStrLn "progress (reading repository)"
   patchset <- readPatches repo

@@ -110,33 +110,33 @@ withUMask umask job =
 -- and the various functions that act on a @RepoJob@ are responsible for instantiating
 -- the underlying action with the appropriate patch type.
 data RepoJob rt a
-    -- = RepoJob (forall p wR wU . RepoPatch p => Repository p wR wU wR -> IO a)
+    -- = RepoJob (forall p wR wU . RepoPatch p => Repository p wU wR -> IO a)
     -- TODO: Unbind Tree from RepoJob, possibly renaming existing RepoJob
     =
     -- |The most common @RepoJob@; the underlying action can accept any patch type that
     -- a darcs repository may use.
-      RepoJob (forall p wR wU . (RepoPatch p, ApplyState p ~ Tree) => Repository rt p wR wU wR -> IO a)
+      RepoJob (forall p wR wU . (RepoPatch p, ApplyState p ~ Tree) => Repository rt p wU wR -> IO a)
     -- |A job that only works on darcs 1 patches
-    | V1Job (forall wR wU . Repository rt (RepoPatchV1 V1.Prim) wR wU wR -> IO a)
+    | V1Job (forall wR wU . Repository rt (RepoPatchV1 V1.Prim) wU wR -> IO a)
     -- |A job that only works on darcs 2 patches
-    | V2Job (forall wR wU . Repository rt (RepoPatchV2 V2.Prim) wR wU wR -> IO a)
+    | V2Job (forall wR wU . Repository rt (RepoPatchV2 V2.Prim) wU wR -> IO a)
     -- |A job that works on any repository where the patch type @p@ has 'PrimOf' @p@ = 'Prim'.
     --
     -- This was added to support darcsden, which inspects the internals of V1 prim patches.
     --
     -- In future this should be replaced with a more abstract inspection API as part of 'PrimPatch'.
     | PrimV1Job (forall p wR wU . (RepoPatch p, ApplyState p ~ Tree, IsPrimV1 (PrimOf p))
-               => Repository rt p wR wU wR -> IO a)
+               => Repository rt p wU wR -> IO a)
     -- A job that works on normal darcs repositories, but will want access to the rebase patch if it exists.
-    | RebaseAwareJob (forall p wR wU . (RepoPatch p, ApplyState p ~ Tree) => Repository rt p wR wU wR -> IO a)
-    | RebaseJob (forall p wR wU . (RepoPatch p, ApplyState p ~ Tree) => Repository rt p wR wU wR -> IO a)
-    | OldRebaseJob (forall p wR wU . (RepoPatch p, ApplyState p ~ Tree) => Repository rt p wR wU wR -> IO a)
-    | StartRebaseJob (forall p wR wU . (RepoPatch p, ApplyState p ~ Tree) => Repository rt p wR wU wR -> IO a)
+    | RebaseAwareJob (forall p wR wU . (RepoPatch p, ApplyState p ~ Tree) => Repository rt p wU wR -> IO a)
+    | RebaseJob (forall p wR wU . (RepoPatch p, ApplyState p ~ Tree) => Repository rt p wU wR -> IO a)
+    | OldRebaseJob (forall p wR wU . (RepoPatch p, ApplyState p ~ Tree) => Repository rt p wU wR -> IO a)
+    | StartRebaseJob (forall p wR wU . (RepoPatch p, ApplyState p ~ Tree) => Repository rt p wU wR -> IO a)
 
 onRepoJob :: RepoJob rt1 a -- original repojob passed to withXxx
           -> (forall p wR wU . (RepoPatch p, ApplyState p ~ Tree) =>
-              (Repository rt1 p wR wU wR -> IO a)
-              -> Repository rt2 p wR wU wR -> IO a)
+              (Repository rt1 p wU wR -> IO a)
+              -> Repository rt2 p wU wR -> IO a)
           -> RepoJob rt2 a -- result job takes a Repo rt2
 onRepoJob (RepoJob job) f = RepoJob (f job)
 onRepoJob (V1Job job) f = V1Job (f job)
@@ -190,7 +190,7 @@ withRepositoryLocation useCache url repojob = do
 
         -- in order to pass SRepoType and RepoPatchType at different types, we need a polymorphic
         -- function that we call in two different ways, rather than directly varying the argument.
-        runJob1 :: Bool -> Repository rt pDummy wR wU wR -> RepoJob rt a -> IO a
+        runJob1 :: Bool -> Repository rt pDummy wU wR -> RepoJob rt a -> IO a
         runJob1 hasRebase =
           if formatHas Darcs3 rf
           then runJob RepoV3 hasRebase
@@ -209,7 +209,7 @@ runJob
    . RepoPatch p
   => RepoPatchType p
   -> Bool
-  -> Repository rt pDummy wR wU wR
+  -> Repository rt pDummy wU wR
   -> RepoJob rt a
   -> IO a
 runJob patchType hasRebase repo repojob = do
@@ -217,7 +217,7 @@ runJob patchType hasRebase repo repojob = do
   -- The actual type the repository should have is only known when
   -- when this function is called, so we need to "cast" it to its proper type
   let
-    therepo = unsafeCoercePatchType repo :: Repository rt p wR wU wR
+    therepo = unsafeCoercePatchType repo :: Repository rt p wU wR
 
   case repojob of
     RepoJob job ->

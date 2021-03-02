@@ -58,7 +58,7 @@ class PatchApplier pa where
         :: pa
         -> (forall p wR wU
                . (RepoPatch p, ApplyState p ~ Tree)
-              => (PatchProxy p -> Repository 'RW p wR wU wR -> IO ()))
+              => (PatchProxy p -> Repository 'RW p wU wR -> IO ()))
         -> RepoJob 'RW ()
 
     applyPatches
@@ -68,7 +68,7 @@ class PatchApplier pa where
         -> PatchProxy p
         -> String
         -> [DarcsFlag]
-        -> Repository 'RW p wR wU wR
+        -> Repository 'RW p wU wR
         -> Fork (PatchSet p)
                 (FL (PatchInfoAnd p))
                 (FL (PatchInfoAnd p)) Origin wR wZ
@@ -83,7 +83,7 @@ instance PatchApplier StandardPatchApplier where
 standardApplyPatches :: (RepoPatch p, ApplyState p ~ Tree)
                      => String
                      -> [DarcsFlag]
-                     -> Repository 'RW p wR wU wR
+                     -> Repository 'RW p wU wR
                      -> Fork (PatchSet p)
                              (FL (PatchInfoAnd p))
                              (FL (PatchInfoAnd p)) Origin wR wZ
@@ -96,7 +96,7 @@ standardApplyPatches cmdName opts repository patches@(Fork _ _ to_be_applied) = 
 mergeAndTest :: (RepoPatch p, ApplyState p ~ Tree)
              => String
              -> [DarcsFlag]
-             -> Repository 'RW p wR wU wR
+             -> Repository 'RW p wU wR
              -> Fork (PatchSet p)
                      (FL (PatchInfoAnd p))
                      (FL (PatchInfoAnd p)) Origin wR wZ
@@ -133,7 +133,7 @@ applyPatchesStart cmdName opts to_be_applied = do
 applyPatchesFinish :: (RepoPatch p, ApplyState p ~ Tree)
                    => String
                    -> [DarcsFlag]
-                   -> Repository 'RW p wR wU wR
+                   -> Repository 'RW p wU wR
                    -> FL (PrimOf p) wU wY
                    -> Bool
                    -> IO ()

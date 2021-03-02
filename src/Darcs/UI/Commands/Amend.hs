@@ -84,8 +84,8 @@ import Darcs.Repository
     , readPendingAndWorking
     , readPristine
     , readPatches
+    , tentativelyRemoveFromPW
     )
-import Darcs.Repository.Pending ( tentativelyRemoveFromPW )
 import Darcs.Repository.Prefs ( getDefaultRepo )
 import Darcs.UI.SelectChanges
     ( WhichChanges(..)
@@ -191,63 +191,67 @@ amendrecord = commandAlias "amend-record" Nothing amend
 doAmend :: Config -> Maybe [AnchoredPath] -> IO ()
 doAmend cfg files =
   withRepoLock (O.useCache ? cfg) (O.umask ? cfg) $
-      RebaseAwareJob $ \(repository :: Repository 'RW p wR wU wR) -> do
+      RebaseAwareJob $ \(repository :: Repository 'RW p wU wR) -> do
     patchSet <- readPatches repository
     FlippedSeal patches <- filterNotInRemote cfg repository patchSet
     withSelectedPatchFromList "amend" patches (patchSelOpts cfg) $ \ (_ :> oldp) -> do
-        announceFiles (O.verbosity ? cfg) files "Amending changes in"
-        -- auxiliary function needed because the witness types differ for the isTag case
-        pristine <- readPristine repository
-        pending :> working <-
-          readPendingAndWorking (diffingOpts cfg) repository files
-        let go :: forall wU1 . FL (PrimOf p) wR wU1 -> IO ()
-            go NilFL | not (hasEditMetadata cfg) =
-              putInfo cfg "No changes!"
-            go ch =
-              do let selection_config =
-                        selectionConfigPrim First "record"
-                            (patchSelOpts cfg)
-                            --([All,Unified] `intersect` opts)
-                            (Just (primSplitter (O.diffAlgorithm ? cfg)))
-                            files
-                            (Just pristine)
-                 (chosenPatches :> _) <- runInvertibleSelection ch selection_config
-                 addChangesToPatch cfg repository oldp chosenPatches pending working
-        if not (isTag (info oldp))
-              -- amending a normal patch
-           then if O.amendUnrecord ? cfg
-                   then do let selection_config =
-                                  selectionConfigPrim Last "unrecord"
-                                      (patchSelOpts cfg)
-                                      -- ([All,Unified] `intersect` opts)
-                                      (Just (primSplitter (O.diffAlgorithm ? cfg)))
-                                      files
-                                      (Just pristine)
-                           (_ :> chosenPrims) <- runInvertibleSelection (effect oldp) selection_config
-                           let invPrims = reverseRL (invertFL chosenPrims)
-                           addChangesToPatch cfg repository oldp invPrims pending working
-                   else go (sortCoalesceFL (pending +>+ working))
-              -- amending a tag
-           else if hasEditMetadata cfg && isNothing files
-                        -- the user is not trying to add new changes to the tag so there is
-                        -- no reason to warn.
-                   then go NilFL
-                        -- the user is trying to add new changes to a tag.
-                   else do if hasEditMetadata cfg
-                                -- the user already knows that it is possible to edit tag metadata,
-                                -- note that s/he is providing editing options!
-                             then ePutDocLn "You cannot add new changes to a tag."
-                                -- the user may not be aware that s/he can edit tag metadata.
-                             else ePutDocLn "You cannot add new changes to a tag, but you are allowed to edit tag's metadata (see darcs help amend)."
-                           go NilFL
+      announceFiles (O.verbosity ? cfg) files "Amending changes in"
+      pristine <- readPristine repository
+      pending :> working <-
+        readPendingAndWorking (diffingOpts cfg) repository files
+      -- auxiliary function needed because the witness types differ for the
+      -- isTag case
+      let go :: FL (PrimOf p) wR wU1 -> IO ()
+          go NilFL | not (hasEditMetadata cfg) = putInfo cfg "No changes!"
+          go ch = do
+            let selection_config =
+                   selectionConfigPrim First "record"
+                       (patchSelOpts cfg)
+                       (Just (primSplitter (O.diffAlgorithm ? cfg)))
+                       files
+                       (Just pristine)
+            (chosenPatches :> _) <- runInvertibleSelection ch selection_config
+            addChangesToPatch cfg repository oldp chosenPatches pending working
+      if not (isTag (info oldp))
+        -- amending a normal patch
+        then
+          if O.amendUnrecord ? cfg
+            then do
+              let selection_config =
+                    selectionConfigPrim Last "unrecord" (patchSelOpts cfg)
+                      (Just (primSplitter (O.diffAlgorithm ? cfg)))
+                      files (Just pristine)
+              (_ :> chosenPrims) <-
+                runInvertibleSelection (effect oldp) selection_config
+              let invPrims = reverseRL (invertFL chosenPrims)
+              addChangesToPatch cfg repository oldp invPrims pending working
+            else
+              go (sortCoalesceFL (pending +>+ working))
+        -- amending a tag
+        else
+          if hasEditMetadata cfg && isNothing files
+            -- the user is not trying to add new changes to the tag so there is
+            -- no reason to warn.
+            then go NilFL
+            -- the user is trying to add new changes to a tag.
+            else do
+              if hasEditMetadata cfg
+                -- the user already knows that it is possible to edit tag metadata,
+                -- note that s/he is providing editing options!
+                then ePutDocLn "You cannot add new changes to a tag."
+                -- the user may not be aware that s/he can edit tag metadata.
+                else
+                  ePutDocLn
+                    "You cannot add new changes to a tag, but you are allowed to edit tag's metadata (see darcs help amend)."
+              go NilFL
 
 
 addChangesToPatch :: (RepoPatch p, ApplyState p ~ Tree)
                   => Config
-                  -> Repository 'RW p wR wU wT
-                  -> PatchInfoAnd p wX wT
-                  -> FL (PrimOf p) wT wY
-                  -> FL (PrimOf p) wT wP
+                  -> Repository 'RW p wU wR
+                  -> PatchInfoAnd p wX wR
+                  -> FL (PrimOf p) wR wY
+                  -> FL (PrimOf p) wR wP
                   -> FL (PrimOf p) wP wU
                   -> IO ()
 addChangesToPatch cfg _repository oldp chs pending working =
@@ -322,7 +326,7 @@ addChangesToPatch cfg _repository oldp chs pending working =
 
 filterNotInRemote :: RepoPatch p
                   => Config
-                  -> Repository 'RW p wR wU wT
+                  -> Repository 'RW p wU wR
                   -> PatchSet p Origin wR
                   -> IO (FlippedSeal (RL (PatchInfoAnd p)) wR)
 filterNotInRemote cfg repository patchSet = do

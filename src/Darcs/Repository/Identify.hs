@@ -6,10 +6,10 @@ from a given @URL@ or a given filesystem path.
 -}
 
 module Darcs.Repository.Identify
-    ( maybeIdentifyRepository
+    ( maybeIdentifyRepository -- exported for darcsden
     , identifyRepository
     , identifyRepositoryFor
-    , IdentifyRepo(..)
+    , IdentifyRepo(..) -- exported for darcsden
     , ReadingOrWriting(..)
     , findRepository
     , amInRepository
@@ -68,13 +68,13 @@ import Darcs.Util.Global ( darcsdir )
 import System.Mem( performGC )
 
 -- | The status of a given directory: is it a darcs repository?
-data IdentifyRepo rt p wR wU wT
+data IdentifyRepo rt p wU wR
     = BadRepository String -- ^ looks like a repository with some error
     | NonRepository String -- ^ safest guess
-    | GoodRepository (Repository rt p wR wU wT)
+    | GoodRepository (Repository rt p wU wR)
 
 -- | Tries to identify the repository in a given directory
-maybeIdentifyRepository :: UseCache -> String -> IO (IdentifyRepo 'RO p wR wU wT)
+maybeIdentifyRepository :: UseCache -> String -> IO (IdentifyRepo 'RO p wU wR)
 maybeIdentifyRepository useCache "." =
     do darcs <- doesDirectoryExist darcsdir
        if not darcs
@@ -113,7 +113,7 @@ identifyPristine =
 
 -- | identifyRepository identifies the repo at 'url'. Warning:
 -- you have to know what kind of patches are found in that repo.
-identifyRepository :: UseCache -> String -> IO (Repository 'RO p wR wU wT)
+identifyRepository :: UseCache -> String -> IO (Repository 'RO p wU wR)
 identifyRepository useCache url =
     do er <- maybeIdentifyRepository useCache url
        case er of
@@ -126,10 +126,10 @@ data ReadingOrWriting = Reading | Writing
 -- | @identifyRepositoryFor repo url@ identifies (and returns) the repo at 'url',
 -- but fails if it is not compatible for reading from and writing to.
 identifyRepositoryFor :: ReadingOrWriting
-                      -> Repository rt p wR wU wT
+                      -> Repository rt p wU wR
                       -> UseCache
                       -> String
-                      -> IO (Repository 'RO p vR vU vT)
+                      -> IO (Repository 'RO p vR vU)
 identifyRepositoryFor what us useCache them_loc = do
   them <- identifyRepository useCache them_loc
   case

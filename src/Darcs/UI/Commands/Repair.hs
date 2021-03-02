@@ -185,8 +185,8 @@ checkCmd opts = withRepository (useCache ? opts) $ RepoJob $ \repository -> do
   exitWith $ if failed || bad_index then ExitFailure 1 else ExitSuccess
 
 brokenPristine
-  :: forall rt p wR wU wT . (RepoPatch p)
-  => [DarcsFlag] -> Repository rt p wR wU wT -> Tree IO -> IO ()
+  :: forall rt p wU wR . (RepoPatch p)
+  => [DarcsFlag] -> Repository rt p wU wR -> Tree IO -> IO ()
 brokenPristine opts repository newpris = do
   putInfo opts "Looks like we have a difference..."
   mc' <-

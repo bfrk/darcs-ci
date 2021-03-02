@@ -178,8 +178,8 @@ pushCmd (_, o) opts [unfixedrepodir] = do
 pushCmd _ _ [] = die "No default repository to push to, please specify one."
 pushCmd _ _ _ = die "Cannot push to more than one repo."
 
-prepareBundle :: forall rt p wR wU wT. (RepoPatch p, ApplyState p ~ Tree)
-              => [DarcsFlag] -> String -> Repository rt p wR wU wT -> IO Doc
+prepareBundle :: forall rt p wR wU. (RepoPatch p, ApplyState p ~ Tree)
+              => [DarcsFlag] -> String -> Repository rt p wU wR -> IO Doc
 prepareBundle opts repodir repository = do
   old_default <- getPreflist "defaultrepo"
   when (old_default == [repodir]) $
@@ -189,27 +189,28 @@ prepareBundle opts repodir repository = do
   addRepoSource repodir (dryRun ? opts) (remoteRepos ? opts)
       (setDefault False opts) (O.inheritDefault ? opts) (isInteractive True opts)
   us <- readPatches repository
-  common :> us' <- return $ findCommonWithThem us them
-  prePushChatter opts us (reverseFL us') them
+  common :> only_us <- return $ findCommonWithThem us them
+  prePushChatter opts us (reverseFL only_us) them
   let direction = if changesReverse ? opts then FirstReversed else First
       selection_config = selectionConfig direction "push" (pushPatchSelOpts opts) Nothing Nothing
-  runSelection us' selection_config
+  runSelection only_us selection_config
                    >>= bundlePatches opts common
 
-prePushChatter :: forall p a wX wY wT . (RepoPatch p, ShowPatch a) =>
+prePushChatter :: forall p a wX wY wC . (RepoPatch p, ShowPatch a) =>
                  [DarcsFlag] -> PatchSet p Origin wX ->
-                 RL a wT wX -> PatchSet p Origin wY -> IO ()
-prePushChatter opts us us' them = do
+                 RL a wC wX -> PatchSet p Origin wY -> IO ()
+prePushChatter opts us only_us them = do
   checkUnrelatedRepos (parseFlags O.allowUnrelatedRepos opts) us them
   let num_to_pull = snd $ countUsThem us them
       pull_reminder = if num_to_pull > 0
                       then text $ "The remote repository has " ++ show num_to_pull
                       ++ " " ++ englishNum num_to_pull (Noun "patch") " to pull."
                       else empty
-  putVerbose opts $ text "We have the following patches to push:" $$ vcat (mapRL description us')
-  unless (nullRL us') $ putInfo opts pull_reminder
-  when (nullRL us') $ do putInfo opts $ text "No recorded local patches to push!"
-                         exitSuccess
+  putVerbose opts $ text "We have the following patches to push:" $$ vcat (mapRL description only_us)
+  unless (nullRL only_us) $ putInfo opts pull_reminder
+  when (nullRL only_us) $ do
+      putInfo opts $ text "No recorded local patches to push!"
+      exitSuccess
 
 bundlePatches :: forall t p wZ wW wA. (RepoPatch p, ApplyState p ~ Tree)
               => [DarcsFlag] -> PatchSet p wA wZ

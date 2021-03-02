@@ -29,7 +29,6 @@ module Darcs.Repository.InternalTypes
     , unsafeCoercePatchType
     , unsafeCoerceR
     , unsafeCoerceU
-    , unsafeCoerceT
     , unsafeEndTransaction
     , unsafeStartTransaction
     , mkRepo
@@ -56,59 +55,58 @@ data SAccessType (rt :: AccessType) where
   SRW :: SAccessType 'RW
 
 -- |A @Repository@ is a token representing the state of a repository on disk.
--- It is parameterized by the patch type in the repository, and witnesses for
--- the recorded state of the repository (i.e. what darcs get would retrieve),
--- the unrecorded state (what's in the working tree now),
--- and the tentative state, which represents work in progress that will
--- eventually become the new recorded state unless something goes wrong.
-data Repository (rt :: AccessType) (p :: * -> * -> *) wRecordedstate wUnrecordedstate wTentativestate =
+-- It is parameterized by
+--
+-- [@rt@] the access type (whether we are in a transaction or not),
+-- [@p@]  the patch type,
+-- [@wU@] the witness for the unrecorded state (what's in the working tree now).
+-- [@wR@] the witness for the recorded state of the repository,
+--        (what darcs get would retrieve).
+data Repository (rt :: AccessType) (p :: * -> * -> *) wU wR =
   Repo !String !RepoFormat !PristineType Cache (SAccessType rt)
 
-type role Repository nominal nominal nominal nominal nominal
+type role Repository nominal nominal nominal nominal
 
-repoLocation :: Repository rt p wR wU wT -> String
+repoLocation :: Repository rt p wU wR -> String
 repoLocation (Repo loc _ _ _ _) = loc
 
 -- | Perform an action with the current working directory set to the
 -- 'repoLocation'.
-withRepoDir :: Repository rt p wR wU wT -> IO a -> IO a
+withRepoDir :: Repository rt p wU wR -> IO a -> IO a
 withRepoDir repo = withCurrentDirectory (repoLocation repo)
 
-repoFormat :: Repository rt p wR wU wT -> RepoFormat
+repoFormat :: Repository rt p wU wR -> RepoFormat
 repoFormat (Repo _ fmt _ _ _) = fmt
 
-repoPristineType :: Repository rt p wR wU wT -> PristineType
+repoPristineType :: Repository rt p wU wR -> PristineType
 repoPristineType (Repo _ _ pr _ _) = pr
 
-repoCache :: Repository rt p wR wU wT -> Cache
+repoCache :: Repository rt p wU wR -> Cache
 repoCache (Repo _ _ _ c _) = c
 
-modifyCache :: (Cache -> Cache) -> Repository rt p wR wU wT -> Repository rt p wR wU wT
+modifyCache :: (Cache -> Cache) -> Repository rt p wU wR -> Repository rt p wU wR
 modifyCache g (Repo l f p c a) = Repo l f p (g c) a
 
-repoAccessType :: Repository rt p wR wU wT -> SAccessType rt
+repoAccessType :: Repository rt p wU wR -> SAccessType rt
 repoAccessType (Repo _ _ _ _ s) = s
 
-unsafeCoerceRepoType :: Repository rt p wR wU wT -> Repository rt' p wR wU wT
+unsafeCoerceRepoType :: Repository rt p wU wR -> Repository rt' p wU wR
 unsafeCoerceRepoType = unsafeCoerce
 
-unsafeCoercePatchType :: Repository rt p wR wU wT -> Repository rt p' wR wU wT
+unsafeCoercePatchType :: Repository rt p wU wR -> Repository rt p' wU wR
 unsafeCoercePatchType = unsafeCoerce
 
-unsafeCoerceR :: Repository rt p wR wU wT -> Repository rt p wR' wU wT
+unsafeCoerceR :: Repository rt p wU wR -> Repository rt p wU wR'
 unsafeCoerceR = unsafeCoerce
 
-unsafeCoerceU :: Repository rt p wR wU wT -> Repository rt p wR wU' wT
+unsafeCoerceU :: Repository rt p wU wR -> Repository rt p wU' wR
 unsafeCoerceU = unsafeCoerce
 
-unsafeCoerceT :: Repository rt p wR wU wT -> Repository rt p wR wU wT'
-unsafeCoerceT = unsafeCoerce
-
-unsafeStartTransaction :: Repository 'RO p wR wU wT -> Repository 'RW p wR wU wT
+unsafeStartTransaction :: Repository 'RO p wU wR -> Repository 'RW p wU wR
 unsafeStartTransaction (Repo l f p c SRO) = Repo l f p c SRW
 
-unsafeEndTransaction :: Repository 'RW p wR wU wT -> Repository 'RO p wR wU wT
+unsafeEndTransaction :: Repository 'RW p wU wR -> Repository 'RO p wU wR
 unsafeEndTransaction (Repo l f p c SRW) = Repo l f p c SRO
 
-mkRepo :: AbsoluteOrRemotePath -> RepoFormat -> PristineType -> Cache -> Repository 'RO p wR wU wT
+mkRepo :: AbsoluteOrRemotePath -> RepoFormat -> PristineType -> Cache -> Repository 'RO p wU wR
 mkRepo p f pr c = Repo (toPath p) f pr c SRO

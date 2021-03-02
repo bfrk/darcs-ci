@@ -47,10 +47,10 @@ import Darcs.Repository
     , readPendingAndWorking
     , readPristine
     , tentativelyAddPatch
+    , tentativelyRemoveFromPW
     , withRepoLock
     )
 import Darcs.Repository.Flags ( UpdatePending(..) )
-import Darcs.Repository.Pending ( tentativelyRemoveFromPW )
 import Darcs.UI.Commands
     ( DarcsCommand(..)
     , amInHashedRepository
@@ -221,7 +221,7 @@ reportNonExisting lfa (paths_only_in_working, _) = do
 recordCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 recordCmd fps cfg args = do
     checkNameIsNotOption (O.patchname ? cfg) (isInteractive cfg)
-    withRepoLock (O.useCache ? cfg) (O.umask ? cfg) $ RepoJob $ \(repository :: Repository 'RW p wR wU wR) -> do
+    withRepoLock (O.useCache ? cfg) (O.umask ? cfg) $ RepoJob $ \(repository :: Repository 'RW p wU wR) -> do
       existing_files <- do
         files <- pathSetFromArgs fps args
         files' <-
@@ -258,7 +258,7 @@ checkNameIsNotOption (Just name) True   =
         unless confirmed $ putStrLn "Okay, aborting the record." >> exitFailure
 
 doRecord :: (RepoPatch p, ApplyState p ~ Tree)
-         => Repository 'RW p wR wU wR -> Config -> Maybe [AnchoredPath]
+         => Repository 'RW p wU wR -> Config -> Maybe [AnchoredPath]
          -> (FL (PrimOf p) :> FL (PrimOf p)) wR wU -> IO ()
 doRecord repository cfg files pw@(pending :> working) = do
     date <- getDate (O.pipe ? cfg)
@@ -290,7 +290,7 @@ doRecord repository cfg files pw@(pending :> working) = do
                           doActualRecord repository cfg name date my_author my_log logf deps chs pw
 
 doActualRecord :: (RepoPatch p, ApplyState p ~ Tree)
-               => Repository 'RW p wR wU wR
+               => Repository 'RW p wU wR
                -> Config
                -> String -> String -> String
                -> [String] -> Maybe String

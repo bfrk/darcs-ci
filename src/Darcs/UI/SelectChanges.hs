@@ -123,7 +123,7 @@ import Darcs.Patch.Witnesses.WZipper
     ( FZipper (..), focus, jokers, left, right
     , rightmost, toEnd, toStart
     )
-import Darcs.Repository ( AccessType(RW), Repository, readTentativePatches )
+import Darcs.Repository ( AccessType(RW), Repository, readPatches )
 import Darcs.UI.External ( editText )
 import Darcs.UI.Options.All
     ( Verbosity(..), WithSummary(..)
@@ -672,7 +672,7 @@ currentFile = do
 -- it.
 decide :: Commute p
        => Bool
-       -> LabelledPatch p wT wU
+       -> LabelledPatch p wA wB
        -> InteractiveSelectionM p wX wY ()
 decide takeOrDrop lp = do
     whch <- asks whichChanges
@@ -1001,7 +1001,7 @@ skipMundane = do
       _nevermind_ jn = "Will not ask whether to " ++ jn ++ " "
       _these_ n  = show n ++ " already decided " ++ _elem_ n ""
       _elem_ n = englishNum n (Noun "patch")
-      showskippedpatch :: ShowPatch p => FL (LabelledPatch p) wY wT -> IO ()
+      showskippedpatch :: ShowPatch p => FL (LabelledPatch p) wY wZ -> IO ()
       showskippedpatch =
         putDocLnWith fancyPrinters . vcat . mapFL (showFriendly NormalVerbosity NoSummary . unLabel)
 
@@ -1019,14 +1019,14 @@ getDefault False InFirst = 'y'
 getDefault False InLast  = 'n'
 
 askAboutDepends :: (RepoPatch p, ApplyState p ~ Tree)
-                => Repository 'RW p wR wU wT -> FL (PrimOf p) wT wY
+                => Repository 'RW p wU wR -> FL (PrimOf p) wR wY
                 -> PatchSelectionOptions
                 -> [PatchInfo] -> IO [PatchInfo]
 askAboutDepends repository pa' ps_opts olddeps = do
   -- Ideally we'd just default the olddeps to yes but still ask about them.
   -- SelectChanges doesn't currently (17/12/09) offer a way to do this so would
   -- have to have this support added first.
-  pset <- readTentativePatches repository
+  pset <- readPatches repository
   -- Let the user select only from patches after the last clean tag.
   -- We do this for efficiency, otherwise independentPatchIds can
   -- take a /very/ long time to finish. The limitation this imposes

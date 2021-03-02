@@ -151,7 +151,7 @@ fetchFilesUsingCache cache dir = mapM_ go where
      else void $ fetchFileUsingCache cache dir path
 
 -- | Create packs from the current recorded version of the repository.
-createPacks :: RepoPatch p => Repository 'RW p wR wU wT -> IO ()
+createPacks :: RepoPatch p => Repository 'RW p wU wR -> IO ()
 createPacks repo = flip finally (mapM_ removeFileIfExists
   [ darcsdir </> "meta-filelist-inventories"
   , darcsdir </> "meta-filelist-pristine"

@@ -454,7 +454,7 @@ optimizeHelpRelink =
   , "into multiple local repositories."
   ]
 
-doOptimizePristine :: [DarcsFlag] -> Repository rt p wR wU wT -> IO ()
+doOptimizePristine :: [DarcsFlag] -> Repository rt p wU wR -> IO ()
 doOptimizePristine opts repo = do
     inv <- BC.readFile hashedInventoryPath
     let linesInv = BC.split '\n' inv
@@ -502,7 +502,7 @@ optimizeUpgradeCmd _ opts _ = do
 
 actuallyUpgradeFormat
   :: (RepoPatch p, ApplyState p ~ Tree)
-  => [DarcsFlag] -> Repository 'RW p wR wU wT -> IO ()
+  => [DarcsFlag] -> Repository 'RW p wU wR -> IO ()
 actuallyUpgradeFormat opts _repository = do
   -- convert patches/inventory
   patches <- readPatches _repository

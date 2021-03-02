@@ -195,7 +195,7 @@ whatsnewHelp =
 
 whatsnewCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 whatsnewCmd fps opts args =
-   withRepository (useCache ? opts) $ RepoJob $ \(repo :: Repository 'RO p wR wU wR) -> do
+   withRepository (useCache ? opts) $ RepoJob $ \(repo :: Repository 'RO p wU wR) -> do
     existing_files <- do
       files <- pathSetFromArgs fps args
       files' <-
@@ -300,7 +300,7 @@ whatsnewCmd fps opts args =
     -- return the unrecorded changes that affect an optional list of paths.
     filteredUnrecordedChanges :: forall rt p wR wU. (RepoPatch p, ApplyState p ~ Tree)
                               => O.DiffOpts
-                              -> Repository rt p wR wU wR
+                              -> Repository rt p wU wR
                               -> Maybe [AnchoredPath]
                               -> IO (Sealed (FL (PrimOf p) wR))
     filteredUnrecordedChanges diffing repo paths =

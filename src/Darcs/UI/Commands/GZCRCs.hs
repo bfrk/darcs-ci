@@ -134,7 +134,7 @@ gzcrcsCmd _ opts _ =
     Nothing -> fail "You must specify --check or --repair for gzcrcs"
     Just action -> withRepository (useCache ? opts) (RepoJob (gzcrcs' action opts))
 
-gzcrcs' :: O.GzcrcsAction -> [DarcsFlag] -> Repository rt p wR wU wT -> IO ()
+gzcrcs' :: O.GzcrcsAction -> [DarcsFlag] -> Repository rt p wU wR -> IO ()
 gzcrcs' action opts repo = do
     -- Somewhat ugly IORef use here because it's convenient, would be nicer to
     -- pre-filter the list of locs to check and then decide whether to print

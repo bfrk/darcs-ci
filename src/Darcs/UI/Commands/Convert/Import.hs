@@ -65,7 +65,7 @@ import Darcs.Repository
     , createPristineDirectoryTree
     , createRepository
     , finalizeRepositoryChanges
-    , readTentativePatches
+    , readPatches
     , repoCache
     , revertRepositoryChanges
     , withUMaskFlag
@@ -235,8 +235,8 @@ fastImport _ opts [outrepo] =
     return marks
 fastImport _ _ _ = fail "I need exactly one output repository."
 
-fastImport' :: forall p r u . (RepoPatch p, ApplyState p ~ Tree) =>
-               Repository 'RW p r u r -> Marks -> IO ()
+fastImport' :: forall p wU wR . (RepoPatch p, ApplyState p ~ Tree) =>
+               Repository 'RW p wU wR -> Marks -> IO ()
 fastImport' repo marks = do
     pristine <- readPristine repo
     marksref <- newIORef marks
@@ -268,7 +268,7 @@ fastImport' repo marks = do
         addtag author msg =
           do info_ <- makeinfo author msg True
              gotany <- liftIO $ doesFileExist tentativePristinePath
-             deps <- if gotany then liftIO $ getUncovered `fmap` readTentativePatches repo
+             deps <- if gotany then liftIO $ getUncovered `fmap` readPatches repo
                                else return []
              let patch :: Named p wA wA
                  patch = NamedP info_ deps NilFL

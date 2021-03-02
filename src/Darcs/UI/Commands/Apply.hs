@@ -206,7 +206,7 @@ applyCmdCommon
     -> PatchProxy p
     -> [DarcsFlag]
     -> B.ByteString
-    -> Repository 'RW p wR wU wR
+    -> Repository 'RW p wU wR
     -> IO ()
 applyCmdCommon patchApplier patchProxy opts bundle repository = do
   us <- readPatches repository

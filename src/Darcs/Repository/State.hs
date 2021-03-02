@@ -139,7 +139,7 @@ newtype TreeFilter m = TreeFilter { applyTreeFilter :: forall tr . FilterTree tr
 -- constructed filter will take pending into account, so the subpaths will be
 -- translated correctly relative to pending move patches.
 restrictSubpaths :: (RepoPatch p, ApplyState p ~ Tree)
-                 => Repository rt p wR wU wT -> [AnchoredPath]
+                 => Repository rt p wU wR -> [AnchoredPath]
                  -> IO (TreeFilter m)
 restrictSubpaths repo paths = do
   Sealed pending <- Pending.readPending repo
@@ -150,7 +150,7 @@ restrictSubpaths repo paths = do
 -- abiguous typing of @p@.
 restrictSubpathsAfter :: (RepoPatch p, ApplyState p ~ Tree)
                       => FL (PrimOf p) wR wP
-                      -> Repository rt p wR wU wT
+                      -> Repository rt p wU wR
                       -> [AnchoredPath]
                       -> IO (TreeFilter m)
 restrictSubpathsAfter pending _repo paths = do
@@ -162,7 +162,7 @@ restrictSubpathsAfter pending _repo paths = do
 -- note we assume pending starts at the recorded state
 maybeRestrictSubpaths :: (RepoPatch p, ApplyState p ~ Tree)
                       => FL (PrimOf p) wR wP
-                      -> Repository rt p wR wU wT
+                      -> Repository rt p wU wR
                       -> Maybe [AnchoredPath]
                       -> IO (TreeFilter m)
 maybeRestrictSubpaths pending repo =
@@ -230,7 +230,7 @@ This also depends on the options given:
 -}
 unrecordedChanges :: (RepoPatch p, ApplyState p ~ Tree)
                   => DiffOpts
-                  -> Repository rt p wR wU wR
+                  -> Repository rt p wU wR
                   -> Maybe [AnchoredPath] -> IO (FL (PrimOf p) wR wU)
 unrecordedChanges dopts r paths = do
   (pending :> working) <- readPendingAndWorking dopts r paths
@@ -241,7 +241,7 @@ unrecordedChanges dopts r paths = do
 -- then detect replaces.
 readPendingAndWorking :: (RepoPatch p, ApplyState p ~ Tree)
                       => DiffOpts
-                      -> Repository rt p wR wU wR
+                      -> Repository rt p wU wR
                       -> Maybe [AnchoredPath]
                       -> IO ((FL (PrimOf p) :> FL (PrimOf p)) wR wU)
 readPendingAndWorking _ r _ | formatHas NoWorkingDir (repoFormat r) = do
@@ -264,14 +264,14 @@ readPendingAndWorking DiffOpts{..} repo mbpaths = do
 
 readPendingAndMovesAndUnrecorded
   :: (RepoPatch p, ApplyState p ~ Tree)
-  => Repository rt p wR wU wR
+  => Repository rt p wU wR
   -> UseIndex
   -> LookForAdds
   -> LookForMoves
   -> Maybe [AnchoredPath]
   -> IO ( Tree IO             -- pristine with (pending + moves)
         , Tree IO             -- working
-        , (FL (PrimOf p) :> FL (PrimOf p)) wR wU -- pending :> moves
+        , (FL (PrimOf p) :> FL (PrimOf p)) wR wM -- pending :> moves
         )
 readPendingAndMovesAndUnrecorded repo useidx scan lfm mbpaths = do
   debugMessage "readPendingAndMovesAndUnrecorded: start"
@@ -295,7 +295,7 @@ readPendingAndMovesAndUnrecorded repo useidx scan lfm mbpaths = do
 -- The @pending_tree@ is understood to have @relevant@ already applied and is
 -- used (only) if @useidx == 'IgnoreIndex'@ and @scan /= 'EvenLookForBoring'@ to act as
 -- a guide for filtering the working tree.
-filteredWorking :: Repository rt p wR wU wR
+filteredWorking :: Repository rt p wU wR
                 -> UseIndex
                 -> LookForAdds
                 -> TreeFilter IO
@@ -327,9 +327,9 @@ filteredWorking repo useidx scan relevant from_index pending_tree =
             return $ applyTreeFilter nonboring working
           EvenLookForBoring -> return working
 
--- | Witnesses the fact that in the absence of a working tree, we
--- pretend that the working dir updates magically to the tentative state.
-workDirLessRepoWitness :: Repository rt p wR wU wT -> EqCheck wU wT
+-- | Witnesses the fact that in the absence of a working tree, the
+-- unrecorded state cannot differ from the record state.
+workDirLessRepoWitness :: Repository rt p wU wR -> EqCheck wU wR
 workDirLessRepoWitness r
  | formatHas NoWorkingDir (repoFormat r) = unsafeCoerceP IsEq
  | otherwise                             = NotEq
@@ -342,7 +342,7 @@ workDirLessRepoWitness r
 -- parts of the index do not need to go through an up-to-date check (which
 -- involves a relatively expensive lstat(2) per file.
 readUnrecorded :: (RepoPatch p, ApplyState p ~ Tree)
-               => Repository rt p wR wU wR
+               => Repository rt p wU wR
                -> UseIndex
                -> Maybe [AnchoredPath]
                -> IO (Tree IO)
@@ -372,7 +372,7 @@ showTree name tree = unlines (name : map (("  "++) . displayPath . fst) (list tr
 #endif
 
 readIndexOrPlainTree :: (ApplyState p ~ Tree, RepoPatch p)
-                     => Repository rt p wR wU wR
+                     => Repository rt p wU wR
                      -> UseIndex
                      -> TreeFilter IO
                      -> Tree IO
@@ -405,7 +405,7 @@ readIndexOrPlainTree repo IgnoreIndex treeFilter pending_tree = do
 -- interested in the resulting tree, not the patch, so the 'DiffAlgorithm' option
 -- is irrelevant.
 readUnrecordedFiltered :: (RepoPatch p, ApplyState p ~ Tree)
-                       => Repository rt p wR wU wR
+                       => Repository rt p wU wR
                        -> UseIndex
                        -> LookForAdds
                        -> LookForMoves
@@ -424,7 +424,7 @@ readWorking relevant =
 
 -- | Obtains the recorded 'Tree' with the pending patch applied.
 readPristineAndPending :: (RepoPatch p, ApplyState p ~ Tree)
-                       => Repository rt p wR wU wR -> IO (Tree IO)
+                       => Repository rt p wU wR -> IO (Tree IO)
 readPristineAndPending repo = fst `fmap` readPending repo
 
 -- | Obtains the recorded 'Tree' with the pending patch applied, plus
@@ -432,7 +432,7 @@ readPristineAndPending repo = fst `fmap` readPending repo
 --   recorded state (we even verify that it applies, and degrade to
 --   renaming pending and starting afresh if it doesn't).
 readPending :: (RepoPatch p, ApplyState p ~ Tree)
-            => Repository rt p wR wU wR
+            => Repository rt p wU wR
             -> IO (Tree IO, Sealed (FL (PrimOf p) wR))
 readPending repo = do
   pristine <- readPristine repo
@@ -447,7 +447,7 @@ readPending repo = do
 
 -- | Open the index or re-create it in case it is invalid or non-existing.
 readIndex :: (RepoPatch p, ApplyState p ~ Tree)
-          => Repository rt p wR wU wR -> IO Index
+          => Repository rt p wU wR -> IO Index
 readIndex repo = do
   okay <- checkIndex
   if not okay
@@ -457,7 +457,7 @@ readIndex repo = do
 -- | Update the index so that it matches pristine+pending. If the index does
 -- not exist or is invalid, create a new one. Returns the updated index.
 internalUpdateIndex :: (RepoPatch p, ApplyState p ~ Tree)
-            => Repository rt p wR wU wR -> IO Index
+            => Repository rt p wU wR -> IO Index
 internalUpdateIndex repo = do
   pris <- readPristineAndPending repo
   idx <- updateIndexFrom indexPath darcsTreeHash pris
@@ -472,7 +472,7 @@ internalUpdateIndex repo = do
 -- content in either pristine or working are handled transparently by the index
 -- reading code.
 updateIndex :: (RepoPatch p, ApplyState p ~ Tree)
-            => Repository rt p wR wU wR -> IO ()
+            => Repository rt p wU wR -> IO ()
 updateIndex repo = do
   -- call checkIndex to throw away the index if it is invalid;
   -- this can happen if we are called with --ignore-times
@@ -498,7 +498,7 @@ checkIndex = do
 -- conflict with the recorded or unrecorded changes in a repo
 filterOutConflicts
   :: (RepoPatch p, ApplyState p ~ Tree)
-  => Repository rt p wR wU wR     -- ^Repository itself, used for grabbing
+  => Repository rt p wU wR     -- ^Repository itself, used for grabbing
                                   --  unrecorded changes
   -> UseIndex                     -- ^Whether to use the index when reading
                                   --  the working state
@@ -523,10 +523,10 @@ filterOutConflicts repository useidx us them
 
 -- | Automatically detect file moves using the index.
 -- TODO: This function lies about the witnesses.
-getMoves :: forall rt p wR wU wB prim.
+getMoves :: forall rt p wU wR wB prim.
             (RepoPatch p, ApplyState p ~ Tree, prim ~ PrimOf p)
          => LookForMoves
-         -> Repository rt p wR wU wR
+         -> Repository rt p wU wR
          -> Maybe [AnchoredPath]
          -> IO (FL prim wB wB)
 getMoves NoLookForMoves _ _ = return NilFL
@@ -536,7 +536,7 @@ getMoves YesLookForMoves repository files =
     mkMovesFL [] = NilFL
     mkMovesFL ((a,b,_):xs) = move a b :>: mkMovesFL xs
 
-    getMovedFiles :: Repository rt p wR wU wR
+    getMovedFiles :: Repository rt p wU wR
                   -> Maybe [AnchoredPath]
                   -> IO [(AnchoredPath, AnchoredPath, ItemType)]
     getMovedFiles repo fs = do
@@ -610,11 +610,11 @@ getMoves YesLookForMoves repository files =
 -- | Search for possible replaces between the recordedAndPending state
 -- and the unrecorded (or working) state. Return a Sealed FL list of
 -- replace patches to be applied to the recordedAndPending state.
-getReplaces :: forall rt p wR wU wT
+getReplaces :: forall rt p wU wR
              . (RepoPatch p, ApplyState p ~ Tree)
             => LookForReplaces
             -> DiffAlgorithm
-            -> Repository rt p wR wU wT
+            -> Repository rt p wU wR
             -> Tree IO -- ^ pending tree (including possibly detected moves)
             -> Tree IO -- ^ working tree
             -> IO (Tree IO, -- new pending tree
@@ -698,7 +698,7 @@ getReplaces YesLookForReplaces diffalg _repo pending working = do
 -- TODO: add witnesses for pending so we can make the types precise: currently
 -- the passed patch can be applied in any context, not just after pending.
 addPendingDiffToPending :: (RepoPatch p, ApplyState p ~ Tree)
-                        => Repository 'RW p wR wU wR
+                        => Repository 'RW p wU wR
                         -> FreeLeft (FL (PrimOf p)) -> IO ()
 addPendingDiffToPending repo newP = do
     (_, Sealed toPend) <- readPending repo
@@ -714,7 +714,7 @@ addPendingDiffToPending repo newP = do
 -- changes between pending and working as is possible, and including anything
 -- that doesn't commute, and the patch itself in the new pending patch.
 addToPending :: (RepoPatch p, ApplyState p ~ Tree)
-             => Repository 'RW p wR wU wR
+             => Repository 'RW p wU wR
              -> DiffOpts
              -> FL (PrimOf p) wU wY -> IO ()
 addToPending repo dopts p = do
@@ -727,5 +727,5 @@ addToPending repo dopts p = do
             (toPend +>+ reverseRL toP' +>+ p') recordedState
            updateIndex repo
 
-readPlainTree :: Repository rt p wR wU wT -> IO (Tree IO)
+readPlainTree :: Repository rt p wU wR -> IO (Tree IO)
 readPlainTree repo  = PlainTree.readPlainTree (repoLocation repo)

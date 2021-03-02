@@ -250,7 +250,7 @@ fetchCmd (_,o) opts repos =
 
 fetchPatches :: (RepoPatch p, ApplyState p ~ Tree)
              => AbsolutePath -> [DarcsFlag] -> [String] -> String
-             -> Repository 'RW p wR wU wR
+             -> Repository 'RW p wU wR
              -> IO (Sealed (Fork (PatchSet p)
                                  (FL (PatchInfoAnd p))
                                  (FL (PatchInfoAnd p)) Origin wR))
@@ -339,7 +339,7 @@ the second patchset(s) to be complemented against Rc.
 -}
 
 readRepos :: RepoPatch p
-          => Repository rt p wR wU wT -> [DarcsFlag] -> [String]
+          => Repository rt p wU wR -> [DarcsFlag] -> [String]
           -> IO (SealedPatchSet p Origin,SealedPatchSet p Origin)
 readRepos _ _ [] = error "impossible case"
 readRepos to_repo opts us =

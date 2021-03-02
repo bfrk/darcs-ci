@@ -131,10 +131,10 @@ convertSizePrefixedPristine cache ph = do
 -- |applyToTentativePristine applies a patch @p@ to the tentative pristine
 -- tree, and updates the tentative pristine hash
 applyToTentativePristine :: (ApplyState q ~ Tree, Apply q, ShowPatch q)
-                         => Repository 'RW p wR wU wT
+                         => Repository 'RW p wU wR
                          -> ApplyDir
                          -> Verbosity
-                         -> q wT wY
+                         -> q wR wY
                          -> IO ()
 applyToTentativePristine r dir verb p =
   withRepoDir r $ do
@@ -161,7 +161,7 @@ applyToTentativePristineCwd cache dir p = do
     writeDocBinFile tentativePristinePath $
         pokePristineHash newPristineHash tentativePristine
 
-readHashedPristineRoot :: Repository rt p wR wU wT -> IO PristineHash
+readHashedPristineRoot :: Repository rt p wU wR -> IO PristineHash
 readHashedPristineRoot r =
   withRepoDir r $
     case repoAccessType r of
@@ -174,7 +174,7 @@ readHashedPristineRoot r =
 
 -- | Write the pristine tree into a plain directory at the given path.
 createPristineDirectoryTree ::
-     Repository rt p wR wU wT -> FilePath -> WithWorkingDir -> IO ()
+     Repository rt p wU wR -> FilePath -> WithWorkingDir -> IO ()
 createPristineDirectoryTree _ _ NoWorkingDir = return ()
 createPristineDirectoryTree r dir WithWorkingDir = do
     tree <- readPristine r
@@ -183,7 +183,7 @@ createPristineDirectoryTree r dir WithWorkingDir = do
 -- | Obtains a Tree corresponding to the "recorded" state of the repository:
 -- this is the same as the pristine cache, which is the same as the result of
 -- applying all the repository's patches to an empty directory.
-readPristine :: Repository rt p wR wU wT -> IO (Tree IO)
+readPristine :: Repository rt p wU wR -> IO (Tree IO)
 readPristine repo
   | formatHas HashedInventory (repoFormat repo) =
     case repoAccessType repo of
@@ -228,7 +228,7 @@ cleanPristineDir c hashroots =
 -- | Replace the existing pristine with a new one (loaded up in a Tree object).
 -- Warning: If @rt ~ 'RO@ this overwrites the recorded state, use only when
 -- creating a new repo!
-writePristine :: Repository rt p wR wU wT -> Tree IO -> IO ()
+writePristine :: Repository rt p wU wR -> Tree IO -> IO ()
 writePristine repo tree =
   withCurrentDirectory (repoLocation repo) $ do
     tree' <- darcsAddMissingHashes tree

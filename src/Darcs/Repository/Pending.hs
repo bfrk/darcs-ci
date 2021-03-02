@@ -67,7 +67,13 @@ import Darcs.Patch.Witnesses.Sealed ( Sealed(Sealed), mapSeal )
 import Darcs.Patch.Witnesses.Unsafe ( unsafeCoercePStart )
 
 import Darcs.Repository.Flags ( UpdatePending (..))
-import Darcs.Repository.InternalTypes ( Repository, withRepoDir, unsafeCoerceT )
+import Darcs.Repository.InternalTypes
+    ( AccessType(..)
+    , Repository
+    , unsafeCoerceR
+    , unsafeStartTransaction
+    , withRepoDir
+    )
 import Darcs.Repository.Paths ( pendingPath )
 
 import Darcs.Util.ByteString ( gzReadFilePS )
@@ -83,23 +89,23 @@ newSuffix = ".new"
 tentativeSuffix = ".tentative"
 
 -- | Read the contents of pending.
-readPending :: RepoPatch p => Repository rt p wR wU wT
+readPending :: RepoPatch p => Repository rt p wU wR
             -> IO (Sealed (FL (PrimOf p) wR))
 readPending = readPendingFile ""
 
 -- |Read the contents of tentative pending.
-readTentativePending :: RepoPatch p => Repository rt p wR wU wT
-                     -> IO (Sealed (FL (PrimOf p) wT))
+readTentativePending :: RepoPatch p => Repository 'RW p wU wR
+                     -> IO (Sealed (FL (PrimOf p) wR))
 readTentativePending = readPendingFile tentativeSuffix
 
 -- |Read the contents of tentative pending.
-readNewPending :: RepoPatch p => Repository rt p wR wU wT
-               -> IO (Sealed (FL (PrimOf p) wT))
+readNewPending :: RepoPatch p => Repository 'RW p wU wR
+               -> IO (Sealed (FL (PrimOf p) wR))
 readNewPending = readPendingFile newSuffix
 
 -- |Read the pending file with the given suffix. CWD should be the repository
--- directory.
-readPendingFile :: ReadPatch prim => String -> Repository rt p wR wU wT
+-- directory. Unsafe!
+readPendingFile :: ReadPatch prim => String -> Repository rt p wU wR
                 -> IO (Sealed (FL prim wX))
 readPendingFile suffix _ =
   ifDoesNotExistError (Sealed NilFL) $ do
@@ -137,18 +143,18 @@ showMaybeBracketedFL printer pre post ps = text [pre] $$
                                            text [post]
 
 -- |Write the contents of tentative pending.
-writeTentativePending :: RepoPatch p => Repository rt p wR wU wT
-                      -> FL (PrimOf p) wT wY -> IO ()
+writeTentativePending :: RepoPatch p => Repository 'RW p wU wR
+                      -> FL (PrimOf p) wR wY -> IO ()
 writeTentativePending = writePendingFile tentativeSuffix
 
 -- |Write the contents of new pending. CWD should be the repository directory.
-writeNewPending :: RepoPatch p => Repository rt p wR wU wT
-                               -> FL (PrimOf p) wT wP -> IO ()
+writeNewPending :: RepoPatch p => Repository 'RW p wU wR
+                               -> FL (PrimOf p) wR wP -> IO ()
 writeNewPending = writePendingFile newSuffix
 
 -- Write a pending file, with the given suffix. CWD should be the repository
 -- directory.
-writePendingFile :: ShowPatchBasic prim => String -> Repository rt p wR wU wT
+writePendingFile :: ShowPatchBasic prim => String -> Repository 'RW p wU wR
                  -> FL prim wX wY -> IO ()
 writePendingFile suffix _ = writePatch name . FLM
   where
@@ -167,12 +173,12 @@ writePatch f p = writeDocBinFile f $ showPatch ForStorage p <> text "\n"
 -- This function is used by Darcs whenever it adds a patch to the repository
 -- (eg. with apply or record). Think of it as one part of transferring patches
 -- from pending to somewhere else.
-tentativelyRemoveFromPending :: forall rt p wR wU wT wO. RepoPatch p
-                             => Repository rt p wR wU wT
-                             -> FL (PrimOf p) wO wT
+tentativelyRemoveFromPending :: forall p wU wR wO. RepoPatch p
+                             => Repository 'RW p wU wR
+                             -> FL (PrimOf p) wO wR
                              -> IO ()
 tentativelyRemoveFromPending r ps = do
-    Sealed pend <- readTentativePending (unsafeCoerceT r :: Repository rt p wR wU wO)
+    Sealed pend <- readTentativePending (unsafeCoerceR r :: Repository 'RW p wU wO)
     Sealed newpend <-
         return $ updatePending (progressFL "Removing from pending:" ps) pend NilFL
     writeTentativePending r newpend
@@ -181,9 +187,9 @@ tentativelyRemoveFromPending r ps = do
 -- difference between pending and working into account. It is used by amend and
 -- record commands to adjust the pending patch. See the docs for
 -- 'updatePending' below for details.
-tentativelyRemoveFromPW :: forall rt p wR wO wT wP wU. RepoPatch p
-                        => Repository rt p wR wU wT
-                        -> FL (PrimOf p) wO wT -- added repo changes
+tentativelyRemoveFromPW :: forall p wR wO wP wU. RepoPatch p
+                        => Repository 'RW p wU wR
+                        -> FL (PrimOf p) wO wR -- added repo changes
                         -> FL (PrimOf p) wO wP -- O = old tentative
                         -> FL (PrimOf p) wP wU -- P = (old) pending
                         -> IO ()
@@ -288,9 +294,9 @@ decoalesceFL (z :>: zs) y
 --   writes it to disk.  If it can't be applied, @pendPs@ must
 --   be somehow buggy, so we save it for forensics and crash.
 makeNewPending :: (RepoPatch p, ApplyState p ~ Tree)
-                 => Repository rt p wR wU wT
+                 => Repository 'RW p wU wR
                  -> UpdatePending
-                 -> FL (PrimOf p) wT wP
+                 -> FL (PrimOf p) wR wP
                  -> Tree IO  -- ^recorded state of the repository, to check if pending can be applied
                  -> IO ()
 makeNewPending _                  NoUpdatePending _ _ = return ()
@@ -321,7 +327,7 @@ makeNewPending repo YesUpdatePending origp recordedState =
 --   inconsistency of the @NoUpdatePending@ doing deletion, but
 --   @YesUpdatePending@ not bothering.
 finalizePending :: (RepoPatch p, ApplyState p ~ Tree)
-                => Repository rt p wR wU wT
+                => Repository 'RW p wU wR
                 -> UpdatePending
                 -> Tree IO
                 -> IO ()
@@ -333,14 +339,14 @@ finalizePending repo upe@YesUpdatePending recordedState =
       makeNewPending repo upe tpend recordedState
 
 revertPending :: RepoPatch p
-              => Repository rt p wR wU wT
+              => Repository 'RO p wU wR
               -> UpdatePending
               -> IO ()
 revertPending r upe = do
   removeFileMayNotExist (pendingPath ++ ".tentative")
   Sealed x <- readPending r
   if upe == YesUpdatePending
-    then writeTentativePending (unsafeCoerceT r) x
+    then writeTentativePending (unsafeCoerceR (unsafeStartTransaction r)) x
     else removeFileMayNotExist pendingPath
 
 -- | @tentativelyAddToPending repo ps@ appends @ps@ to the pending patch.
@@ -348,8 +354,8 @@ revertPending r upe = do
 --   This fuction is unsafe because it accepts a patch that works on the
 --   tentative pending and we don't currently track the state of the
 --   tentative pending.
-tentativelyAddToPending :: forall rt p wR wU wT wX wY. RepoPatch p
-                        => Repository rt p wR wU wT
+tentativelyAddToPending :: RepoPatch p
+                        => Repository 'RW p wU wR
                         -> FL (PrimOf p) wX wY
                         -> IO ()
 tentativelyAddToPending repo patch =
@@ -358,9 +364,9 @@ tentativelyAddToPending repo patch =
         writeTentativePending repo (pend +>+ unsafeCoercePStart patch)
 
 -- | Overwrites the pending patch with a new one, starting at the tentative state.
-setTentativePending :: forall rt p wR wU wT wP. RepoPatch p
-                    => Repository rt p wR wU wT
-                    -> FL (PrimOf p) wT wP
+setTentativePending :: RepoPatch p
+                    => Repository 'RW p wU wR
+                    -> FL (PrimOf p) wR wP
                     -> IO ()
 setTentativePending repo patch = do
     Sealed prims <- return $ siftForPending patch

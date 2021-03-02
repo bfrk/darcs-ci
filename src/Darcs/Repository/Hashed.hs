@@ -20,7 +20,6 @@ module Darcs.Repository.Hashed
     , finalizeTentativeChanges
     , addToTentativeInventory
     , readPatches
-    , readTentativePatches
     , writeAndReadPatch
     , writeTentativeInventory
     , copyHashedInventory
@@ -162,7 +161,6 @@ import Darcs.Repository.InternalTypes
     , repoLocation
     , withRepoDir
     , unsafeCoerceR
-    , unsafeCoerceT
     , unsafeStartTransaction
     , unsafeEndTransaction
     )
@@ -191,7 +189,7 @@ import Darcs.Patch.Progress (progressFL)
 -- |revertTentativeChanges swaps the tentative and "real" hashed inventory
 -- files, and then updates the tentative pristine with the "real" inventory
 -- hash.
-revertTentativeChanges :: Repository 'RO p wR wU wT -> IO ()
+revertTentativeChanges :: Repository 'RO p wU wR -> IO ()
 revertTentativeChanges repo = do
     cloneFile hashedInventoryPath tentativeHashedInventoryPath
     inv <- gzReadFilePS tentativeHashedInventoryPath
@@ -211,7 +209,7 @@ revertTentativeChanges repo = do
 -- swap. In general, we can't clean the pristine cache at the same time, since
 -- a simultaneous get might be in progress.
 finalizeTentativeChanges :: RepoPatch p
-                         => Repository 'RW p wR wU wT -> Compression -> IO ()
+                         => Repository 'RW p wU wR -> Compression -> IO ()
 finalizeTentativeChanges r compr = do
     debugMessage "Optimizing the inventory..."
     -- Read the tentative patches
@@ -242,7 +240,7 @@ writeHashFile c compr subdir d = do
     writeFileUsingCache c compr subdir $ renderPS d
 
 -- | Read the recorded 'PatchSet' of a hashed 'Repository'.
-readPatchesHashed :: RepoPatch p => Repository rt p wR wU wT
+readPatchesHashed :: RepoPatch p => Repository rt p wU wR
                   -> IO (PatchSet p Origin wR)
 readPatchesHashed repo =
   case repoAccessType repo of
@@ -251,14 +249,14 @@ readPatchesHashed repo =
 
 -- | Read the tentative 'PatchSet' of a (hashed) 'Repository'.
 readTentativePatches :: (PatchListFormat p, ReadPatch p)
-                     => Repository 'RW p wR wU wT
-                     -> IO (PatchSet p Origin wT)
+                     => Repository 'RW p wU wR
+                     -> IO (PatchSet p Origin wR)
 readTentativePatches = readPatchesUsingSpecificInventory tentativeHashedInventoryPath
 
 -- | Read a 'PatchSet' starting with a specific inventory inside a 'Repository'.
 readPatchesUsingSpecificInventory :: (PatchListFormat p, ReadPatch p)
                                   => FilePath
-                                  -> Repository rt p wR wU wT
+                                  -> Repository rt p wU wR
                                   -> IO (PatchSet p Origin wS)
 readPatchesUsingSpecificInventory invPath repo = do
   let repodir = repoLocation repo
@@ -391,7 +389,7 @@ readInventoryPrivate path = do
 
 -- |Copy the hashed inventory from the given location to the given repository,
 -- possibly using the given remote darcs binary.
-copyHashedInventory :: Repository 'RO p wR wU wT -> RemoteDarcs -> String -> IO ()
+copyHashedInventory :: Repository 'RO p wU wR -> RemoteDarcs -> String -> IO ()
 copyHashedInventory outrepo rdarcs inloc | remote <- remoteDarcs rdarcs = do
     let outloc = repoLocation outrepo
     createDirectoryIfMissing False (outloc </> inventoriesDirPath)
@@ -432,7 +430,7 @@ createValidHashed h f = createHashed (getValidHash h) (f . mkValidHash)
 
 -- | Write a 'PatchSet' to the tentative inventory.
 writeTentativeInventory :: RepoPatch p
-                        => Repository 'RW p wR wU wT
+                        => Repository 'RW p wU wR
                         -> Compression
                         -> PatchSet p Origin wX
                         -> IO ()
@@ -499,12 +497,12 @@ writePatchIfNecessary c compr hp = infohp `seq`
     infohp = info hp
 
 tentativelyAddPatch :: (RepoPatch p, ApplyState p ~ Tree)
-                    => Repository 'RW p wR wU wT
+                    => Repository 'RW p wU wR
                     -> Compression
                     -> Verbosity
                     -> UpdatePending
-                    -> PatchInfoAnd p wT wY
-                    -> IO (Repository 'RW p wR wU wY)
+                    -> PatchInfoAnd p wR wY
+                    -> IO (Repository 'RW p wU wY)
 tentativelyAddPatch = tentativelyAddPatch_ UpdatePristine
 
 data UpdatePristine = UpdatePristine 
@@ -513,25 +511,25 @@ data UpdatePristine = UpdatePristine
 
 tentativelyAddPatches_ :: (RepoPatch p, ApplyState p ~ Tree)
                        => UpdatePristine
-                       -> Repository 'RW p wR wU wT
+                       -> Repository 'RW p wU wR
                        -> Compression
                        -> Verbosity
                        -> UpdatePending
-                       -> FL (PatchInfoAnd p) wT wY
-                       -> IO (Repository 'RW p wR wU wY)
+                       -> FL (PatchInfoAnd p) wR wY
+                       -> IO (Repository 'RW p wU wY)
 tentativelyAddPatches_ upr r c v upe ps =
     foldFL_M (\r' p -> tentativelyAddPatch_ upr r' c v upe p) r ps
 
 tentativelyAddPatch_ :: (RepoPatch p, ApplyState p ~ Tree)
                      => UpdatePristine
-                     -> Repository 'RW p wR wU wT
+                     -> Repository 'RW p wU wR
                      -> Compression
                      -> Verbosity
                      -> UpdatePending
-                     -> PatchInfoAnd p wT wY
-                     -> IO (Repository 'RW p wR wU wY)
+                     -> PatchInfoAnd p wR wY
+                     -> IO (Repository 'RW p wU wY)
 tentativelyAddPatch_ upr r compr verb upe p = do
-    let r' = unsafeCoerceT r
+    let r' = unsafeCoerceR r
     withTentativeRebase r r' (removeFixupsFromSuspended $ hopefully p)
     withRepoDir r $ do
        addToTentativeInventory (repoCache r) compr p
@@ -544,20 +542,20 @@ tentativelyAddPatch_ upr r compr verb upe p = do
        return r'
 
 tentativelyRemovePatches :: (RepoPatch p, ApplyState p ~ Tree)
-                         => Repository 'RW p wR wU wT
+                         => Repository 'RW p wU wR
                          -> Compression
                          -> UpdatePending
-                         -> FL (PatchInfoAnd p) wX wT
-                         -> IO (Repository 'RW p wR wU wX)
+                         -> FL (PatchInfoAnd p) wX wR
+                         -> IO (Repository 'RW p wU wX)
 tentativelyRemovePatches = tentativelyRemovePatches_ UpdatePristine
 
 tentativelyRemovePatches_ :: (RepoPatch p, ApplyState p ~ Tree)
                           => UpdatePristine
-                          -> Repository 'RW p wR wU wT
+                          -> Repository 'RW p wU wR
                           -> Compression
                           -> UpdatePending
-                          -> FL (PatchInfoAnd p) wX wT
-                          -> IO (Repository 'RW p wR wU wX)
+                          -> FL (PatchInfoAnd p) wX wR
+                          -> IO (Repository 'RW p wU wX)
 tentativelyRemovePatches_ upr r compr upe ps
   | formatHas HashedInventory (repoFormat r) = do
       withRepoDir r $ do
@@ -583,19 +581,19 @@ tentativelyRemovePatches_ upr r compr upe ps
 -- * the patches are in the repository
 --
 -- * any necessary commutations will succeed
-removeFromTentativeInventory :: forall p wR wU wT wX. RepoPatch p
-                             => Repository 'RW p wR wU wT
+removeFromTentativeInventory :: forall p wU wR wX. RepoPatch p
+                             => Repository 'RW p wU wR
                              -> Compression
-                             -> FL (PatchInfoAnd p) wX wT
-                             -> IO (Repository 'RW p wR wU wX)
+                             -> FL (PatchInfoAnd p) wX wR
+                             -> IO (Repository 'RW p wU wX)
 removeFromTentativeInventory repo compr to_remove = do
     debugMessage $ "Start removeFromTentativeInventory"
-    allpatches :: PatchSet p Origin wT <- readTentativePatches repo
+    allpatches :: PatchSet p Origin wR <- readTentativePatches repo
     remaining :: PatchSet p Origin wX <-
       case removeFromPatchSet to_remove allpatches of
         Nothing -> error "Hashed.removeFromTentativeInventory: precondition violated"
         Just r -> return r
-    let repo' = unsafeCoerceT repo
+    let repo' = unsafeCoerceR repo
     writeTentativeInventory repo' compr remaining
     debugMessage $ "Done removeFromTentativeInventory"
     return repo'
@@ -604,11 +602,11 @@ removeFromTentativeInventory repo compr to_remove = do
 -- thereby committing the tentative changes that were made so far.
 -- This includes inventories, pending, rebase, and the index.
 finalizeRepositoryChanges :: (RepoPatch p, ApplyState p ~ Tree)
-                          => Repository 'RW p wR wU wT
+                          => Repository 'RW p wU wR
                           -> UpdatePending
                           -> Compression
                           -> DryRun
-                          -> IO (Repository 'RO p wT wU wT)
+                          -> IO (Repository 'RO p wU wR)
 finalizeRepositoryChanges r updatePending compr dryrun
     | formatHas HashedInventory (repoFormat r) = do
         let r' = unsafeEndTransaction $ unsafeCoerceR r
@@ -637,9 +635,9 @@ finalizeRepositoryChanges r updatePending compr dryrun
 -- changes, revertRepositoryChanges also re-initialises the tentative state.
 -- It's therefore used before makign any changes to the repo.
 revertRepositoryChanges :: RepoPatch p
-                        => Repository 'RO p wR wU wT
+                        => Repository 'RO p wU wR
                         -> UpdatePending
-                        -> IO (Repository 'RW p wR wU wR)
+                        -> IO (Repository 'RW p wU wR)
 revertRepositoryChanges r upe
   | formatHas HashedInventory (repoFormat r) =
       withRepoDir r $ do
@@ -647,7 +645,7 @@ revertRepositoryChanges r upe
           `catchIOError` \e -> fail (unlines ["Cannot write index", show e])
         revertPending r upe
         revertTentativeChanges r
-        let r' = unsafeCoerceT r
+        let r' = unsafeCoerceR r
         revertTentativeRebase r'
         return $ unsafeStartTransaction r'
   | otherwise = fail Old.oldRepoFailMsg
@@ -675,7 +673,7 @@ checkIndexIsWritable = do
 -- history traversal is needed.  This latter issue can become very
 -- important in large repositories.
 reorderInventory :: (RepoPatch p, ApplyState p ~ Tree)
-                 => Repository 'RW p wR wU wR
+                 => Repository 'RW p wU wR
                  -> Compression
                  -> IO ()
 reorderInventory r compr
@@ -688,7 +686,7 @@ reorderInventory r compr
 -- | Read inventories and patches from a 'Repository' and return them as a
 -- 'PatchSet'. Note that patches and inventories are read lazily.
 readPatches :: RepoPatch p
-            => Repository rt p wR wU wT
+            => Repository rt p wU wR
             -> IO (PatchSet p Origin wR)
 readPatches r
     | formatHas HashedInventory (repoFormat r) = readPatchesHashed r
@@ -702,15 +700,15 @@ readPatches r
 -- be present twice in a repository.
 -- This checksum is not cryptographically secure,
 -- see http://robotics.stanford.edu/~xb/crypto06b/ .
-repoXor :: RepoPatch p => Repository rt p wR wU wR -> IO SHA1
+repoXor :: RepoPatch p => Repository rt p wU wR -> IO SHA1
 repoXor repo = do
   hashes <- mapRL (makePatchname . info) . patchSet2RL <$> readPatches repo
   return $ foldl' sha1Xor sha1zero hashes
 
 -- | Upgrade a possible old-style rebase in progress to the new style.
-upgradeOldStyleRebase :: forall p wR wU wT.
+upgradeOldStyleRebase :: forall p wU wR.
                          (RepoPatch p, ApplyState p ~ Tree)
-                      => Repository 'RW p wR wU wT -> Compression -> IO ()
+                      => Repository 'RW p wU wR -> Compression -> IO ()
 upgradeOldStyleRebase repo compr = do
   PatchSet ts _ <- readTentativePatches repo
   Inventory _ invEntries <- readInventoryPrivate tentativeHashedInventoryPath
@@ -726,7 +724,7 @@ upgradeOldStyleRebase repo compr = do
       Items old_r <- readTentativeRebase repo
       case old_r of
         NilFL -> do
-          writeTentativeRebase (unsafeCoerceT repo) r
+          writeTentativeRebase (unsafeCoerceR repo) r
           writeRepoFormat
             ( addToFormat RebaseInProgress_2_16
             $ removeFromFormat RebaseInProgress

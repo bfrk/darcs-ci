@@ -115,7 +115,7 @@ removeCmd fps opts relargs = do
 --   flag should be handled by the caller by adding all offspring of a directory
 --   to the files list.
 makeRemovePatch :: (RepoPatch p, ApplyState p ~ Tree)
-                => [DarcsFlag] -> Repository rt p wR wU wR
+                => [DarcsFlag] -> Repository rt p wU wR
                 -> [AnchoredPath] -> IO (Sealed (FL (PrimOf p) wU))
 makeRemovePatch opts repository files =
                           do recorded <- T.expand =<< readPristineAndPending repository

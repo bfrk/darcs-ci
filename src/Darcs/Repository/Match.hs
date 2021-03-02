@@ -51,13 +51,13 @@ import Darcs.Util.Path ( toFilePath )
 -- corresponding to the state of the 'PatchSet' returned by 'getOnePatchSet'
 -- for the same 'PatchSetMatch'.
 getRecordedUpToMatch :: (ApplyMonad (ApplyState p) DefaultIO, RepoPatch p, ApplyState p ~ Tree)
-                     => Repository rt p wR wU wT
+                     => Repository rt p wU wR
                      -> PatchSetMatch
                      -> IO ()
 getRecordedUpToMatch r = withRecordedMatch r . rollbackToPatchSetMatch
 
 getOnePatchset :: RepoPatch p
-               => Repository rt p wR wU wR
+               => Repository rt p wU wR
                -> PatchSetMatch
                -> IO (SealedPatchSet p Origin)
 getOnePatchset repository pm =
@@ -70,7 +70,7 @@ getOnePatchset repository pm =
       readContextFile ref (toFilePath path)
 
 withRecordedMatch :: RepoPatch p
-                  => Repository rt p wR wU wT
+                  => Repository rt p wU wR
                   -> (PatchSet p Origin wR -> DefaultIO ())
                   -> IO ()
 withRecordedMatch r job

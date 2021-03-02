@@ -85,9 +85,9 @@ import Darcs.Util.URL ( isValidLocalPath )
 
 withManualRebaseUpdate
    :: RepoPatch p
-   => Repository rt p wR wU wT1
-   -> (Repository rt p wR wU wT1 -> IO (Repository rt p wR wU wT2, FL (RebaseFixup (PrimOf p)) wT2 wT1, x))
-   -> IO (Repository rt p wR wU wT2, x)
+   => Repository rt p wU wR
+   -> (Repository rt p wU wR -> IO (Repository rt p wU wR', FL (RebaseFixup (PrimOf p)) wR' wR, x))
+   -> IO (Repository rt p wU wR', x)
 withManualRebaseUpdate r subFunc = do
     susp <- readTentativeRebase r
     (r', fixups, x) <- subFunc r
@@ -97,7 +97,7 @@ withManualRebaseUpdate r subFunc = do
       writeTentativeRebase r' (simplifyPushes MyersDiff fixups susp)
     return (r', x)
 
-checkOldStyleRebaseStatus :: RepoPatch p => Repository rt p wR wU wR -> IO ()
+checkOldStyleRebaseStatus :: RepoPatch p => Repository rt p wU wR -> IO ()
 checkOldStyleRebaseStatus repo = do
   let rf = repoFormat repo
   when (formatHas RebaseInProgress rf) $ do
@@ -114,8 +114,8 @@ checkOldStyleRebaseStatus repo = do
 -- | got a rebase operation to run where it is required that a rebase is
 -- already in progress
 rebaseJob :: RepoPatch p
-          => (Repository rt p wR wU wR -> IO a)
-          -> Repository rt p wR wU wR
+          => (Repository rt p wU wR -> IO a)
+          -> Repository rt p wU wR
           -> IO a
 rebaseJob job repo = do
     job repo
@@ -132,8 +132,8 @@ rebaseJob job repo = do
 -- | Got a rebase operation to run where we may need to initialise the
 -- rebase state first. Make sure you have taken the lock before calling this.
 startRebaseJob :: RepoPatch p
-               => (Repository rt p wR wU wR -> IO a)
-               -> Repository rt p wR wU wR
+               => (Repository rt p wU wR -> IO a)
+               -> Repository rt p wU wR
                -> IO a
 startRebaseJob job repo = do
     let rf = repoFormat repo
@@ -141,7 +141,7 @@ startRebaseJob job repo = do
       writeRepoFormat (addToFormat RebaseInProgress_2_16 rf) formatPath
     rebaseJob job repo
 
-checkSuspendedStatus :: RepoPatch p => Repository rt p wR wU wR -> IO ()
+checkSuspendedStatus :: RepoPatch p => Repository rt p wU wR -> IO ()
 checkSuspendedStatus repo =
   when (isValidLocalPath (repoLocation repo)) $ do
     -- This may be executed after transaction has been finalized,
@@ -167,7 +167,7 @@ displaySuspendedStatus count =
 
 -- | Generic status display for non-rebase commands.
 maybeDisplaySuspendedStatus :: RepoPatch p
-                            => Repository rt p wR wU wR
+                            => Repository rt p wU wR
                             -> IO ()
 maybeDisplaySuspendedStatus repo =
   when (isValidLocalPath (repoLocation repo)) $ do
@@ -182,28 +182,28 @@ maybeDisplaySuspendedStatus repo =
 
 withTentativeRebase
   :: RepoPatch p
-  => Repository rt p wR wU wT
-  -> Repository rt p wR wU wY
-  -> (Suspended p wT -> Suspended p wY)
+  => Repository rt p wU wR
+  -> Repository rt p wU wR'
+  -> (Suspended p wR -> Suspended p wR')
   -> IO ()
 withTentativeRebase r r' f =
   readTentativeRebase r >>= writeTentativeRebase r' . f
 
 readTentativeRebase :: RepoPatch p
-                    => Repository rt p wR wU wT -> IO (Suspended p wT)
+                    => Repository rt p wU wR -> IO (Suspended p wR)
 readTentativeRebase = readRebaseFile tentativeRebasePath
 
 writeTentativeRebase :: RepoPatch p
-                     => Repository rt p wR wU wT -> Suspended p wT -> IO ()
+                     => Repository rt p wU wR -> Suspended p wR -> IO ()
 writeTentativeRebase = writeRebaseFile tentativeRebasePath
 
-readRebase :: RepoPatch p => Repository rt p wR wU wR -> IO (Suspended p wR)
+readRebase :: RepoPatch p => Repository rt p wU wR -> IO (Suspended p wR)
 readRebase = readRebaseFile rebasePath
 
-createTentativeRebase :: RepoPatch p => Repository rt p wR wU wR -> IO ()
+createTentativeRebase :: RepoPatch p => Repository rt p wU wR -> IO ()
 createTentativeRebase r = writeRebaseFile tentativeRebasePath r (Items NilFL)
 
-revertTentativeRebase :: RepoPatch p => Repository rt p wR wU wR -> IO ()
+revertTentativeRebase :: RepoPatch p => Repository rt p wU wR -> IO ()
 revertTentativeRebase repo =
   copyFile rebasePath tentativeRebasePath
     `catchDoesNotExistError` createTentativeRebase repo
@@ -213,7 +213,7 @@ finalizeTentativeRebase = renameFile tentativeRebasePath rebasePath
 
 -- unsafe witnesses, not exported
 readRebaseFile :: RepoPatch p
-               => FilePath -> Repository rt p wR wU wT -> IO (Suspended p wX)
+               => FilePath -> Repository rt p wU wR -> IO (Suspended p wX)
 readRebaseFile path r = do
   parsed <- parse readSuspended <$> readBinFile (repoLocation r </> path)
   case parsed of
@@ -222,8 +222,8 @@ readRebaseFile path r = do
 
 -- unsafe witnesses, not exported
 writeRebaseFile :: RepoPatch p
-                => FilePath -> Repository rt p wR wU wT
-                -> Suspended p wT -> IO ()
+                => FilePath -> Repository rt p wU wR
+                -> Suspended p wR -> IO ()
 writeRebaseFile path r sp =
   writeDocBinFile (repoLocation r </> path) (showSuspended ForStorage sp)
 

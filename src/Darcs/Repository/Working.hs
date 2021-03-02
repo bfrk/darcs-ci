@@ -39,10 +39,10 @@ import Darcs.Repository.ApplyPatches ( runTolerantly, runSilently )
 import Darcs.Repository.State ( readWorking, TreeFilter(..)  )
 
 applyToWorking :: (ApplyState p ~ Tree, RepoPatch p)
-               => Repository rt p wR wU wT
+               => Repository rt p wU wR
                -> Verbosity
                -> FL (PrimOf p) wU wY
-               -> IO (Repository rt p wR wY wT)
+               -> IO (Repository rt p wY wR)
 applyToWorking repo verb patch =
   do
     unless (formatHas NoWorkingDir (repoFormat repo)) $

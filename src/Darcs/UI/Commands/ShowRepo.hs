@@ -127,7 +127,7 @@ putInfo m t i = unless (null i) (putStr $ m t i)
 
 actuallyShowRepo
   :: (RepoPatch p, ApplyState p ~ Tree)
-  => PutInfo -> Repository rt p wR wU wR -> [DarcsFlag] -> IO ()
+  => PutInfo -> Repository rt p wU wR -> [DarcsFlag] -> IO ()
 actuallyShowRepo out r opts = do
   when (hasXmlOutput opts) (putStr "<repository>\n")
   out "Format" $ showInOneLine $ repoFormat r
@@ -149,7 +149,7 @@ actuallyShowRepo out r opts = do
   when (hasXmlOutput opts) (putStr "</repository>\n")
 
 showXor :: (RepoPatch p, ApplyState p ~ Tree)
-        => PutInfo -> Repository rt p wR wU wR -> IO ()
+        => PutInfo -> Repository rt p wU wR -> IO ()
 showXor out repo = do
   theXor <- repoXor repo
   out "Weak Hash" (show theXor)
@@ -169,10 +169,10 @@ showRepoPrefs out = do
     getPreflist "defaultrepo" >>= out "Default Remote" . unlines
   where prefOut = uncurry out . (\(p,v) -> (p++" Pref", dropWhile isSpace v)) . break isSpace
 
-showRepoMOTD :: PutInfo -> Repository rt p wR wU wR -> IO ()
+showRepoMOTD :: PutInfo -> Repository rt p wU wR -> IO ()
 showRepoMOTD out repo = getMotd (repoLocation repo) >>= out "MOTD" . BC.unpack
 
 -- Support routines to provide information used by the PutInfo operations above.
 
-numPatches :: (RepoPatch p, ApplyState p ~ Tree) => Repository rt p wR wU wR -> IO Int
+numPatches :: (RepoPatch p, ApplyState p ~ Tree) => Repository rt p wU wR -> IO Int
 numPatches r = (lengthRL . patchSet2RL) `liftM` readPatches r

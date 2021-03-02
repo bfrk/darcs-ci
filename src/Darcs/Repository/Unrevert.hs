@@ -49,9 +49,9 @@ unrevertPatchBundle us = do
           Right ps -> return (Sealed ps)
       Left err -> fail $ "Couldn't parse unrevert patch:\n" ++ err
 
-removeFromUnrevertContext :: forall p wT wX. (RepoPatch p, ApplyState p ~ Tree)
-                          => PatchSet p Origin wT
-                          -> FL (PatchInfoAnd p) wX wT
+removeFromUnrevertContext :: forall p wR wX. (RepoPatch p, ApplyState p ~ Tree)
+                          => PatchSet p Origin wR
+                          -> FL (PatchInfoAnd p) wX wR
                           -> IO ()
 removeFromUnrevertContext _ NilFL = return () -- nothing to do
 removeFromUnrevertContext ref ps = do

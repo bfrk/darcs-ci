@@ -302,7 +302,7 @@ lookupFids' fn = do
 -- | Creates patch index that corresponds to all patches in repo.
 createPatchIndexDisk
   :: (RepoPatch p, ApplyState p ~ Tree)
-  => Repository rt p wR wU wT
+  => Repository rt p wU wR
   -> PatchSet p Origin wR
   -> IO ()
 createPatchIndexDisk repository ps = do
@@ -372,7 +372,7 @@ removePidSuffix pid2idx oldpids@(oldpid:_) (PatchIndex pids fidspans fpspans inf
 -- | update the patch index to the current state of the repository
 updatePatchIndexDisk
     :: (RepoPatch p, ApplyState p ~ Tree)
-    => Repository rt p wR wU wT
+    => Repository rt p wU wR
     -> PatchSet p Origin wR
     -> IO ()
 updatePatchIndexDisk repo patches = do
@@ -400,7 +400,7 @@ updatePatchIndexDisk repo patches = do
 
 -- | 'createPatchIndexFrom repo pmods' creates a patch index from the given
 --   patchmods.
-createPatchIndexFrom :: Repository rt p wR wU wT
+createPatchIndexFrom :: Repository rt p wU wR
                      -> [(PatchId, [PatchMod AnchoredPath])] -> IO ()
 createPatchIndexFrom repo pmods = do
     inv_hash <- getInventoryHash repodir
@@ -428,7 +428,7 @@ loadPatchIndex repodir = do
 
 -- | If patch-index is useful as it is now, read it. If not, create or update it, then read it.
 loadSafePatchIndex :: (RepoPatch p, ApplyState p ~ Tree)
-                   => Repository rt p wR wU wT
+                   => Repository rt p wU wR
                    -> PatchSet p Origin wR     -- ^ PatchSet of the repository, used if we need to create the patch-index.
                    -> IO PatchIndex
 loadSafePatchIndex repo ps = do
@@ -467,7 +467,7 @@ isPatchIndexDisabled repodir = doesFileExist (repodir </> darcsdir  </> noPatchI
 --   2. if patch index exists, update it
 --   3. if not, create it from scratch
 createOrUpdatePatchIndexDisk :: (RepoPatch p, ApplyState p ~ Tree)
-                             => Repository rt p wR wU wT -> PatchSet p Origin wR -> IO ()
+                             => Repository rt p wU wR -> PatchSet p Origin wR -> IO ()
 createOrUpdatePatchIndexDisk repo ps = do
    debugMessage "createOrUpdatePatchIndexDisk: start"
    let repodir = repoLocation repo
@@ -485,7 +485,7 @@ createOrUpdatePatchIndexDisk repo ps = do
 --
 -- Then only if it exists and it is not explicitely disabled, returns @True@, else returns @False@
 -- (or an error if it exists and is explicitely disabled at the same time).
-canUsePatchIndex :: Repository rt p wR wU wT -> IO Bool
+canUsePatchIndex :: Repository rt p wU wR -> IO Bool
 canUsePatchIndex repo = do
      let repodir = repoLocation repo
      piExists <- doesPatchIndexExist repodir
@@ -499,7 +499,7 @@ canUsePatchIndex repo = do
 -- | Creates patch-index (ignoring whether it is explicitely disabled).
 --   If it is ctrl-c'ed, then aborts, delete patch-index and mark it as disabled.
 createPIWithInterrupt :: (RepoPatch p, ApplyState p ~ Tree)
-                      => Repository rt p wR wU wT -> PatchSet p Origin wR -> IO ()
+                      => Repository rt p wU wR -> PatchSet p Origin wR -> IO ()
 createPIWithInterrupt repo ps = do
     let repodir = repoLocation repo
     putStrLn "Creating a patch index, please wait. To stop press Ctrl-C"
@@ -509,7 +509,7 @@ createPIWithInterrupt repo ps = do
 
 -- | Checks if patch-index exists and is in sync with repository.
 --   That is, checks if patch-index can be used as it is now.
-isPatchIndexInSync :: Repository rt p wR wU wT -> IO Bool
+isPatchIndexInSync :: Repository rt p wU wR -> IO Bool
 isPatchIndexInSync repo = do
    let repodir = repoLocation repo
    dpie <- doesPatchIndexExist repodir
@@ -638,7 +638,7 @@ fpSpans2filePaths' fidSpans = [fp | (fp, _)  <- M.toList fidSpans]
 -- | Checks if patch index can be created and build it with interrupt.
 attemptCreatePatchIndex
   :: (RepoPatch p, ApplyState p ~ Tree)
-  => Repository rt p wR wU wT -> PatchSet p Origin wR -> IO ()
+  => Repository rt p wU wR -> PatchSet p Origin wR -> IO ()
 attemptCreatePatchIndex repo ps = do
   canCreate <- canCreatePI repo
   when canCreate $ createPIWithInterrupt repo ps
@@ -646,7 +646,7 @@ attemptCreatePatchIndex repo ps = do
 -- | Checks whether a patch index can (and should) be created. If we are not in
 -- an old-fashioned repo, and if we haven't been told not to, then we should
 -- create a patch index if it doesn't already exist.
-canCreatePI :: Repository rt p wR wU wT -> IO Bool
+canCreatePI :: Repository rt p wU wR -> IO Bool
 canCreatePI repo =
     (not . or) <$> sequence [ doesntHaveHashedInventory (repoFormat repo)
                             , isPatchIndexDisabled repodir
@@ -664,7 +664,7 @@ getRelevantSubsequence
     :: (RepoPatch p, ApplyState p ~ Tree, a ~ PatchInfoAnd p)
     => Sealed ((RL a) wK)
     -- ^ Sequence of patches you want to filter
-    -> Repository rt p wR wU wR
+    -> Repository rt p wU wR
     -- ^ The repository (to attempt loading patch-index from its path)
     -> PatchSet p Origin wR
     -- ^ PatchSet of repository (in case we need to create patch-index)
@@ -696,7 +696,7 @@ type PatchFilter p = [AnchoredPath] -> [Sealed2 (PatchInfoAnd p)] -> IO [Sealed2
 --   (Also, if it is out-of-sync, which should not happen, silently update it).
 maybeFilterPatches
     :: (RepoPatch p, ApplyState p ~ Tree)
-    => Repository rt p wR wU wT  -- ^ The repository
+    => Repository rt p wU wR  -- ^ The repository
     -> PatchSet p Origin wR   -- ^ PatchSet of patches of repository (in case patch-index needs to be created)
     -> PatchFilter p          -- ^ PatchFilter ready to be used by SelectChanges.
 maybeFilterPatches repo ps fps ops = do

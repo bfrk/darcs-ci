@@ -80,8 +80,8 @@ replaceInFL (o:>:orig) ch@(Sealed2 (o':||:c):ch_rest)
     | otherwise = o:>:replaceInFL orig ch
 
 applyAndFix
-  :: forall rt p wR wU wT. (RepoPatch p, ApplyState p ~ Tree)
-  => Repository rt p wR wU wT
+  :: forall rt p wU wR. (RepoPatch p, ApplyState p ~ Tree)
+  => Repository rt p wU wR
   -> Compression
   -> FL (PatchInfoAnd p) Origin wR
   -> TreeIO (FL (PatchInfoAnd p) Origin wR, Bool)
@@ -122,7 +122,7 @@ data RepositoryConsistency p wX =
 checkUniqueness :: RepoPatch p
                 => (Doc -> IO ())
                 -> (Doc -> IO ())
-                -> Repository rt p wR wU wT
+                -> Repository rt p wU wR
                 -> IO ()
 checkUniqueness putVerbose putInfo repository =
     do putVerbose $ text "Checking that patch names are unique..."
@@ -141,10 +141,10 @@ hasDuplicate li = hd $ sort li
                         | otherwise = hd (x2:xs)
 
 replayRepository'
-  :: forall rt p wR wU wT. (RepoPatch p, ApplyState p ~ Tree)
+  :: forall rt p wR wU. (RepoPatch p, ApplyState p ~ Tree)
   => DiffAlgorithm
   -> Cache
-  -> Repository rt p wR wU wT
+  -> Repository rt p wU wR
   -> Compression
   -> Verbosity
   -> IO (RepositoryConsistency p wR)
@@ -181,7 +181,7 @@ replayRepository' dflag cache repo compr verbosity = do
             then BrokenPristine newpris
             else BrokenPatches newpris newpatches)
 
-cleanupRepositoryReplay :: Repository rt p wR wU wT -> IO ()
+cleanupRepositoryReplay :: Repository rt p wU wR -> IO ()
 cleanupRepositoryReplay r = do
   current <- readHashedPristineRoot r
   cleanPristineDir (repoCache r) [current]
@@ -189,7 +189,7 @@ cleanupRepositoryReplay r = do
 replayRepositoryInTemp
   :: (RepoPatch p, ApplyState p ~ Tree)
   => DiffAlgorithm
-  -> Repository rt p wR wU wT
+  -> Repository rt p wU wR
   -> Compression
   -> Verbosity
   -> IO (RepositoryConsistency p wR)
@@ -210,7 +210,7 @@ replayRepositoryInTemp dflag r compr verb = do
 replayRepository
   :: (RepoPatch p, ApplyState p ~ Tree)
   => DiffAlgorithm
-  -> Repository rt p wR wU wT
+  -> Repository rt p wU wR
   -> Compression
   -> Verbosity
   -> (RepositoryConsistency p wR -> IO a)
@@ -224,7 +224,7 @@ replayRepository dflag r compr verb f =
 
 checkIndex
   :: (RepoPatch p, ApplyState p ~ Tree)
-  => Repository rt p wR wU wR
+  => Repository rt p wU wR
   -> Bool
   -> IO Bool
 checkIndex repo quiet = do

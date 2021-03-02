@@ -220,12 +220,12 @@ The new pending patch starts out at the new tentative state, so as explained
 above, we set it to pw'+>+res, and again rely on sifting to commute out and
 drop anything we don't need.
 
-TODO: We should return a properly coerced @Repository 'RW p wR wU wT@.
+TODO: We should return a properly coerced @Repository 'RW p wU wR@.
 -}
 
 tentativelyMergePatches_ :: (RepoPatch p, ApplyState p ~ Tree)
                          => MakeChanges
-                         -> Repository 'RW p wR wU wR -> String
+                         -> Repository 'RW p wU wR -> String
                          -> AllowConflicts
                          -> ExternalMerge -> WantGuiPause
                          -> Compression -> Verbosity -> Reorder
@@ -318,7 +318,7 @@ tentativelyMergePatches_ mc _repo cmd allowConflicts externalMerge wantGuiPause
     return $ seal (effect them''content +>+ resolution)
 
 tentativelyMergePatches :: (RepoPatch p, ApplyState p ~ Tree)
-                        => Repository 'RW p wR wU wR -> String
+                        => Repository 'RW p wU wR -> String
                         -> AllowConflicts
                         -> ExternalMerge -> WantGuiPause
                         -> Compression -> Verbosity -> Reorder
@@ -331,7 +331,7 @@ tentativelyMergePatches = tentativelyMergePatches_ MakeChanges
 
 
 considerMergeToWorking :: (RepoPatch p, ApplyState p ~ Tree)
-                       => Repository 'RW p wR wU wR -> String
+                       => Repository 'RW p wU wR -> String
                        -> AllowConflicts
                        -> ExternalMerge -> WantGuiPause
                        -> Compression -> Verbosity -> Reorder

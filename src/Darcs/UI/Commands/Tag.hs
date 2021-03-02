@@ -127,7 +127,7 @@ tag = DarcsCommand
 
 tagCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 tagCmd _ opts args =
-  withRepoLock (useCache ? opts) (umask ? opts) $ RepoJob $ \(repository :: Repository 'RW p wR wU wR) -> do
+  withRepoLock (useCache ? opts) (umask ? opts) $ RepoJob $ \(repository :: Repository 'RW p wU wR) -> do
     date <- getDate (hasPipe opts)
     the_author <- getAuthor (author ? opts) (hasPipe opts)
     patches <- readPatches repository

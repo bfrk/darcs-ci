@@ -220,7 +220,7 @@ getLog m_name has_pipe log_file ask_long m_old chs =
         ]
 
 -- |specify whether to ask about dependencies with respect to a particular repository, or not
-data AskAboutDeps rt p wR wU wT = AskAboutDeps (Repository rt p wR wU wT) | NoAskAboutDeps
+data AskAboutDeps p wU wR = AskAboutDeps (Repository 'RW p wU wR) | NoAskAboutDeps
 
 -- | Run a job that involves a hijack confirmation prompt.
 --
@@ -231,9 +231,9 @@ runHijackT = flip evalStateT
 -- | Update the metadata for a patch.
 --   This potentially involves a bit of interactivity, so we may return @Nothing@
 --   if there is cause to abort what we're doing along the way
-updatePatchHeader :: forall p wX wY wR wU wT . (RepoPatch p, ApplyState p ~ Tree)
+updatePatchHeader :: forall p wX wY wU wR . (RepoPatch p, ApplyState p ~ Tree)
                   => String -- ^ verb: command name
-                  -> AskAboutDeps 'RW p wR wU wT
+                  -> AskAboutDeps p wU wR
                   -> S.PatchSelectionOptions
                   -> D.DiffAlgorithm
                   -> Bool -- keepDate
@@ -241,12 +241,12 @@ updatePatchHeader :: forall p wX wY wR wU wT . (RepoPatch p, ApplyState p ~ Tree
                   -> Maybe String -- author
                   -> Maybe String -- patchname
                   -> Maybe O.AskLongComment
-                  -> Named (PrimOf p) wT wX
+                  -> Named (PrimOf p) wR wX
                   -- ^ patch to edit, must be conflict-free as conflicts can't be preserved when changing
                   -- the identity of a patch. If necessary this can be achieved by calling @fmapFL_Named effect@
                   -- on an @Named p@ first, but some callers might already have @Named (PrimOf p)@ available.
                   -> FL (PrimOf p) wX wY -- ^new primitives to add
-                  -> HijackT IO (Maybe String, PatchInfoAnd p wT wY)
+                  -> HijackT IO (Maybe String, PatchInfoAnd p wR wY)
 updatePatchHeader verb ask_deps pSelOpts da nKeepDate nSelectAuthor nAuthor nPatchname nAskLongComment oldp chs = do
 
     let newchs = canonizeFL da (patchcontents oldp +>+ chs)

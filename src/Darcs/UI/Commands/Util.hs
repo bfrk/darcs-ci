@@ -169,7 +169,7 @@ printDryRunMessageAndExit action v s d x interactive patches = do
 -- The result is a pair of path lists: those that exist only in the working tree,
 -- and those that exist in pristine or working.
 filterExistingPaths :: (RepoPatch p, ApplyState p ~ Tree)
-                    => Repository rt p wR wU wR
+                    => Repository rt p wU wR
                     -> Verbosity
                     -> DiffOpts
                     -> [AnchoredPath]
@@ -235,7 +235,7 @@ checkUnrelatedRepos allowUnrelatedRepos us them =
 -- | Get the union of the set of patches in each specified location
 remotePatches :: RepoPatch p
               => [DarcsFlag]
-              -> Repository rt p wX wU wT -> [O.NotInRemote]
+              -> Repository rt p wU wR -> [O.NotInRemote]
               -> IO (SealedPatchSet p Origin)
 remotePatches opts repository nirs = do
     nirsPaths <- mapM getNotInRemotePath nirs
@@ -268,7 +268,7 @@ getLastPatches matchFlags ps =
 preselectPatches
   :: RepoPatch p
   => [DarcsFlag]
-  -> Repository rt p wR wU wT
+  -> Repository rt p wU wR
   -> IO ((PatchSet p :> FL (PatchInfoAnd p)) Origin wR)
 preselectPatches opts repo = do
   allpatches <- readPatches repo
