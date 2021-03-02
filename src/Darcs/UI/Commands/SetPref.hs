@@ -20,14 +20,25 @@ module Darcs.UI.Commands.SetPref ( setpref ) where
 import Darcs.Prelude
 
 import System.Exit ( exitWith, ExitCode(..) )
-import Control.Monad ( when )
+import Control.Monad ( when, void )
 import Data.Maybe ( fromMaybe )
 
-import Darcs.UI.Commands ( DarcsCommand(..), withStdOpts, nodefaults, amInHashedRepository )
+import Darcs.UI.Commands
+    ( DarcsCommand(..)
+    , amInHashedRepository
+    , nodefaults
+    , withStdOpts
+    )
 import Darcs.UI.Flags ( DarcsFlag, diffingOpts, useCache, umask)
 import Darcs.UI.Options ( (?) )
 import qualified Darcs.UI.Options.All as O
-import Darcs.Repository ( addToPending, withRepoLock, RepoJob(..) )
+import Darcs.Repository
+    ( RepoJob(..)
+    , UpdatePending(..)
+    , addToPending
+    , finalizeRepositoryChanges
+    , withRepoLock
+    )
 import Darcs.Patch ( changepref )
 import Darcs.Patch.Witnesses.Ordered ( FL(..) )
 import Darcs.Repository.Prefs ( getPrefval, changePrefval )
@@ -113,5 +124,7 @@ setprefCmd _ opts [pref,val] =
   changePrefval pref old val
   putStrLn $ "Changing value of "++pref++" from '"++old++"' to '"++val++"'"
   addToPending repository (diffingOpts opts) (changepref pref old val :>: NilFL)
+  void $ finalizeRepositoryChanges repository YesUpdatePending
+    (O.compress ? opts) (O.dryRun ? opts)
 setprefCmd _ _ _ = error "impossible case"
 

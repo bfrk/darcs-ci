@@ -52,6 +52,7 @@ newPendingPath = patchesDirPath </> "pending.new"
 
 -- | Location of unrevert bundle.
 unrevertPath = patchesDirPath </> "unrevert"
+tentativeUnrevertPath = patchesDirPath </> "unrevert.tentative"
 
 -- | Location of old style (unhashed) files and directories.
 oldPristineDirPath = makeDarcsdirPath "pristine"

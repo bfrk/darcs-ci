@@ -75,7 +75,6 @@ import Darcs.Repository.Flags
     , LookForMoves(..)
     , LookForReplaces(..)
     , LookForAdds(..)
-    , UpdatePending(..)
     , UseIndex(..)
     , DiffOpts(..)
     )
@@ -704,9 +703,7 @@ addPendingDiffToPending repo newP = do
     (_, Sealed toPend) <- readPending repo
     case unFreeLeft newP of
         (Sealed p) -> do
-            recordedState <- readPristine repo
-            Pending.makeNewPending repo YesUpdatePending (toPend +>+ p) recordedState
-            updateIndex repo
+            Pending.writeTentativePending repo (toPend +>+ p)
 
 -- | Add an 'FL' of patches starting from the working state to the pending patch,
 -- including as much extra context as is necessary (context meaning
@@ -722,10 +719,7 @@ addToPending repo dopts p = do
       readPendingAndWorking dopts repo Nothing
    case genCommuteWhatWeCanRL commuteFL (reverseFL toUnrec :> p) of
        (toP' :> p'  :> _excessUnrec) -> do
-           recordedState <- readPristine repo
-           Pending.makeNewPending repo YesUpdatePending
-            (toPend +>+ reverseRL toP' +>+ p') recordedState
-           updateIndex repo
+           Pending.writeTentativePending repo (toPend +>+ reverseRL toP' +>+ p')
 
 readPlainTree :: Repository rt p wU wR -> IO (Tree IO)
 readPlainTree repo  = PlainTree.readPlainTree (repoLocation repo)

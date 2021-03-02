@@ -19,7 +19,7 @@ module Darcs.UI.Commands.Move ( move, mv ) where
 
 import Darcs.Prelude
 
-import Control.Monad ( when, unless, forM_, forM )
+import Control.Monad ( when, unless, forM_, forM, void )
 import Data.Maybe ( fromMaybe )
 import Darcs.Util.SignalHandler ( withSignalsBlocked )
 
@@ -50,9 +50,11 @@ import Darcs.Repository
     , withRepoLock
     , RepoJob(..)
     , addPendingDiffToPending
+    , finalizeRepositoryChanges
+    , UpdatePending(..)
     )
 import Darcs.Patch.Witnesses.Ordered ( FL(..), (+>+) )
-import Darcs.Patch.Witnesses.Sealed ( emptyGap, freeGap, joinGap, FreeLeft )
+import Darcs.Patch.Witnesses.Sealed ( FreeLeft, emptyGap, freeGap, joinGap )
 import Darcs.Util.Global ( debugMessage )
 import qualified Darcs.Patch
 import Darcs.Patch ( RepoPatch, PrimPatch )
@@ -212,6 +214,15 @@ moveFilesToDir opts froms to =
   withRepoAndState opts $ \(repo, work, cur, _) ->
     moveToDir repo opts cur work froms to
 
+{-
+data RepoAndState = RS
+  { repo :: Repository 'RW p wU wR
+  , working :: Tree IO
+  , current :: Tree IO
+  , recorded :: Tree IO
+  }
+-}
+
 withRepoAndState :: [DarcsFlag]
                  -> (forall p wR wU .
                         (ApplyState p ~ Tree, RepoPatch p) =>
@@ -265,6 +276,8 @@ doMoves repository opts cur work moves = do
             (freeGap $ Darcs.Patch.move old new :>: NilFL)
       moveFileOrDir work old new
       addPendingDiffToPending repository pendingDiff
+    void $ finalizeRepositoryChanges repository YesUpdatePending
+      (O.compress ? opts) (O.dryRun ? opts)
 
 -- Take the recorded/ working trees and the old and intended new filenames;
 -- check if the new path is safe on windows. We potentially need to create

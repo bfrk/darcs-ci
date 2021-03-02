@@ -51,7 +51,9 @@ import qualified Darcs.UI.Options.All as O
 import Darcs.Repository
     ( withRepoLock
     , RepoJob(..)
+    , UpdatePending(..)
     , addToPending
+    , finalizeRepositoryChanges
     , applyToWorking
     , readPatches
     , unrecordedChanges )
@@ -59,7 +61,7 @@ import Darcs.Repository
 import Darcs.Patch ( invert, listTouchedFiles, effectOnPaths )
 import Darcs.Patch.Show
 import Darcs.Patch.TouchesFiles ( chooseTouching )
-import Darcs.Patch.Witnesses.Ordered ( FL(..), mapFL )
+import Darcs.Patch.Witnesses.Ordered ( (+>+), mapFL, nullFL )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(Sealed) )
 import Darcs.Repository.Resolution
     ( StandardResolution(..)
@@ -193,9 +195,7 @@ markconflictsCmd fps opts args = do
         putInfo opts $ "Conflicts will not be marked: this is a dry run."
         exitSuccess
 
-    _repository <- case to_revert of
-      NilFL -> return _repository
-      _ -> do
+    unless (nullFL to_revert) $ do
         -- TODO:
         -- (1) create backups for all files where we revert changes
         -- (2) try to add the reverted stuff to the unrevert bundle
@@ -214,13 +214,13 @@ markconflictsCmd fps opts args = do
           Nothing -> writeUnrevert repository (norevert+>+p) recorded NilFL
         debugMessage "About to apply to the working tree."
 -}
-
-        let to_add = invert to_revert
-        addToPending _repository (diffingOpts opts) to_add
-        applyToWorking _repository (verbosity ? opts) to_add
-    withSignalsBlocked $
-      do addToPending _repository (diffingOpts opts) res
-         void $ applyToWorking _repository (verbosity ? opts) res
+    to_add <- return $ invert to_revert +>+ res
+    addToPending _repository (diffingOpts opts) to_add
+    withSignalsBlocked $ do
+      _repository <-
+        finalizeRepositoryChanges _repository YesUpdatePending
+          (O.compress ? opts) (O.dryRun ? opts)
+      void $ applyToWorking _repository (verbosity ? opts) to_add
     putFinished opts "marking conflicts"
 
 -- * Generic 'PathSet' support

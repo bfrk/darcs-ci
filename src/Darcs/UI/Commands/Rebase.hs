@@ -40,7 +40,6 @@ import Darcs.Repository
     , tentativelyAddPatch, finalizeRepositoryChanges
     , tentativelyRemovePatches, readPatches
     , tentativelyAddToPending, unrecordedChanges, applyToWorking
-    , revertRepositoryChanges
     )
 import Darcs.Repository.Flags ( UpdatePending(..), ExternalMerge(..) )
 import Darcs.Repository.Hashed ( upgradeOldStyleRebase )
@@ -709,14 +708,6 @@ applyPatchesForRebaseCmd cmdName opts _repository (Fork common us' to_be_applied
     _repository <- doSuspend opts _repository suspended usToSuspend
     -- the new rebase patch containing the suspended patches is now in the repo
     -- and the suspended patches have been removed
-
-    -- TODO This is a nasty hack, caused by the fact that most functions
-    -- in Darcs.Repository.State require the recorded state to be equal to the
-    -- tentative state and thus must not be called after the repo was changed.
-    _repository <-
-      finalizeRepositoryChanges _repository YesUpdatePending
-        (compress ? opts) (O.dryRun ? opts)
-    _repository <- revertRepositoryChanges _repository YesUpdatePending
 
     Sealed pw <-
         tentativelyMergePatches

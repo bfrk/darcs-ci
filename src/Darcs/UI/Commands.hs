@@ -86,7 +86,7 @@ import Darcs.UI.Options
     )
 import Darcs.UI.Options.All
     ( StdCmdAction, stdCmdActions, debugging, UseCache, useCache, HooksConfig, hooks
-    , Verbosity(..), DryRun(..), dryRun, newRepo, verbosity, UseIndex, useIndex
+    , Verbosity(..), DryRun(..), dryRun, newRepo, verbosity, UseIndex, useIndex, yes
     )
 
 import Darcs.UI.Flags ( DarcsFlag, remoteRepos, workRepo, quiet, verbose )
@@ -281,6 +281,7 @@ putInfo flags = unless (quiet flags) . putDocLnWith fancyPrinters
 
 putFinished :: [DarcsFlag] -> String -> IO ()
 putFinished flags what =
+  unless (yes (dryRun ? flags)) $
     putInfo flags $ "Finished" <+> text what <> "."
 
 putWarning :: [DarcsFlag] -> Doc -> IO ()

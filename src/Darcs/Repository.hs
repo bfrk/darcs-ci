@@ -58,6 +58,7 @@ module Darcs.Repository
     , tentativelyMergePatches
     , considerMergeToWorking
     , revertRepositoryChanges
+    , UpdatePending(..)
     , finalizeRepositoryChanges
     , createRepository
     , createRepositoryV1
@@ -168,6 +169,7 @@ import Darcs.Repository.Create
     , createRepositoryV2
     , EmptyRepository(..)
     )
+import Darcs.Repository.Flags ( UpdatePending(..) )
 
 import Darcs.Patch.Set ( PatchSet, SealedPatchSet )
 import Darcs.Patch.PatchInfoAnd ( PatchInfoAnd )

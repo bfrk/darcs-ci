@@ -19,7 +19,7 @@ module Darcs.UI.Commands.Remove ( remove, rm, unadd ) where
 
 import Darcs.Prelude
 
-import Control.Monad ( when, foldM )
+import Control.Monad ( when, foldM, void )
 import Darcs.UI.Commands
     ( DarcsCommand(..)
     , withStdOpts, nodefaults
@@ -38,7 +38,9 @@ import Darcs.Repository
     ( Repository
     , withRepoLock
     , RepoJob(..)
+    , UpdatePending(..)
     , addToPending
+    , finalizeRepositoryChanges
     , readPristineAndPending
     , readUnrecorded
     )
@@ -107,6 +109,8 @@ removeCmd fps opts relargs = do
         when (nullFL p && not (null paths) && not (quiet opts)) $
             fail "No files were removed."
         addToPending repository (diffingOpts opts) p
+        void $ finalizeRepositoryChanges repository YesUpdatePending
+          (O.compress ? opts) (O.dryRun ? opts)
         putInfo opts $ vcat $ map text $ ["Will stop tracking:"] ++
             map displayPath (listTouchedFiles p)
 

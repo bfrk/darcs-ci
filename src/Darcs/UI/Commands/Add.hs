@@ -28,7 +28,7 @@ module Darcs.UI.Commands.Add ( add ) where
 import Darcs.Prelude
 
 import Control.Exception ( catch, IOException )
-import Control.Monad ( when, unless )
+import Control.Monad ( when, unless, void )
 import Data.List ( (\\), nub )
 import Data.List.Ordered ( nubSort )
 import Data.Maybe ( fromMaybe, isNothing, maybeToList )
@@ -79,7 +79,9 @@ import Darcs.Repository.State
 import Darcs.Repository
     ( withRepoLock
     , RepoJob(..)
+    , UpdatePending(..)
     , addToPending
+    , finalizeRepositoryChanges
     )
 import Darcs.Repository.Prefs ( isBoring )
 import Darcs.Util.File ( getFileStatus )
@@ -178,10 +180,12 @@ addFiles opts paths =
     Sealed ps <- fmap unFreeLeft $ addp msgs opts cur $ nboring realPath all_paths
     when (nullFL ps && not (null paths)) $
         fail "No files were added"
-    unless gotDryRun $
-      do addToPending repository (diffingOpts opts) ps
-         putInfo opts $ vcat $ map text $ ["Finished adding:"] ++
-            map displayPath (listTouchedFiles ps)
+    addToPending repository (diffingOpts opts) ps
+    void $ finalizeRepositoryChanges repository YesUpdatePending
+      (O.compress ? opts) (O.dryRun ? opts)
+    unless gotDryRun $ do
+      putInfo opts $ vcat $
+        map text $ ["Finished adding:"] ++ map displayPath (listTouchedFiles ps)
   where
     gotDryRun = dryRun ? opts == O.YesDryRun
     msgs | gotDryRun = dryRunMessages

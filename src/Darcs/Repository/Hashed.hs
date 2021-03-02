@@ -106,8 +106,12 @@ import Darcs.Repository.Rebase
     , revertTentativeRebase
     , extractOldStyleRebase
     )
-import Darcs.Repository.State ( readPristine, updateIndex )
-import Darcs.Repository.Unrevert ( removeFromUnrevertContext )
+import Darcs.Repository.State ( updateIndex )
+import Darcs.Repository.Unrevert
+    ( finalizeTentativeUnrevert
+    , removeFromUnrevertContext
+    , revertTentativeUnrevert
+    )
 
 import Darcs.Util.Lock
     ( writeBinFile
@@ -616,8 +620,8 @@ finalizeRepositoryChanges r updatePending compr dryrun
             withSignalsBlocked $ do
                 finalizeTentativeRebase
                 finalizeTentativeChanges r compr
-                recordedState <- readPristine r
-                finalizePending r updatePending recordedState
+                finalizePending r updatePending
+                finalizeTentativeUnrevert
             debugMessage "Done finalizing changes..."
             ps <- readPatches r'
             pi_exists <- doesPatchIndexExist (repoLocation r')
@@ -643,6 +647,7 @@ revertRepositoryChanges r upe
       withRepoDir r $ do
         checkIndexIsWritable
           `catchIOError` \e -> fail (unlines ["Cannot write index", show e])
+        revertTentativeUnrevert
         revertPending r upe
         revertTentativeChanges r
         let r' = unsafeCoerceR r

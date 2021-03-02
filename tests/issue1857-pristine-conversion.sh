@@ -30,7 +30,11 @@ unpack_testdata minimal-darcs-2_4
 
 cd minimal-darcs-2.4
 darcs check
-darcs setpref test false
+# we used to do
+#  darcs setpref test false
+# here but that will now do the pristine conversion itself
+# (during revertRepositoryChanges), so we have to fake it:
+echo 'test false' >> _darcs/prefs/prefs
 echo 'hi' > README
 not darcs record -a -m argh --test 2> errlog 1> outlog
 # check that we are really doing the pristine conversion...

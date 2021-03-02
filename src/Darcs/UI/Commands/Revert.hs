@@ -53,7 +53,9 @@ import Darcs.Util.Printer ( Doc, formatWords, vsep )
 import Darcs.Util.SignalHandler ( withSignalsBlocked )
 import Darcs.Repository
     ( RepoJob(..)
+    , UpdatePending(..)
     , addToPending
+    , finalizeRepositoryChanges
     , applyToWorking
     , readPatches
     , readPristine
@@ -134,11 +136,11 @@ revert = DarcsCommand
 revertCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 revertCmd fps opts args =
   withRepoLock (useCache ? opts) (umask ? opts) $
-  RepoJob $ \repository -> do
-    existing_paths <- existingPaths repository =<< pathSetFromArgs fps args
+  RepoJob $ \_repository -> do
+    existing_paths <- existingPaths _repository =<< pathSetFromArgs fps args
     announceFiles verbosity existing_paths "Reverting changes in"
-    changes <- unrecordedChanges diffOpts repository existing_paths
-    pristine <- readPristine repository
+    changes <- unrecordedChanges diffOpts _repository existing_paths
+    pristine <- readPristine _repository
     case changes of
       NilFL -> putInfo opts "There are no changes to revert!"
       _ -> do
@@ -151,9 +153,9 @@ revertCmd fps opts args =
           then
             putInfo opts $
               "If you don't want to revert after all, that's fine with me!"
-          else
+          else do
             withSignalsBlocked $ do
-              addToPending repository diffOpts $ invert torevert
+              addToPending _repository diffOpts $ invert torevert
               debugMessage "About to write the unrevert file."
               {- The user has split unrecorded into the sequence 'norevert'
                  then 'torevert', which is natural as the bit we keep in
@@ -171,12 +173,14 @@ revertCmd fps opts args =
               -}
               case genCommuteWhatWeCanRL commuteFL (reverseFL norevert :> torevert) of
                 deps :> torevert' :> _ -> do
-                  recorded <- readPatches repository
+                  recorded <- readPatches _repository
                   writeUnrevert recorded pristine (deps +>>+ torevert')
+              _repository <-
+                finalizeRepositoryChanges _repository YesUpdatePending
+                  (O.compress ? opts) (O.dryRun ? opts)
               debugMessage "About to apply to the working tree."
-              void $
-                applyToWorking repository verbosity (invert torevert)
-        putFinished opts "reverting"
+              void $ applyToWorking _repository verbosity (invert torevert)
+            putFinished opts "reverting"
   where
     verbosity = O.verbosity ? opts
     diffOpts = diffingOpts opts

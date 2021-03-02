@@ -47,7 +47,9 @@ import Darcs.Patch.RegChars ( regChars )
 import Darcs.Repository
     ( withRepoLock
     , RepoJob(..)
+    , UpdatePending(..)
     , addToPending
+    , finalizeRepositoryChanges
     , applyToWorking
     , readUnrecorded
     )
@@ -151,22 +153,25 @@ replaceArgs fps flags args =
 replaceCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 replaceCmd fps opts (old : new : args@(_ : _)) =
   withRepoLock (useCache ? opts) (umask ? opts) $ RepoJob $
-    \repository -> do
+    \_repository -> do
         paths <- nubSort <$> pathsFromArgs fps args
         when (null paths) $ fail "No valid repository paths were given."
         toks <- chooseToks (O.tokens ? opts) old new
         let checkToken tok = unless (isTok toks tok) $
                                  fail $ "'" ++ tok ++ "' is not a valid token!"
         mapM_ checkToken [ old, new ]
-        working <- readUnrecorded repository (O.useIndex ? opts) Nothing
+        working <- readUnrecorded _repository (O.useIndex ? opts) Nothing
         files <- filterM (exists working) paths
         Sealed replacePs <- mapSeal concatFL . toFL <$>
             mapM (doReplace toks working) files
         withSignalsBlocked $ do
           -- Note: addToPending takes care of commuting the replace patch and
           -- everything it depends on past the diff between pending and working
-          addToPending repository (diffingOpts opts) replacePs
-          void $ applyToWorking repository (verbosity ? opts) replacePs
+          addToPending _repository (diffingOpts opts) replacePs
+          _repository <-
+            finalizeRepositoryChanges _repository YesUpdatePending
+              (O.compress ? opts) (O.dryRun ? opts)
+          void $ applyToWorking _repository (verbosity ? opts) replacePs
   where
     exists tree file = if isJust $ findFile tree file
                            then return True

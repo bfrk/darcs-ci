@@ -19,7 +19,7 @@ module Darcs.UI.Commands.Unrevert ( unrevert ) where
 
 import Darcs.Prelude
 
-import Control.Monad ( when )
+import Control.Monad ( when, void )
 
 import Darcs.Patch ( commute )
 import Darcs.Patch.Depends ( mergeThem )
@@ -143,18 +143,17 @@ unrevertCmd _ opts [] =
             Nothing Nothing (Just pristine)
   (to_unrevert :> to_keep) <- runInvertibleSelection pw selection_config
   tentativelyAddToPending _repository to_unrevert
-  withSignalsBlocked $
-      do _repository <-
-            finalizeRepositoryChanges _repository YesUpdatePending
-              (compress ? opts) (O.dryRun ? opts)
-         _ <- applyToWorking _repository (verbosity ? opts) to_unrevert
-         recorded <- readPatches _repository
-         debugMessage "I'm about to writeUnrevert."
-         case commute ((unrecorded +>+ to_unrevert) :> to_keep) of
-           Nothing -> do
-             yes <-
-               promptYorn "You will not be able to unrevert this operation! Proceed?"
-             when yes $ writeUnrevert recorded pristine NilFL -- i.e. remove unrevert
-           Just (to_keep' :> _) -> writeUnrevert recorded pristine to_keep'
+  recorded <- readPatches _repository
+  debugMessage "I'm about to writeUnrevert."
+  case commute ((unrecorded +>+ to_unrevert) :> to_keep) of
+    Nothing -> do
+      yes <- promptYorn "You will not be able to undo this operation! Proceed?"
+      when yes $ writeUnrevert recorded pristine NilFL -- i.e. remove unrevert
+    Just (to_keep' :> _) -> writeUnrevert recorded pristine to_keep'
+  withSignalsBlocked $ do
+    _repository <-
+      finalizeRepositoryChanges _repository YesUpdatePending
+        (compress ? opts) (O.dryRun ? opts)
+    void $ applyToWorking _repository (verbosity ? opts) to_unrevert
   putFinished opts "unreverting"
 unrevertCmd _ _ _ = error "impossible case"
