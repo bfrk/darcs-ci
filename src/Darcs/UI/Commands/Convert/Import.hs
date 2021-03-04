@@ -71,6 +71,7 @@ import Darcs.Repository
     , withUMaskFlag
     )
 import Darcs.Repository.Diff (treeDiff)
+import Darcs.Repository.Flags (Compression(..), DiffAlgorithm(PatienceDiff))
 import Darcs.Repository.Hashed (addToTentativeInventory)
 import Darcs.Repository.Paths (tentativePristinePath)
 import Darcs.Repository.Prefs (FileType(..))
@@ -163,16 +164,16 @@ convertImport = DarcsCommand
     , commandPrereq = \_ -> return $ Right ()
     , commandCompleteArgs = noArgs
     , commandArgdefaults = nodefaults
-    , commandOptions = opts
+    , commandOptions = convertImportOpts
     }
   where
-    basicOpts
+    convertImportBasicOpts
       = O.newRepo
       ^ O.setScriptsExecutable
       ^ O.patchFormat
       ^ O.withWorkingDir
-    advancedOpts = O.diffAlgorithm ^ O.patchIndexNo ^ O.compress ^ O.umask
-    opts = basicOpts `withStdOpts` advancedOpts
+    convertImportAdvancedOpts = O.patchIndexNo ^ O.umask
+    convertImportOpts = convertImportBasicOpts `withStdOpts` convertImportAdvancedOpts
 
 type Marked = Maybe Int
 type Branch = B.ByteString
@@ -227,23 +228,16 @@ fastImport _ opts [outrepo] =
       (useCache ? opts)
     -- TODO implement --dry-run, which would be read-only?
     _repo <- revertRepositoryChanges _repo (updatePending opts)
-    marks <-
-      fastImport' _repo (O.compress ? opts) (O.diffAlgorithm ? opts) emptyMarks
+    marks <- fastImport' _repo emptyMarks
     cleanRepository _repo
-    _repo <-
-      finalizeRepositoryChanges _repo (updatePending opts)
-        (O.compress ? opts) (O.dryRun ? opts)
+    _repo <- finalizeRepositoryChanges _repo (updatePending opts) GzipCompression (O.dryRun ? opts)
     createPristineDirectoryTree _repo "." (withWorkingDir ? opts)
     return marks
 fastImport _ _ _ = fail "I need exactly one output repository."
 
-fastImport' :: forall p wU wR . (RepoPatch p, ApplyState p ~ Tree)
-            => Repository 'RW p wU wR
-            -> O.Compression
-            -> O.DiffAlgorithm
-            -> Marks
-            -> IO ()
-fastImport' repo compression diffalg marks = do
+fastImport' :: forall p wU wR . (RepoPatch p, ApplyState p ~ Tree) =>
+               Repository 'RW p wU wR -> Marks -> IO ()
+fastImport' repo marks = do
     pristine <- readPristine repo
     marksref <- newIORef marks
     let initial = Toplevel Nothing $ BC.pack "refs/branches/master"
@@ -278,8 +272,7 @@ fastImport' repo compression diffalg marks = do
                                else return []
              let patch :: Named p wA wA
                  patch = NamedP info_ deps NilFL
-             liftIO $
-                 addToTentativeInventory (repoCache repo) compression (n2pia patch)
+             liftIO $ addToTentativeInventory (repoCache repo) GzipCompression (n2pia patch)
 
         -- processing items
         updateHashes = do
@@ -312,7 +305,7 @@ fastImport' repo compression diffalg marks = do
         diffCurrent (InCommit mark ancestors branch start ps info_) = do
           current <- updateHashes
           Sealed diff <- unFreeLeft `fmap`
-             liftIO (treeDiff diffalg (const TextFile) start current)
+             liftIO (treeDiff PatienceDiff (const TextFile) start current)
           let newps = ps +<+ reverseFL diff
           return $ InCommit mark ancestors branch current newps info_
         diffCurrent _ = error "This is never valid outside of a commit."
@@ -433,8 +426,8 @@ fastImport' repo compression diffalg marks = do
           (prims :: FL (PrimOf p) cX cY)  <- return $ sortCoalesceFL $ reverseRL ps
           let patch :: Named p cX cY
               patch = infopatch info_ prims
-          liftIO $
-              addToTentativeInventory (repoCache repo) compression (n2pia patch)
+          liftIO $ addToTentativeInventory (repoCache repo)
+                                                  GzipCompression (n2pia patch)
           case mark of
             Nothing -> return ()
             Just n -> case getMark marks n of

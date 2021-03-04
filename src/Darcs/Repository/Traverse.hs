@@ -35,7 +35,7 @@ import Darcs.Repository.InternalTypes
     )
 import Darcs.Repository.Paths
     ( tentativeHashedInventory
-    , tentativeHashedInventoryPath
+    , tentativePristinePath
     , inventoriesDir
     , inventoriesDirPath
     , patchesDirPath
@@ -63,7 +63,7 @@ data DirLayout = PlainLayout | BucketedLayout
 cleanPristine :: Repository 'RW p wU wR -> IO ()
 cleanPristine r = withRepoDir r $ do
     debugMessage "Cleaning out the pristine cache..."
-    i <- gzReadFilePS tentativeHashedInventoryPath
+    i <- gzReadFilePS tentativePristinePath
     cleanPristineDir (repoCache r) [peekPristineHash i]
 
 -- | Set difference between two lists of hashes.

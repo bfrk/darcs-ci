@@ -134,12 +134,12 @@ convertDarcs2 = DarcsCommand
     , commandPrereq = \_ -> return $ Right ()
     , commandCompleteArgs = noArgs
     , commandArgdefaults = nodefaults
-    , commandOptions = opts
+    , commandOptions = convertDarcs2Opts
     }
   where
-    basicOpts = O.newRepo ^ O.setScriptsExecutable ^ O.withWorkingDir
-    advancedOpts = O.network ^ O.patchIndexNo ^ O.compress ^ O.umask ^ O.patchFormat
-    opts = basicOpts `withStdOpts` advancedOpts
+    convertDarcs2BasicOpts = O.newRepo ^ O.setScriptsExecutable ^ O.withWorkingDir
+    convertDarcs2AdvancedOpts = O.network ^ O.patchIndexNo ^ O.umask ^ O.patchFormat
+    convertDarcs2Opts = convertDarcs2BasicOpts `withStdOpts` convertDarcs2AdvancedOpts
 
 toDarcs2 :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 toDarcs2 _ opts' args = do
