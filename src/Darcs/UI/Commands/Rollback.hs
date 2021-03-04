@@ -19,7 +19,7 @@ module Darcs.UI.Commands.Rollback ( rollback ) where
 
 import Darcs.Prelude
 
-import Control.Monad ( when, void )
+import Control.Monad ( unless, when, void )
 import System.Exit ( exitSuccess )
 
 import Darcs.Patch.Match ( firstMatch )
@@ -33,7 +33,7 @@ import Darcs.Patch.Witnesses.Sealed ( Sealed(..) )
 import Darcs.Repository.Flags ( AllowConflicts(..), Reorder(..), UpdatePending(..) )
 import Darcs.Repository ( withRepoLock, RepoJob(..),
                           applyToWorking, readPatches,
-                          finalizeRepositoryChanges, tentativelyAddToPending,
+                          finalizeRepositoryChanges, addToPending,
                           considerMergeToWorking )
 import Darcs.UI.Commands ( DarcsCommand(..), withStdOpts, nodefaults, setEnvDarcsPatches,
                            amInHashedRepository, putInfo )
@@ -143,11 +143,12 @@ rollbackCmd fps opts args = withRepoLock (useCache ? opts)
                          (compress ? opts) (verbosity ? opts) NoReorder
                          (diffingOpts opts)
                          (Fork allpatches NilFL (rbp :>: NilFL))
-        tentativelyAddToPending _repo pw
+        addToPending _repo (diffingOpts opts) pw
         withSignalsBlocked $ do
             _repo <-
               finalizeRepositoryChanges _repo YesUpdatePending
                 (compress ? opts) (O.dryRun ? opts)
-            void $ applyToWorking _repo (verbosity ? opts) pw
+            unless (O.yes (O.dryRun ? opts)) $
+              void $ applyToWorking _repo (verbosity ? opts) pw
         debugMessage "Finished applying unrecorded rollback patch"
         putInfo opts $ text "Changes rolled back in working tree"

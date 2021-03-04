@@ -19,7 +19,7 @@ module Darcs.UI.Commands.Unrevert ( unrevert ) where
 
 import Darcs.Prelude
 
-import Control.Monad ( when, void )
+import Control.Monad ( unless, when, void )
 
 import Darcs.Patch ( commute )
 import Darcs.Patch.Depends ( mergeThem )
@@ -32,7 +32,7 @@ import Darcs.Repository
     , finalizeRepositoryChanges
     , readPristine
     , readPatches
-    , tentativelyAddToPending
+    , addToPending
     , unrecordedChanges
     , withRepoLock
     )
@@ -142,7 +142,7 @@ unrevertCmd _ opts [] =
             First "unrevert" (patchSelOpts opts)
             Nothing Nothing (Just pristine)
   (to_unrevert :> to_keep) <- runInvertibleSelection pw selection_config
-  tentativelyAddToPending _repository to_unrevert
+  addToPending _repository (diffingOpts opts) to_unrevert
   recorded <- readPatches _repository
   debugMessage "I'm about to writeUnrevert."
   case commute ((unrecorded +>+ to_unrevert) :> to_keep) of
@@ -154,6 +154,7 @@ unrevertCmd _ opts [] =
     _repository <-
       finalizeRepositoryChanges _repository YesUpdatePending
         (compress ? opts) (O.dryRun ? opts)
-    void $ applyToWorking _repository (verbosity ? opts) to_unrevert
+    unless (O.yes (O.dryRun ? opts)) $
+      void $ applyToWorking _repository (verbosity ? opts) to_unrevert
   putFinished opts "unreverting"
 unrevertCmd _ _ _ = error "impossible case"

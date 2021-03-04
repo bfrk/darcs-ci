@@ -25,7 +25,6 @@ module Darcs.Repository.Pending
     , tentativelyRemoveFromPW
     , revertPending
     , finalizePending
-    , tentativelyAddToPending
     , setTentativePending
     ) where
 
@@ -61,7 +60,6 @@ import Darcs.Patch.Witnesses.Eq ( Eq2(..) )
 import Darcs.Patch.Witnesses.Ordered
     ( RL(..), FL(..), (+>+), (+>>+), (:>)(..), mapFL, reverseFL )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(Sealed), mapSeal, unseal )
-import Darcs.Patch.Witnesses.Unsafe ( unsafeCoercePStart )
 
 import Darcs.Repository.Flags ( UpdatePending(..) )
 import Darcs.Repository.InternalTypes
@@ -292,20 +290,6 @@ revertPending _ NoUpdatePending = return ()
 revertPending r YesUpdatePending =
   copyFile pendingPath tentativePendingPath `catchDoesNotExistError`
     (readPending r >>= unseal (writeTentativePending (unsafeStartTransaction r)))
-
--- | @tentativelyAddToPending repo ps@ appends @ps@ to the pending patch.
---
---   This fuction is unsafe because it accepts a patch that works on the
---   tentative pending and we don't currently track the state of the
---   tentative pending.
-tentativelyAddToPending :: forall p wU wR wX wY. RepoPatch p
-                        => Repository 'RW p wU wR
-                        -> FL (PrimOf p) wX wY
-                        -> IO ()
-tentativelyAddToPending repo patch =
-    withRepoDir repo $ do
-        Sealed pend <- readTentativePending repo
-        writeTentativePending repo (pend +>+ unsafeCoercePStart patch)
 
 -- | Overwrites the pending patch with a new one, starting at the tentative state.
 setTentativePending :: forall p wU wR wP. RepoPatch p

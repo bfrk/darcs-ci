@@ -29,7 +29,8 @@ import qualified System.FilePath.Posix as Posix ( searchPathSeparator )
 import System.IO( hSetBinaryMode, hSetBuffering, BufferMode( NoBuffering ), stdin, stdout, stderr, localeEncoding )
 import Test.Framework.Providers.API
   ( TestResultlike(..), Testlike(..), Test, runImprovingIO, yieldImprovement, Test(..), liftIO )
-import Test.Framework ( defaultMainWithArgs )
+import Test.Framework ( defaultMainWithOpts, RunnerOptions'(..), TestOptions'(..)
+  , ColorMode(..), Seed(..) )
 import Shelly hiding ( liftIO, run, FilePath, path )
 import qualified Shelly
 
@@ -252,7 +253,7 @@ data Config = Config { suites :: String
                      , hideSuccesses :: Bool
                      , threads :: Int
                      , qcCount :: Int
-                     , replay :: Maybe Integer
+                     , replay :: Maybe Int
                      }
             deriving (Data, Typeable, Eq, Show)
 
@@ -283,15 +284,6 @@ Right defaultConfig = fmap cmdArgsValue $ process (cmdArgsMode_ defaultConfigAnn
 
 run :: Config -> IO ()
 run conf = do
-    let args = [ "-j", show $ threads conf ]
-             ++ concat [ ["-t", x ] | x <- tests conf ]
-             ++ [ "--plain" | True <- [plain conf] ]
-             ++ [ "--hide-successes" | True <- [hideSuccesses conf] ]
-                -- this multiplier is calibrated against the observed behaviour of the test harness -
-                -- increase it if we see lots of "arguments exhausted" errors or similar
-             ++ [ "--maximum-unsuitable-generated-tests", show (7 * qcCount conf) ]
-             ++ [ "--maximum-generated-tests", show (qcCount conf) ]
-             ++ [ "--test-seed="++show seed | Just seed <- [replay conf] ]
     case testDir conf of
        Nothing -> return ()
        Just d  -> do e <- shelly (test_e (fromText $ pack d))
@@ -376,7 +368,24 @@ run conf = do
         then findShell darcsBin "tests/network" (testDir conf) failing diffAlgorithm repoFormat useIndex useCache
         else return []
     hstests <- if hashed then doHashed else return []
-    defaultMainWithArgs (stests ++ utests ++ ntests ++ hstests) args
+    let testRunnerOptions = RunnerOptions
+          { ropt_threads = Just (threads conf)
+          , ropt_test_options = Just $ TestOptions
+              { topt_seed = FixedSeed <$> replay conf
+              , topt_maximum_generated_tests = Just (qcCount conf)
+              , topt_maximum_unsuitable_generated_tests = Just (7 * qcCount conf)
+              , topt_maximum_test_size = Nothing
+              , topt_maximum_test_depth = Nothing
+              , topt_timeout = Nothing
+              }
+          , ropt_test_patterns = if null (tests conf) then Nothing else Just (map read (tests conf))
+          , ropt_xml_output = Nothing
+          , ropt_xml_nested = Nothing
+          , ropt_color_mode = if plain conf then Just ColorNever else Nothing
+          , ropt_hide_successes = Just (hideSuccesses conf)
+          , ropt_list_only = Nothing
+          }
+    defaultMainWithOpts (stests ++ utests ++ ntests ++ hstests) testRunnerOptions
        where
           exeSuffix :: String
 #ifdef WIN32

@@ -18,6 +18,8 @@
 module Darcs.Util.Lock
     ( withLock
     , withLockCanFail
+    , getLock
+    , releaseLock
     , environmentHelpLocks
     , withTemp
     , withOpenTemp
@@ -119,7 +121,7 @@ import Darcs.Util.Progress ( debugMessage )
 import Darcs.Util.Prompt ( askUser )
 
 withLock :: String -> IO a -> IO a
-withLock s job = bracket (getlock s 30) releaseLock (\_ -> job)
+withLock s job = bracket (getLock s 30) releaseLock (\_ -> job)
 
 releaseLock :: String -> IO ()
 releaseLock = removeFileMayNotExist
@@ -133,18 +135,18 @@ withLockCanFail s job =
           (\l -> if l then liftM Right job
                       else return $ Left ())
 
-getlock :: String -> Int -> IO String
-getlock l 0 = do yorn <- askUser $ "Couldn't get lock "++l++". Abort (yes or anything else)? "
+getLock :: String -> Int -> IO String
+getLock l 0 = do yorn <- askUser $ "Couldn't get lock "++l++". Abort (yes or anything else)? "
                  case yorn of
                     ('y':_) -> exitWith $ ExitFailure 1
-                    _ -> getlock l 30
-getlock lbad tl = do l <- canonFilename lbad
+                    _ -> getLock l 30
+getLock lbad tl = do l <- canonFilename lbad
                      gotit <- takeLock l
                      if gotit then return l
                               else do putStrLn $ "Waiting for lock "++l
                                       hFlush stdout -- for Windows
                                       threadDelay 2000000
-                                      getlock l (tl - 1)
+                                      getLock l (tl - 1)
 
 
 takeLock :: FilePathLike p => p -> IO Bool

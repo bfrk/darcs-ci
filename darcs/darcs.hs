@@ -32,7 +32,7 @@ import Darcs.Prelude
 import Control.Exception ( handle, ErrorCall )
 import System.Exit ( exitWith, ExitCode(..) )
 import System.Environment ( getArgs )
-import System.IO ( hPutStrLn, stderr )
+import System.IO ( hPutStr, stderr )
 
 import Darcs.UI.RunCommand ( runTheCommand )
 import Darcs.UI.Commands.Help ( helpCmd, listAvailableCommands, printVersion,
@@ -48,15 +48,24 @@ import Version ( version, context, weakhash )
 
 execExceptionHandler :: ExecException -> IO a
 execExceptionHandler (ExecException cmd args redirects reason) = do
-    putStrLn . unlines $
+    hPutStr stderr . unlines $
         [ "Failed to execute external command: " ++ unwords (cmd:args)
         , "Lowlevel error: " ++ reason
         , "Redirects: " ++ show redirects
         ]
     exitWith $ ExitFailure 3
 
+errorExceptionHandler :: ErrorCall -> IO a
+errorExceptionHandler e = do
+    hPutStr stderr . unlines $
+        [ "This is a bug! Please report it at http://bugs.darcs.net " ++
+          "or via email to bugs@darcs.net:"
+        , show e
+        ]
+    exitWith $ ExitFailure 4
+
 main :: IO ()
-main = handleErrors . withAtexit . withSignalsHandled . handleExecFail $ do
+main = handleErrors . handleExecFail . withSignalsHandled . withAtexit $ do
     atexit reportBadSources
     setDarcsEncodings
     argv <- getArgs
@@ -74,15 +83,8 @@ main = handleErrors . withAtexit . withSignalsHandled . handleExecFail $ do
         ["--exact-version"] -> printExactVersion
         _ -> runTheCommand commandControlList (head argv) (tail argv)
   where
-    handleErrors =
-      handle (\(e::ErrorCall) -> do
-        hPutStrLn stderr $
-          "This is a bug! Please report it at http://bugs.darcs.net " ++
-          "or via email to bugs@darcs.net:\n" ++
-          show e
-        exitWith $ ExitFailure 4)
+    handleErrors = handle errorExceptionHandler
     handleExecFail = handle execExceptionHandler
     printExactVersion =  do
         putStrLn $ "Weak Hash: " ++ weakhash
         putStrLn context
-

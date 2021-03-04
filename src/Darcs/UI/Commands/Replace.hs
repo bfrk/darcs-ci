@@ -171,7 +171,8 @@ replaceCmd fps opts (old : new : args@(_ : _)) =
           _repository <-
             finalizeRepositoryChanges _repository YesUpdatePending
               (O.compress ? opts) (O.dryRun ? opts)
-          void $ applyToWorking _repository (verbosity ? opts) replacePs
+          unless (O.yes (O.dryRun ? opts)) $
+            void $ applyToWorking _repository (verbosity ? opts) replacePs
   where
     exists tree file = if isJust $ findFile tree file
                            then return True

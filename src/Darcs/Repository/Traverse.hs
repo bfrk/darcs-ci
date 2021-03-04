@@ -1,11 +1,7 @@
 module Darcs.Repository.Traverse
-    ( cleanInventories
-    , cleanPatches
-    , cleanPristine
-    , cleanRepository
+    ( cleanRepository
     , diffHashLists
     , listInventories
-    , listInventoriesLocal
     , listInventoriesRepoDir
     , listPatchesLocalBucketed
     , specialPatches
@@ -33,12 +29,13 @@ import Darcs.Repository.Inventory
     )
 import Darcs.Repository.InternalTypes
     ( Repository
+    , AccessType(..)
     , repoCache
     , withRepoDir
     )
 import Darcs.Repository.Paths
-    ( hashedInventory
-    , hashedInventoryPath
+    ( tentativeHashedInventory
+    , tentativeHashedInventoryPath
     , inventoriesDir
     , inventoriesDirPath
     , patchesDirPath
@@ -51,7 +48,7 @@ import Darcs.Util.Global ( darcsdir, debugMessage )
 import Darcs.Util.Lock ( removeFileMayNotExist )
 
 
-cleanRepository :: Repository rt p wU wR -> IO ()
+cleanRepository :: Repository 'RW p wU wR -> IO ()
 cleanRepository r = cleanPristine r >> cleanInventories r >> cleanPatches r
 
 -- | The way patchfiles, inventories, and pristine trees are stored.
@@ -63,10 +60,10 @@ cleanRepository r = cleanPristine r >> cleanInventories r >> cleanPatches r
 data DirLayout = PlainLayout | BucketedLayout
 
 -- | Remove unreferenced entries in the pristine cache.
-cleanPristine :: Repository rt p wU wR -> IO ()
+cleanPristine :: Repository 'RW p wU wR -> IO ()
 cleanPristine r = withRepoDir r $ do
     debugMessage "Cleaning out the pristine cache..."
-    i <- gzReadFilePS hashedInventoryPath
+    i <- gzReadFilePS tentativeHashedInventoryPath
     cleanPristineDir (repoCache r) [peekPristineHash i]
 
 -- | Set difference between two lists of hashes.
@@ -77,7 +74,7 @@ diffHashLists xs ys = from_set $ (to_set xs) `Set.difference` (to_set ys)
     from_set = map BC.unpack . Set.toList
 
 -- | Remove unreferenced files in the inventories directory.
-cleanInventories :: Repository rt p wU wR -> IO ()
+cleanInventories :: Repository 'RW p wU wR -> IO ()
 cleanInventories _ = do
     debugMessage "Cleaning out inventories..."
     hs <- listInventoriesLocal
@@ -95,7 +92,7 @@ specialPatches :: [FilePath]
 specialPatches = ["unrevert", "pending", "pending.tentative"]
 
 -- | Remove unreferenced files in the patches directory.
-cleanPatches :: Repository rt p wU wR -> IO ()
+cleanPatches :: Repository 'RW p wU wR -> IO ()
 cleanPatches _ = do
     debugMessage "Cleaning out patches..."
     hs <- (specialPatches ++) <$> listPatchesLocal PlainLayout darcsdir darcsdir
@@ -113,7 +110,7 @@ listInventoriesWith
   -> DirLayout
   -> String -> String -> IO [String]
 listInventoriesWith readInv dirformat baseDir startDir = do
-    mbStartingWithInv <- getStartingWithHash startDir hashedInventory
+    mbStartingWithInv <- getStartingWithHash startDir tentativeHashedInventory
     followStartingWiths mbStartingWithInv
   where
     getStartingWithHash dir file = inventoryParent <$> readInv (dir </> file)
@@ -167,7 +164,7 @@ listInventoriesRepoDir repoDir = do
 -- * The third argument is the directory of the head inventory.
 listPatchesLocal :: DirLayout -> String -> String -> IO [String]
 listPatchesLocal dirformat baseDir startDir = do
-  inventory <- readInventory (startDir </> hashedInventory)
+  inventory <- readInventory (startDir </> tentativeHashedInventory)
   followStartingWiths
     (inventoryParent inventory)
     (inventoryPatchNames inventory)

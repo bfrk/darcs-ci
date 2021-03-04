@@ -454,7 +454,7 @@ optimizeHelpRelink =
   , "into multiple local repositories."
   ]
 
-doOptimizePristine :: [DarcsFlag] -> Repository rt p wU wR -> IO ()
+doOptimizePristine :: [DarcsFlag] -> Repository 'RW p wU wR -> IO ()
 doOptimizePristine opts repo = do
     inv <- BC.readFile hashedInventoryPath
     let linesInv = BC.split '\n' inv

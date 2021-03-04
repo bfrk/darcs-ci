@@ -9,7 +9,7 @@ module Darcs.Repository.Unrevert
 import Darcs.Prelude
 import Darcs.Patch ( PrimOf, RepoPatch, commuteRL )
 import Darcs.Patch.Apply ( ApplyState )
-import Darcs.Patch.Bundle ( Bundle(..), interpretBundle, makeBundle, parseBundle )
+import Darcs.Patch.Bundle ( interpretBundle, makeBundle, parseBundle )
 import Darcs.Patch.Depends ( mergeThem, removeFromPatchSet )
 import Darcs.Patch.Info ( patchinfo )
 import Darcs.Patch.Named ( infopatch )
@@ -33,7 +33,8 @@ finalizeTentativeUnrevert =
 
 revertTentativeUnrevert :: IO ()
 revertTentativeUnrevert =
-  copyFile unrevertPath tentativeUnrevertPath `catchDoesNotExistError` return ()
+  copyFile unrevertPath tentativeUnrevertPath `catchDoesNotExistError`
+    removeFileMayNotExist tentativeUnrevertPath
 
 writeUnrevert :: (RepoPatch p, ApplyState p ~ Tree)
               => PatchSet p Origin wR
@@ -66,10 +67,8 @@ removeFromUnrevertContext :: forall p wR wX. (RepoPatch p, ApplyState p ~ Tree)
                           -> FL (PatchInfoAnd p) wX wR
                           -> IO ()
 removeFromUnrevertContext _ NilFL = return () -- nothing to do
-removeFromUnrevertContext ref ps = do
-  Sealed bundle <-
-    unrevert_patch_bundle `catchDoesNotExistError`
-      return (Sealed (Bundle (NilFL :> NilFL)))
+removeFromUnrevertContext ref ps = (do
+  Sealed bundle <- unrevert_patch_bundle
   debugMessage "Adjusting the context of the unrevert changes..."
   debugMessage $
     "Removing " ++ show (lengthFL ps) ++ " patches in removeFromUnrevertContext"
@@ -86,7 +85,8 @@ removeFromUnrevertContext ref ps = do
               bundle' <- makeBundle Nothing common (hopefully us' :>: NilFL)
               writeDocBinFile tentativeUnrevertPath bundle'
     Sealed _ -> return () -- TODO I guess this should be an error call
-  debugMessage "Done adjusting the context of the unrevert changes"
+  debugMessage "Done adjusting the context of the unrevert changes")
+  `catchDoesNotExistError` return ()
   where
     unrevert_impossible = do
       confirmed <-

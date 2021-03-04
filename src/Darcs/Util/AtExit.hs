@@ -28,31 +28,22 @@
 -- features, such as exit handlers.  These features slightly break the Haskellian
 -- purity of darcs, in favour of programming convenience.
 
-module Darcs.Util.AtExit
-    (
-      atexit
-    , withAtexit
-    ) where
+module Darcs.Util.AtExit ( atexit , withAtexit ) where
 
 import Darcs.Prelude
 
 import Control.Concurrent.MVar
-import Control.Exception
-    ( bracket_, catch, SomeException
-    , mask
-    )
-import System.IO.Unsafe (unsafePerformIO)
-import System.IO ( hPutStrLn, stderr, hPrint )
+import Control.Exception ( SomeException, catch, finally )
+import System.IO ( hPrint, hPutStrLn, stderr )
+import System.IO.Unsafe ( unsafePerformIO )
 
 atexitActions :: MVar (Maybe [IO ()])
 atexitActions = unsafePerformIO (newMVar (Just []))
 {-# NOINLINE atexitActions #-}
 
-
 -- | Registers an IO action to run just before darcs exits. Useful for removing
 -- temporary files and directories, for example. Referenced in Issue1914.
-atexit :: IO ()
-       -> IO ()
+atexit :: IO () -> IO ()
 atexit action =
     modifyMVar_ atexitActions $ \ml ->
         case ml of
@@ -62,16 +53,14 @@ atexit action =
                 hPutStrLn stderr "It's too late to use atexit"
                 return Nothing
 
-
 withAtexit :: IO a -> IO a
-withAtexit = bracket_ (return ()) exit
+withAtexit job = job `finally` runAtexitActions
   where
-    exit = mask $ \unmask -> do
+    runAtexitActions = do
         Just actions <- swapMVar atexitActions Nothing
         -- from now on atexit will not register new actions
-        mapM_ (runAction unmask) actions
-    runAction unmask action =
-        catch (unmask action) $ \(exn :: SomeException) -> do
+        mapM_ runAction actions
+    runAction action =
+        catch action $ \(exn :: SomeException) -> do
             hPutStrLn stderr "Exception thrown by an atexit registered action:"
             hPrint stderr exn
-

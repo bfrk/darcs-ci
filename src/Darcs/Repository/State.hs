@@ -34,7 +34,7 @@ module Darcs.Repository.State
     -- * Utilities
     , filterOutConflicts
     -- * Pending-related functions that depend on repo state
-    , addPendingDiffToPending, addToPending
+    , unsafeAddToPending, addToPending
     ) where
 
 import Darcs.Prelude
@@ -688,18 +688,11 @@ getReplaces YesLookForReplaces diffalg _repo pending working = do
                 put tree''
                 return patches
 
--- Note: We call updateIndex in these two functions because they
--- are used by commands that modify only the pending patch and thus have
--- no call to finalizeRepositoryChanges (which normally does this).
--- Also note that updateIndex must be called after pending is modified.
-
 -- | Add an 'FL' of patches started from the pending state to the pending patch.
--- TODO: add witnesses for pending so we can make the types precise: currently
--- the passed patch can be applied in any context, not just after pending.
-addPendingDiffToPending :: (RepoPatch p, ApplyState p ~ Tree)
-                        => Repository 'RW p wU wR
-                        -> FreeLeft (FL (PrimOf p)) -> IO ()
-addPendingDiffToPending repo newP = do
+unsafeAddToPending :: (RepoPatch p, ApplyState p ~ Tree)
+                   => Repository 'RW p wU wR
+                   -> FreeLeft (FL (PrimOf p)) -> IO ()
+unsafeAddToPending repo newP = do
     (_, Sealed toPend) <- readPending repo
     case unFreeLeft newP of
         (Sealed p) -> do

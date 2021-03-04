@@ -28,6 +28,7 @@ module Darcs.Repository.Hashed
     , tentativelyRemovePatches
     , tentativelyRemovePatches_
     , tentativelyAddPatch_
+    , tentativelyAddPatches
     , tentativelyAddPatches_
     , finalizeRepositoryChanges
     , reorderInventory
@@ -113,11 +114,14 @@ import Darcs.Repository.Unrevert
     , revertTentativeUnrevert
     )
 
+import Darcs.Util.AtExit ( atexit )
 import Darcs.Util.Lock
     ( writeBinFile
     , writeDocBinFile
     , writeAtomicFilePS
     , appendDocBinFile
+    , getLock
+    , releaseLock
     )
 import Darcs.Patch.Set ( PatchSet(..), Tagged(..)
                        , SealedPatchSet, Origin
@@ -441,8 +445,10 @@ writeTentativeInventory :: RepoPatch p
 writeTentativeInventory repo compr patchSet = do
     debugMessage "in writeTentativeInventory..."
     createDirectoryIfMissing False inventoriesDirPath
+    let cache = repoCache repo
+        tediousName = "Writing inventory"
     beginTedious tediousName
-    hsh <- writeInventoryPrivate $ slightlyOptimizePatchset patchSet
+    hsh <- writeInventory tediousName cache compr $ slightlyOptimizePatchset patchSet
     endTedious tediousName
     debugMessage "still in writeTentativeInventory..."
     case hsh of
@@ -450,19 +456,19 @@ writeTentativeInventory repo compr patchSet = do
         Just h -> do
             content <- snd <$> fetchFileUsingCache cache HashedInventoriesDir h
             writeAtomicFilePS tentativeHashedInventoryPath content
+
+writeInventory :: RepoPatch p => String -> Cache -> Compression
+               -> PatchSet p Origin wX -> IO (Maybe String)
+writeInventory tediousName cache compr = go
   where
-    cache = repoCache repo
-    tediousName = "Writing inventory"
-    writeInventoryPrivate :: RepoPatch p => PatchSet p Origin wX
-                          -> IO (Maybe String)
-    writeInventoryPrivate (PatchSet NilRL NilRL) = return Nothing
-    writeInventoryPrivate (PatchSet NilRL ps) = do
+    go :: RepoPatch p => PatchSet p Origin wX -> IO (Maybe String)
+    go (PatchSet NilRL NilRL) = return Nothing
+    go (PatchSet NilRL ps) = do
         inventory <- sequence $ mapRL (writePatchIfNecessary cache compr) ps
         let inventorylist = showInventoryPatches (reverse inventory)
         hash <- writeHashFile cache compr HashedInventoriesDir inventorylist
         return $ Just hash
-    writeInventoryPrivate
-        (PatchSet xs@(_ :<: Tagged t _ _) x) = do
+    go (PatchSet xs@(_ :<: Tagged t _ _) x) = do
         resthash <- write_ts xs
         finishedOneIO tediousName $ fromMaybe "" resthash
         inventory <- sequence $ mapRL (writePatchIfNecessary cache compr)
@@ -482,7 +488,7 @@ writeTentativeInventory repo compr patchSet = do
                  -> IO (Maybe String)
         write_ts (_ :<: Tagged _ (Just h) _) = return (Just h)
         write_ts (tts :<: Tagged _ Nothing pps) =
-            writeInventoryPrivate $ PatchSet tts pps
+            go $ PatchSet tts pps
         write_ts NilRL = return Nothing
 
 -- | Write a 'PatchInfoAnd' to disk and return an 'InventoryEntry' i.e. the
@@ -508,6 +514,15 @@ tentativelyAddPatch :: (RepoPatch p, ApplyState p ~ Tree)
                     -> PatchInfoAnd p wR wY
                     -> IO (Repository 'RW p wU wY)
 tentativelyAddPatch = tentativelyAddPatch_ UpdatePristine
+
+tentativelyAddPatches :: (RepoPatch p, ApplyState p ~ Tree)
+                      => Repository 'RW p wU wR
+                      -> Compression
+                      -> Verbosity
+                      -> UpdatePending
+                      -> FL (PatchInfoAnd p) wR wY
+                      -> IO (Repository 'RW p wU wY)
+tentativelyAddPatches = tentativelyAddPatches_ UpdatePristine
 
 data UpdatePristine = UpdatePristine 
                     | DontUpdatePristine
@@ -565,7 +580,6 @@ tentativelyRemovePatches_ upr r compr upe ps
       withRepoDir r $ do
         ref <- readTentativePatches r
         unless (upr == DontUpdatePristineNorRevert) $ removeFromUnrevertContext ref ps
-        Sealed pend <- readTentativePending r
         debugMessage "Removing changes from tentative inventory..."
         r' <- removeFromTentativeInventory r compr ps
         withTentativeRebase r r' (foldrwFL (addFixupsToSuspended . hopefully) ps)
@@ -574,6 +588,7 @@ tentativelyRemovePatches_ upr r compr upe ps
             progressFL "Applying inverse to pristine" ps
         when (upe == YesUpdatePending) $ do
           debugMessage "Adding changes to pending..."
+          Sealed pend <- readTentativePending r
           writeTentativePending r' $ effect ps +>+ pend
         return r'
   | otherwise = fail Old.oldRepoFailMsg
@@ -612,10 +627,10 @@ finalizeRepositoryChanges :: (RepoPatch p, ApplyState p ~ Tree)
                           -> DryRun
                           -> IO (Repository 'RO p wU wR)
 finalizeRepositoryChanges r updatePending compr dryrun
-    | formatHas HashedInventory (repoFormat r) = do
-        let r' = unsafeEndTransaction $ unsafeCoerceR r
-        when (dryrun == NoDryRun) $
-          withRepoDir r $ do
+    | formatHas HashedInventory (repoFormat r) =
+        withRepoDir r $ do
+          let r' = unsafeEndTransaction $ unsafeCoerceR r
+          when (dryrun == NoDryRun) $ do
             debugMessage "Finalizing changes..."
             withSignalsBlocked $ do
                 finalizeTentativeRebase
@@ -630,7 +645,8 @@ finalizeRepositoryChanges r updatePending compr dryrun
               `catchIOError` \e ->
                 hPutStrLn stderr $ "Cannot create or update patch index: "++ show e
             updateIndex r'
-        return r'
+          releaseLock lockPath
+          return r'
     | otherwise = fail Old.oldRepoFailMsg
 
 -- TODO: rename this and document the transaction protocol (revert/finalize)
@@ -645,6 +661,8 @@ revertRepositoryChanges :: RepoPatch p
 revertRepositoryChanges r upe
   | formatHas HashedInventory (repoFormat r) =
       withRepoDir r $ do
+        lock <- getLock lockPath 30
+        atexit (releaseLock lock)
         checkIndexIsWritable
           `catchIOError` \e -> fail (unlines ["Cannot write index", show e])
         revertTentativeUnrevert

@@ -49,7 +49,7 @@ import Darcs.Repository
     , AccessType(..)
     , withRepoLock
     , RepoJob(..)
-    , addPendingDiffToPending
+    , unsafeAddToPending
     , finalizeRepositoryChanges
     , UpdatePending(..)
     )
@@ -275,7 +275,7 @@ doMoves repository opts cur work moves = do
             (fromMaybe (emptyGap NilFL) prePatch)
             (freeGap $ Darcs.Patch.move old new :>: NilFL)
       moveFileOrDir work old new
-      addPendingDiffToPending repository pendingDiff
+      unsafeAddToPending repository pendingDiff
     void $ finalizeRepositoryChanges repository YesUpdatePending
       (O.compress ? opts) (O.dryRun ? opts)
 

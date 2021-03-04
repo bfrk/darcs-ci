@@ -17,7 +17,7 @@
 
 module Darcs.UI.Commands.Convert.Darcs2 ( convertDarcs2 ) where
 
-import Control.Monad ( when, unless )
+import Control.Monad ( when, unless, void )
 import qualified Data.ByteString as B
 import Data.Char ( toLower )
 import Data.Maybe ( catMaybes )
@@ -65,7 +65,7 @@ import Darcs.Repository
     , withUMaskFlag
     )
 import qualified Darcs.Repository as R ( setScriptsExecutable )
-import Darcs.Repository.Flags ( Compression(..), UpdatePending(..) )
+import Darcs.Repository.Flags ( UpdatePending(..) )
 import Darcs.Repository.Format
     ( RepoProperty(Darcs2)
     , formatHas
@@ -134,12 +134,12 @@ convertDarcs2 = DarcsCommand
     , commandPrereq = \_ -> return $ Right ()
     , commandCompleteArgs = noArgs
     , commandArgdefaults = nodefaults
-    , commandOptions = convertDarcs2Opts
+    , commandOptions = opts
     }
   where
-    convertDarcs2BasicOpts = O.newRepo ^ O.setScriptsExecutable ^ O.withWorkingDir
-    convertDarcs2AdvancedOpts = O.network ^ O.patchIndexNo ^ O.umask ^ O.patchFormat
-    convertDarcs2Opts = convertDarcs2BasicOpts `withStdOpts` convertDarcs2AdvancedOpts
+    basicOpts = O.newRepo ^ O.setScriptsExecutable ^ O.withWorkingDir
+    advancedOpts = O.network ^ O.patchIndexNo ^ O.compress ^ O.umask ^ O.patchFormat
+    opts = basicOpts `withStdOpts` advancedOpts
 
 toDarcs2 :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 toDarcs2 _ opts' args = do
@@ -208,6 +208,9 @@ toDarcs2 _ opts' args = do
 
       -- Note: we use bunchFL so we can commit every 100 patches
       _ <- applyAll opts _repo $ bunchFL 100 $ progressFL "Converting patch" patches
+      void $
+        finalizeRepositoryChanges _repo (updatePending opts) (O.compress ? opts)
+          (O.dryRun ? opts)
       when (parseFlags O.setScriptsExecutable opts == O.YesSetScriptsExecutable)
         R.setScriptsExecutable
 
@@ -224,14 +227,14 @@ toDarcs2 _ opts' args = do
              -> IO (W2 (Repository 'RW p) wY)
     applyOne opts (W2 _repo) x = do
       _repo <- tentativelyAddPatch_ (updatePristine opts) _repo
-        GzipCompression (verbosity ? opts) (updatePending opts) x
+        (O.compress ? opts) (verbosity ? opts) (updatePending opts) x
       _repo <- applyToWorking _repo (verbosity ? opts) (effect x)
       return (W2 _repo)
 
     applySome opts (W2 _repo) xs = do
       _repo <- unW2 <$> foldFL_M (applyOne opts) (W2 _repo) xs
       -- commit after applying a bunch of patches
-      _repo <- finalizeRepositoryChanges _repo (updatePending opts) GzipCompression (O.dryRun ? opts)
+      _repo <- finalizeRepositoryChanges _repo (updatePending opts) (O.compress ? opts) (O.dryRun ? opts)
       _repo <- revertRepositoryChanges _repo (updatePending opts)
       return (W2 _repo)
 

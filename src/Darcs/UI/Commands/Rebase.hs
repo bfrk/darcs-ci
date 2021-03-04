@@ -32,14 +32,20 @@ import Darcs.UI.Flags
 import qualified Darcs.UI.Flags as Flags ( getAuthor )
 import Darcs.UI.Options ( oid, (?), (^) )
 import qualified Darcs.UI.Options.All as O
-import Darcs.UI.PatchHeader ( HijackT, HijackOptions(..), runHijackT
-                            , getAuthor
-                            , updatePatchHeader, AskAboutDeps(..) )
+import Darcs.UI.PatchHeader
+    ( AskAboutDeps(..)
+    , HijackOptions(..)
+    , HijackT
+    , getAuthor
+    , patchHeaderConfig
+    , runHijackT
+    , updatePatchHeader
+    )
 import Darcs.Repository
     ( Repository, RepoJob(..), AccessType(..), withRepoLock, withRepository
-    , tentativelyAddPatch, finalizeRepositoryChanges
+    , tentativelyAddPatches, finalizeRepositoryChanges
     , tentativelyRemovePatches, readPatches
-    , tentativelyAddToPending, unrecordedChanges, applyToWorking
+    , setTentativePending, unrecordedChanges, applyToWorking
     )
 import Darcs.Repository.Flags ( UpdatePending(..), ExternalMerge(..) )
 import Darcs.Repository.Hashed ( upgradeOldStyleRebase )
@@ -60,6 +66,7 @@ import Darcs.Patch.Apply ( ApplyState )
 import Darcs.Patch.CommuteFn ( commuterIdFL )
 import Darcs.Patch.Info ( displayPatchInfo )
 import Darcs.Patch.Match ( secondMatch, splitSecondFL )
+import Darcs.Patch.Merge ( cleanMerge )
 import Darcs.Patch.Named ( Named, fmapFL_Named, patchcontents, patch2patchinfo )
 import Darcs.Patch.PatchInfoAnd ( PatchInfoAnd, hopefully, info, n2pia )
 import Darcs.Patch.Prim ( canonizeFL, PrimPatch )
@@ -73,6 +80,7 @@ import Darcs.Patch.Rebase.Change
 import Darcs.Patch.Rebase.Fixup ( RebaseFixup(..), flToNamesPrims )
 import Darcs.Patch.Rebase.Name ( RebaseName(..), commuteNameNamed )
 import Darcs.Patch.Rebase.Suspended ( Suspended(..), addToEditsToSuspended )
+import qualified Darcs.Patch.Rebase.Suspended as S ( simplifyPush )
 import Darcs.Patch.Permutations ( partitionConflictingFL )
 import Darcs.Patch.Progress ( progressRL )
 import Darcs.Patch.Set ( PatchSet, Origin, patchSet2RL )
@@ -91,11 +99,12 @@ import Darcs.UI.SelectChanges
     , viewChanges
     )
 import qualified Darcs.UI.SelectChanges as S ( PatchSelectionOptions (..) )
-import Darcs.Patch.Witnesses.Eq ( EqCheck(..) )
 import Darcs.Patch.Witnesses.Ordered
     ( FL(..), (+>+), mapFL_FL
     , concatFL, mapFL, nullFL, lengthFL, reverseFL
     , (:>)(..)
+    , (:\/:)(..)
+    , (:/\:)(..)
     , RL(..), reverseRL, mapRL_RL
     , Fork(..)
     )
@@ -120,9 +129,8 @@ import Darcs.Util.Path ( AbsolutePath )
 
 import Darcs.Util.SignalHandler ( withSignalsBlocked )
 import Darcs.Util.Tree ( Tree )
-import Darcs.Util.Exception ( die )
 
-import Control.Monad ( when, void )
+import Control.Monad ( unless, when, void )
 import Control.Monad.Trans ( liftIO )
 import System.Exit ( exitSuccess )
 
@@ -265,8 +273,7 @@ doSuspend opts _repository suspended psToSuspend = do
                     ++ if (verbose opts) then "" else " Use --verbose to see the details."
 
     _repository <-
-      tentativelyRemovePatches _repository (compress ? opts) YesUpdatePending psToSuspend
-    tentativelyAddToPending _repository $ invert $ effect psToSuspend
+      tentativelyRemovePatches _repository (compress ? opts) NoUpdatePending psToSuspend
     new_suspended <-
       addToEditsToSuspended
         (O.diffAlgorithm ? opts)
@@ -274,7 +281,8 @@ doSuspend opts _repository suspended psToSuspend = do
         suspended
     writeTentativeRebase _repository new_suspended
     withSignalsBlocked $
-      void $ applyToWorking _repository (verbosity ? opts) (invert psAfterPending)
+      unless (O.yes (O.dryRun ? opts)) $
+        void $ applyToWorking _repository (verbosity ? opts) (invert psAfterPending)
     return _repository
 
 unsuspend :: DarcsCommand
@@ -298,9 +306,12 @@ unsuspend = DarcsCommand
       ^ O.interactive
       ^ O.withSummary
       ^ O.externalMerge
-      ^ O.keepDate
       ^ O.author
-      ^ O.diffAlgorithm
+      ^ O.selectAuthor
+      ^ O.patchname
+      ^ O.askDeps
+      ^ O.askLongComment
+      ^ O.keepDate
     unsuspendOpts = unsuspendBasicOpts `withStdOpts` oid
     unsuspendDescription =
       "Select suspended patches to restore to the end of the repo."
@@ -331,21 +342,18 @@ reify = DarcsCommand
       "Select suspended patches to restore to the end of the repo,\
       \ reifying any fixup patches."
 
-unsuspendCmd :: String -> Bool -> (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
+unsuspendCmd :: String -> Bool -> (AbsolutePath, AbsolutePath)
+             -> [DarcsFlag] -> [String] -> IO ()
 unsuspendCmd cmd reifyFixups _ opts _args =
-  withRepoLock (useCache ? opts) (umask ? opts) $
-  RebaseJob $
-  \_repository -> do
-    IsEq <- requireNoUnrecordedChanges _repository
-
-    Items selects <- readTentativeRebase _repository
+  withRepoLock (useCache ? opts) (umask ? opts) $ RebaseJob $ \_repository -> do
+    Items suspended <- readTentativeRebase _repository
 
     let matchFlags = O.matchSeveralOrFirst ? opts
     inRange :> outOfRange <-
         return $
             if secondMatch matchFlags then
-            splitSecondFL rcToPia matchFlags selects
-            else selects :> NilFL
+            splitSecondFL rcToPia matchFlags suspended
+            else suspended :> NilFL
 
     offer :> dontoffer <-
         return $
@@ -358,7 +366,9 @@ unsuspendCmd cmd reifyFixups _ opts _args =
 
     warnSkip dontoffer
 
-    let selection_config = selectionConfigGeneric rcToPia First "unsuspend" (patchSelOpts True opts) Nothing
+    let selection_config =
+          selectionConfigGeneric rcToPia First "unsuspend"
+            (patchSelOpts True opts) Nothing
     (chosen :> keep) <- runSelection offer selection_config
     when (nullFL chosen) $ do putStrLn "No patches selected!"
                               exitSuccess
@@ -370,8 +380,7 @@ unsuspendCmd cmd reifyFixups _ opts _args =
           reifyRebaseChange author chosen
         else return $ extractRebaseChange (diffAlgorithm ? opts) chosen
 
-    let da = diffAlgorithm ? opts
-        ps_to_keep = simplifyPushes da chosen_fixups $
+    let ps_to_keep = simplifyPushes da chosen_fixups $
                      keep +>+ reverseRL dontoffer +>+ outOfRange
 
     context <- readPatches _repository
@@ -384,44 +393,63 @@ unsuspendCmd cmd reifyFixups _ opts _args =
 
     have_conflicts <- announceConflicts "unsuspend"
         (allowConflicts opts) (externalMerge ? opts) conflicts
-    Sealed resolved_p <-
+    Sealed resolution <-
         case (externalMerge ? opts, have_conflicts) of
             (NoExternalMerge, _) ->
                 case O.conflictsYes ? opts of
-                    Just O.YesAllowConflicts -> return $ seal NilFL -- i.e. don't mark them
+                    Just O.YesAllowConflicts ->
+                      return $ seal NilFL -- i.e. don't mark them
                     _ -> return $ mangled conflicts
             (_, False) -> return $ mangled conflicts
             (YesExternalMerge _, True) ->
                 error "external resolution for unsuspend not implemented yet"
 
-    let effect_to_apply = concatFL (mapFL_FL effect ps_to_unsuspend) +>+ resolved_p
-    -- TODO should catch logfiles (fst value from updatePatchHeader) and clean them up as in AmendRecord
-    tentativelyAddToPending _repository effect_to_apply
-    -- we can just let hijack attempts through here because we already asked about them on suspend time
-    (_repository, renames) <- runHijackT IgnoreHijack $ doAdd _repository ps_to_unsuspend
-    writeTentativeRebase _repository $
-      unseal Items $
-      unseal (simplifyPushes da (mapFL_FL NameFixup renames)) ps_to_keep
-    withSignalsBlocked $ do
-      _repository <-
-        finalizeRepositoryChanges _repository YesUpdatePending
-          (compress ? opts) (O.dryRun ? opts)
-      void $ applyToWorking _repository (verbosity ? opts) effect_to_apply
+    unrec <- unrecordedChanges (diffingOpts opts) _repository Nothing
 
-    where doAdd :: (RepoPatch p, ApplyState p ~ Tree)
-                => Repository 'RW p wU wR
-                -> FL (WDDNamed p) wR wR2
-                -> HijackT IO (Repository 'RW p wU wR2, FL RebaseName wR2 wR2)
-          doAdd _repo NilFL = return (_repo, NilFL)
-          doAdd _repo ((p :: WDDNamed p wR wU) :>:ps) = do
+    -- TODO should catch logfiles (fst value from updatePatchHeader) and
+    -- clean them up as in AmendRecord
+    -- Note: we can hijack because we already asked about that on suspend time
+    (unsuspended_ps, ps_to_keep') <-
+      runHijackT IgnoreHijack $ hijack ps_to_unsuspend (unseal Items ps_to_keep)
+    _repository <-
+      tentativelyAddPatches _repository (compress ? opts) (verbosity ? opts)
+        NoUpdatePending unsuspended_ps
+    let effect_unsuspended = concatFL (mapFL_FL effect unsuspended_ps)
+    case cleanMerge (effect_unsuspended :\/: unrec) of
+      Nothing ->
+        fail $ "Can't "++cmd++" because there are conflicting unrecorded changes."
+      Just (unrec' :/\: effect_unsuspended') ->
+        case cleanMerge (resolution :\/: unrec') of
+          Nothing ->
+            fail $ "Can't "++cmd++" because there are conflicting unrecorded changes."
+          Just (unrec'' :/\: resolution') -> do
+            let effect_to_apply = effect_unsuspended' +>+ resolution'
+            setTentativePending _repository (resolution +>+ unrec'')
+            writeTentativeRebase _repository ps_to_keep'
+            withSignalsBlocked $ do
+              _repository <-
+                finalizeRepositoryChanges _repository YesUpdatePending
+                  (compress ? opts) (O.dryRun ? opts)
+              unless (O.yes (O.dryRun ? opts)) $
+                void $ applyToWorking _repository (verbosity ? opts) effect_to_apply
+
+    where da = diffAlgorithm ? opts
+
+          hijack :: forall p wR wT. (RepoPatch p, ApplyState p ~ Tree)
+                 => FL (WDDNamed p) wR wT
+                 -> Suspended p wT
+                 -> HijackT IO (FL (PatchInfoAnd p) wR wT, Suspended p wT)
+          hijack NilFL to_keep = return (NilFL, to_keep)
+          hijack (p :>: ps) to_keep = do
               case wddDependedOn p of
                   [] -> return ()
                   deps -> liftIO $ do
-                      -- It might make sense to only print out this message once, but we might find
-                      -- that the dropped dependencies are interspersed with other output,
-                      -- e.g. if running with --ask-deps
+                      -- It might make sense to only print out this message
+                      -- once, but we might find that the dropped dependencies
+                      -- are interspersed with other output, e.g. if running
+                      -- with --ask-deps
                       putStr $ "Warning: dropping the following explicit "
-                                 ++ englishNum (length deps) (Noun "dependency") ":\n\n"
+                            ++ englishNum (length deps) (Noun "dependency") ":\n\n"
                       let printIndented n =
                               mapM_ (putStrLn . (replicate n ' '++)) . lines .
                               renderString . displayPatchInfo
@@ -436,37 +464,19 @@ unsuspendCmd cmd reifyFixups _ opts _args =
               p' <- snd <$> updatePatchHeader "unsuspend"
                       NoAskAboutDeps
                       (patchSelOpts True opts)
-                      (diffAlgorithm ? opts)
-                      (O.keepDate ? opts)
-                      (O.selectAuthor ? opts)
-                      (O.author ? opts)
-                      (O.patchname ? opts)
-                      (O.askLongComment ? opts)
+                      (patchHeaderConfig opts)
                       (fmapFL_Named effect (wddPatch p)) NilFL
-              _repo <-
-                liftIO $
-                  tentativelyAddPatch _repo (compress ? opts) (verbosity ? opts) YesUpdatePending p'
-              -- create a rename that undoes the change we just made, so the contexts match up
-              let rename :: RebaseName wU wU
-                  rename = Rename (info p') (patch2patchinfo (wddPatch p))
+              -- create a rename that undoes the change we just made
+              let rename = Rename (info p') (patch2patchinfo (wddPatch p))
               -- push it through the remaining patches to fix them up
-              Just (ps2 :> (rename2 :: RebaseName wV wT2)) <-
-                return (commuterIdFL (commuterIdWDD commuteNameNamed) (rename :> ps))
-              -- assert that the rename still has a null effect on the context after commuting
-              IsEq <- return (unsafeCoerceP IsEq :: EqCheck wV wT2)
-              (_repo, renames) <- doAdd _repo ps2
-              -- return the renames so that the suspended patch can be fixed up
-              return (_repo, rename2 :>: renames)
-
-          requireNoUnrecordedChanges :: (RepoPatch p, ApplyState p ~ Tree)
-                                     => Repository 'RW p wU wR
-                                     -> IO (EqCheck wR wU)
-          requireNoUnrecordedChanges repo = do
-            pend <-
-              unrecordedChanges (diffingOpts opts) repo Nothing
-            case pend of
-              NilFL -> return IsEq
-              _ -> die $ "Can't "++cmd++" when there are unrecorded changes."
+              Just (ps2 :> rename2) <-
+                return $ commuterIdFL (commuterIdWDD commuteNameNamed) (rename :> ps)
+              to_keep' <- return $ S.simplifyPush da (NameFixup rename2) to_keep
+              (converted, to_keep'') <- hijack ps2 to_keep'
+              -- the rename still has a null effect on the context after
+              -- commuting, but it is not easy to convince the type-checker,
+              -- so we just coerce here
+              return $ unsafeCoerceP (p' :>: converted, to_keep'')
 
 inject :: DarcsCommand
 inject = DarcsCommand
@@ -828,14 +838,10 @@ TODO:
     - automatically answer yes re suspension
     - offer all patches (so they can be kept in order)
        - or perhaps rebase suspend --complement?
- - make unsuspend actually display the patch helpfully like normal selection
  - amended patches will often be in both the target repo and in the rebase context, detect?
  - can we be more intelligent about conflict resolutions?
  - --all option to unsuspend
  - review other conflict options for unsuspend
- - warning message on suspend about not being able to unsuspend with unrecorded changes
- - aborting during a rebase pull or rebase suspend causes it to leave the repo marked for rebase
- - patch count: get English right in <n> suspended patch(es)
  - darcs check should check integrity of rebase patch
  - review existence of reify and inject commands - bit of an internals hack
 -}

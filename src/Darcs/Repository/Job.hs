@@ -289,16 +289,15 @@ runJob patchType hasRebase repo repojob = do
 -- transaction.
 withRepoLock :: UseCache -> UMask -> RepoJob 'RW a -> IO a
 withRepoLock useCache um repojob =
-  withLock lockPath $
-    withRepository useCache $ onRepoJob repojob $ \job repository -> do
-      maybe (return ()) fail $ writeProblem (repoFormat repository)
-      withUMaskFlag um $ revertRepositoryChanges repository YesUpdatePending >>= job
+  withRepository useCache $ onRepoJob repojob $ \job repository -> do
+    maybe (return ()) fail $ writeProblem (repoFormat repository)
+    withUMaskFlag um $ revertRepositoryChanges repository YesUpdatePending >>= job
 
 -- | run a lock-taking job in an old-fashion repository.
 --   only used by `darcs optimize upgrade`.
 withOldRepoLock :: RepoJob 'RW a -> IO a
 withOldRepoLock repojob =
-    withRepository NoUseCache $ onRepoJob repojob $ \job repository ->
+  withRepository NoUseCache $ onRepoJob repojob $ \job repository ->
     withLock lockPath $ job $ unsafeStartTransaction repository
 
 -- | Apply a given RepoJob to a repository in the current working directory,

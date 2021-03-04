@@ -23,7 +23,7 @@ module Darcs.UI.Commands.Unrecord
     , obliterate
     ) where
 
-import Control.Monad ( when, void )
+import Control.Monad ( unless, when, void )
 import Data.Maybe( fromJust, isJust )
 import Darcs.Util.Tree( Tree )
 import System.Exit ( exitSuccess )
@@ -46,7 +46,6 @@ import Darcs.Repository
     , applyToWorking
     , finalizeRepositoryChanges
     , readPatches
-    , tentativelyAddToPending
     , tentativelyRemovePatches
     , unrecordedChanges
     , withRepoLock
@@ -258,13 +257,13 @@ genericObliterateCmd cmdname _ opts _ =
                         -- for the bundle.
                         readPatches _repository >>= savetoBundle opts removed
                     _repository <- tentativelyRemovePatches _repository
-                        (compress ? opts) YesUpdatePending removed
-                    tentativelyAddToPending _repository $ invert $ effect removed
+                        (compress ? opts) NoUpdatePending removed
                     withSignalsBlocked $ do
                         _repository <- finalizeRepositoryChanges _repository
                                         YesUpdatePending (compress ? opts) (O.dryRun ? opts)
                         debugMessage "Applying patches to working tree..."
-                        void $ applyToWorking _repository verbOpt (invert p_after_pending)
+                        unless (O.yes (O.dryRun ? opts)) $
+                          void $ applyToWorking _repository verbOpt (invert p_after_pending)
                     putFinished opts (presentParticiple cmdname)
 
 savetoBundle :: (RepoPatch p, ApplyState p ~ Tree)
