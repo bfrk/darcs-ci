@@ -12,7 +12,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macOS-10.15, windows-latest]
         ghc: [8.2.2, 8.4.4, 8.6.5, 8.8.4, 8.10.3]
-        cabal: [3.2.0.0]
+        cabal: [3.2.0.0, 3.4.0.0]
     env:
       tests-to-run: # e.g. -t=EXAMPLE
       testcmd: cabal run -- darcs-test -f=123 -s=sn -c=yn
