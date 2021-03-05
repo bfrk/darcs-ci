@@ -29,7 +29,7 @@ import Codec.Archive.Tar.Entry ( fileEntry, toTarPath )
 import Codec.Compression.GZip as GZ ( compress, decompress )
 import Control.Concurrent.Async ( withAsync )
 import Control.Exception ( Exception, IOException, throwIO, catch, finally )
-import Control.Monad ( void, when )
+import Control.Monad ( when )
 import System.IO.Error ( isAlreadyExistsError )
 import System.IO.Unsafe ( unsafeInterleaveIO )
 
@@ -70,15 +70,19 @@ import Darcs.Repository.Traverse ( listInventories )
 import Darcs.Repository.InternalTypes ( Repository, AccessType(RW) )
 import Darcs.Repository.Hashed ( readPatches )
 import Darcs.Repository.Inventory ( getValidHash )
+import Darcs.Repository.Paths
+    ( hashedInventoryPath
+    , inventoriesDirPath
+    , patchesDirPath
+    , pristineDirPath
+    )
+import Darcs.Repository.Pristine ( readHashedPristineRoot )
 import Darcs.Util.Cache ( fetchFileUsingCache
                               , HashedDir(..)
                               , Cache
                               , closestWritableDirectory
-                              , hashedDir
                               , bucketFolder
                               )
-import Darcs.Repository.Pristine ( readHashedPristineRoot )
-import Darcs.Repository.Paths ( pristineDirPath )
 
 packsDir, basicPack, patchesPack :: String
 packsDir     = "packs"
@@ -100,7 +104,7 @@ fetchAndUnpackPatches paths cache remote =
   -- So we download pack asynchonously and alway do a complete pass
   -- of individual patch files.
   withAsync (fetchAndUnpack patchesPack HashedInventoriesDir cache remote) $ \_ -> do
-  fetchFilesUsingCache cache HashedPatchesDir paths
+  mapM_ (fetchFileUsingCache cache HashedPatchesDir) paths
 
 fetchAndUnpackBasic :: Cache -> FilePath -> IO ()
 fetchAndUnpackBasic = fetchAndUnpack basicPack HashedPristineDir
@@ -118,7 +122,7 @@ unpackTar c dir (Tar.Next e es) = case Tar.entryContent e of
         if ex
           then debugMessage $ "TAR thread: exists " ++ p ++ "\nStopping TAR thread."
           else do
-            if p == darcsdir </> "hashed_inventory"
+            if p == hashedInventoryPath
               then writeFile' Nothing p bs
               else writeFile' (closestWritableDirectory c) p $ GZ.compress bs
             debugMessage $ "TAR thread: GET " ++ p
@@ -140,16 +144,6 @@ unpackTar c dir (Tar.Next e es) = case Tar.entryContent e of
         -- ignore cache if we cannot link
         writeFile' Nothing path content)
 
--- | Similar to @'mapM_' ('void' 'fetchFileUsingCache')@, exepts
--- it stops execution if file it's going to fetch already exists.
-fetchFilesUsingCache :: Cache -> HashedDir -> [FilePath] -> IO ()
-fetchFilesUsingCache cache dir = mapM_ go where
-  go path = do
-    ex <- doesFileExist $ darcsdir </> hashedDir dir </> path
-    if ex
-     then debugMessage $ "FILE thread: exists " ++ path
-     else void $ fetchFileUsingCache cache dir path
-
 -- | Create packs from the current recorded version of the repository.
 createPacks :: RepoPatch p => Repository 'RW p wU wR -> IO ()
 createPacks repo = flip finally (mapM_ removeFileIfExists
@@ -164,7 +158,7 @@ createPacks repo = flip finally (mapM_ removeFileIfExists
   writeFile ( darcsdir </> packsDir </> "pristine" ) $ getValidHash hash
   -- pack patchesTar
   ps <- mapFL hashedPatchFileName . progressFL "Packing patches" . patchSet2FL <$> readPatches repo
-  is <- map ((darcsdir </> "inventories") </>) <$> listInventories
+  is <- map (inventoriesDirPath </>) <$> listInventories
   writeFile (darcsdir </> "meta-filelist-inventories") . unlines $
     map takeFileName is
   -- Note: tinkering with zlib's compression parameters does not make
@@ -179,7 +173,7 @@ createPacks repo = flip finally (mapM_ removeFileIfExists
     map takeFileName pr
   BLC.writeFile (basicTar <.> "part") . GZ.compress . Tar.write =<< mapM fileEntry' (
     [ darcsdir </> "meta-filelist-pristine"
-    , darcsdir </> "hashed_inventory"
+    , hashedInventoryPath
     ] ++ progressList "Packing pristine" (reverse pr))
   renameFile (basicTar <.> "part") basicTar
  where
@@ -192,7 +186,7 @@ createPacks repo = flip finally (mapM_ removeFileIfExists
   dirContents dir = map (dir </>) <$> listDirectory dir
   hashedPatchFileName x = case extractHash x of
     Left _ -> fail "unexpected unhashed patch"
-    Right h -> darcsdir </> "patches" </> h
+    Right h -> patchesDirPath </> h
   sortByMTime xs = map snd . sort <$> mapM (\x -> (\t -> (t, x)) <$>
     getModificationTime x) xs
   removeFileIfExists x = do
