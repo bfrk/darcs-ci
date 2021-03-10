@@ -37,10 +37,15 @@ import Darcs.Patch.Witnesses.Ordered ( FL(..), (:>)(..) )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(..), mapSeal )
 
 import Darcs.Repository
-    ( withRepoLock, Repository, RepoJob(..), readPatches
-    , tentativelyAddPatch, finalizeRepositoryChanges,
+    ( AccessType(..)
+    , RepoJob(..)
+    , Repository
+    , finalizeRepositoryChanges
+    , readPatches
+    , tentativelyAddPatch
+    , withRepoLock
     )
-import Darcs.Repository.Flags ( UpdatePending(..), DryRun(NoDryRun) )
+import Darcs.Repository.Flags ( UpdatePending(..) )
 
 import Darcs.UI.Commands
     ( DarcsCommand(..), withStdOpts, nodefaults, amInHashedRepository, putFinished )
@@ -122,7 +127,7 @@ tag = DarcsCommand
 
 tagCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 tagCmd _ opts args =
-  withRepoLock NoDryRun (useCache ? opts) (umask ? opts) $ RepoJob $ \(repository :: Repository rt p wR wU wR) -> do
+  withRepoLock (useCache ? opts) (umask ? opts) $ RepoJob $ \(repository :: Repository 'RW p wR wU wR) -> do
     date <- getDate (hasPipe opts)
     the_author <- getAuthor (author ? opts) (hasPipe opts)
     patches <- readPatches repository
@@ -137,7 +142,7 @@ tagCmd _ opts args =
     let mypatch = infopatch myinfo NilFL
     _ <- tentativelyAddPatch repository (compress ? opts) (verbosity ? opts) YesUpdatePending
              $ n2pia $ adddeps mypatch deps
-    _ <- finalizeRepositoryChanges repository YesUpdatePending (compress ? opts)
+    _ <- finalizeRepositoryChanges repository YesUpdatePending (compress ? opts) (O.dryRun ? opts)
     putFinished opts $ "tagging '"++name++"'"
   where  get_name_log ::(PrimPatch prim) => FL prim wA wA -> [String] -> [String] -> IO (String, [String])
          get_name_log nilFL a tags

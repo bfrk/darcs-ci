@@ -29,6 +29,7 @@ import Darcs.UI.Commands.Util ( testTentativeAndMaybeExit )
 import Darcs.Repository.Flags ( UpdatePending(..) )
 import Darcs.Repository
     ( Repository
+    , AccessType(..)
     , tentativelyMergePatches
     , finalizeRepositoryChanges
     , applyToWorking
@@ -55,19 +56,19 @@ class PatchApplier pa where
 
     repoJob
         :: pa
-        -> (forall rt p wR wU
+        -> (forall p wR wU
                . (RepoPatch p, ApplyState p ~ Tree)
-              => (PatchProxy p -> Repository rt p wR wU wR -> IO ()))
-        -> RepoJob ()
+              => (PatchProxy p -> Repository 'RW p wR wU wR -> IO ()))
+        -> RepoJob 'RW ()
 
     applyPatches
-        :: forall rt p wR wU wZ
+        :: forall p wR wU wZ
          . (RepoPatch p, ApplyState p ~ Tree)
         => pa
         -> PatchProxy p
         -> String
         -> [DarcsFlag]
-        -> Repository rt p wR wU wR
+        -> Repository 'RW p wR wU wR
         -> Fork (PatchSet p)
                 (FL (PatchInfoAnd p))
                 (FL (PatchInfoAnd p)) Origin wR wZ
@@ -82,7 +83,7 @@ instance PatchApplier StandardPatchApplier where
 standardApplyPatches :: (RepoPatch p, ApplyState p ~ Tree)
                      => String
                      -> [DarcsFlag]
-                     -> Repository rt p wR wU wR
+                     -> Repository 'RW p wR wU wR
                      -> Fork (PatchSet p)
                              (FL (PatchInfoAnd p))
                              (FL (PatchInfoAnd p)) Origin wR wZ
@@ -95,7 +96,7 @@ standardApplyPatches cmdName opts repository patches@(Fork _ _ to_be_applied) = 
 mergeAndTest :: (RepoPatch p, ApplyState p ~ Tree)
              => String
              -> [DarcsFlag]
-             -> Repository rt p wR wU wR
+             -> Repository 'RW p wR wU wR
              -> Fork (PatchSet p)
                      (FL (PatchInfoAnd p))
                      (FL (PatchInfoAnd p)) Origin wR wZ
@@ -132,7 +133,7 @@ applyPatchesStart cmdName opts to_be_applied = do
 applyPatchesFinish :: (RepoPatch p, ApplyState p ~ Tree)
                    => String
                    -> [DarcsFlag]
-                   -> Repository rt p wR wU wR
+                   -> Repository 'RW p wR wU wR
                    -> FL (PrimOf p) wU wY
                    -> Bool
                    -> IO ()
@@ -140,6 +141,7 @@ applyPatchesFinish cmdName opts _repository pw any_applied = do
     withSignalsBlocked $ do
         _repository <-
             finalizeRepositoryChanges _repository YesUpdatePending (compress ? opts)
+                (O.dryRun ? opts)
         void $ applyToWorking _repository (verbosity ? opts) pw
         when (setScriptsExecutable ? opts == O.YesSetScriptsExecutable) $
             setScriptsExecutablePatches pw

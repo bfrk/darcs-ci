@@ -55,12 +55,14 @@ import Darcs.Repository.Paths
     , oldPristineDirPath
     )
 import Darcs.Repository.Prefs ( getCaches )
-import Darcs.Repository.InternalTypes( Repository
-                                     , PristineType(..)
-                                     , mkRepo
-                                     , repoFormat
-                                     , repoPristineType
-                                     )
+import Darcs.Repository.InternalTypes
+    ( AccessType(..)
+    , PristineType(..)
+    , Repository
+    , mkRepo
+    , repoFormat
+    , repoPristineType
+    )
 import Darcs.Util.Global ( darcsdir )
 
 import System.Mem( performGC )
@@ -72,7 +74,7 @@ data IdentifyRepo rt p wR wU wT
     | GoodRepository (Repository rt p wR wU wT)
 
 -- | Tries to identify the repository in a given directory
-maybeIdentifyRepository :: UseCache -> String -> IO (IdentifyRepo rt p wR wU wT)
+maybeIdentifyRepository :: UseCache -> String -> IO (IdentifyRepo 'RO p wR wU wT)
 maybeIdentifyRepository useCache "." =
     do darcs <- doesDirectoryExist darcsdir
        if not darcs
@@ -111,7 +113,7 @@ identifyPristine =
 
 -- | identifyRepository identifies the repo at 'url'. Warning:
 -- you have to know what kind of patches are found in that repo.
-identifyRepository :: UseCache -> String -> IO (Repository rt p wR wU wT)
+identifyRepository :: UseCache -> String -> IO (Repository 'RO p wR wU wT)
 identifyRepository useCache url =
     do er <- maybeIdentifyRepository useCache url
        case er of
@@ -127,7 +129,7 @@ identifyRepositoryFor :: ReadingOrWriting
                       -> Repository rt p wR wU wT
                       -> UseCache
                       -> String
-                      -> IO (Repository rt p vR vU vT)
+                      -> IO (Repository 'RO p vR vU vT)
 identifyRepositoryFor what us useCache them_loc = do
   them <- identifyRepository useCache them_loc
   case

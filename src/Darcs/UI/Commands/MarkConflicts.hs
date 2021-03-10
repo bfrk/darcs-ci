@@ -125,7 +125,7 @@ markconflictsCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> I
 markconflictsCmd fps opts args = do
   paths <- maybeToOnly <$> pathSetFromArgs fps args
   debugDocLn $ "::: paths =" <+>  (text . show) paths
-  withRepoLock (dryRun ? opts) (useCache ? opts) (umask ? opts) $
+  withRepoLock (useCache ? opts) (umask ? opts) $
     RepoJob $ \_repository -> do
 
 {-

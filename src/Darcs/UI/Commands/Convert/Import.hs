@@ -228,7 +228,7 @@ fastImport _ opts [outrepo] =
     -- TODO implement --dry-run, which would be read-only?
     _repo <- revertRepositoryChanges _repo (updatePending opts)
     marks <- fastImport' _repo emptyMarks
-    _ <- finalizeRepositoryChanges _repo (updatePending opts) GzipCompression
+    _ <- finalizeRepositoryChanges _repo (updatePending opts) GzipCompression (O.dryRun ? opts)
     cleanRepository _repo
     createPristineDirectoryTree _repo "." (withWorkingDir ? opts)
     return marks

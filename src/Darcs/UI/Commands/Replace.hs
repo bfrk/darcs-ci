@@ -34,7 +34,7 @@ import Darcs.Util.Tree( readBlob, modifyTree, findFile, TreeItem(..), Tree
 import Darcs.Util.Path( AbsolutePath )
 import Darcs.UI.Flags
     ( DarcsFlag, diffingOpts
-    , verbosity, useCache, dryRun, umask, diffAlgorithm, pathsFromArgs )
+    , verbosity, useCache, umask, diffAlgorithm, pathsFromArgs )
 import Darcs.UI.Options ( (^), (?) )
 import qualified Darcs.UI.Options.All as O
 import Darcs.UI.Commands ( DarcsCommand(..), withStdOpts, nodefaults, amInHashedRepository )
@@ -150,7 +150,7 @@ replaceArgs fps flags args =
 
 replaceCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 replaceCmd fps opts (old : new : args@(_ : _)) =
-  withRepoLock  (dryRun ? opts) (useCache ? opts) (umask ? opts) $ RepoJob $
+  withRepoLock (useCache ? opts) (umask ? opts) $ RepoJob $
     \repository -> do
         paths <- nubSort <$> pathsFromArgs fps args
         when (null paths) $ fail "No valid repository paths were given."

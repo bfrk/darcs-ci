@@ -70,6 +70,7 @@ import Darcs.Util.External
     )
 import Darcs.Repository.Flags
     ( Compression
+    , DryRun(..)
     , RemoteDarcs
     , UpdatePending(..)
     , Verbosity(..)
@@ -155,12 +156,15 @@ import Darcs.Util.Cache
 import Darcs.Repository.Inventory
 import Darcs.Repository.InternalTypes
     ( Repository
+    , AccessType(..)
     , repoCache
     , repoFormat
     , repoLocation
     , withRepoDir
     , unsafeCoerceR
     , unsafeCoerceT
+    , unsafeStartTransaction
+    , unsafeEndTransaction
     )
 import qualified Darcs.Repository.Old as Old ( readOldRepo, oldRepoFailMsg )
 import Darcs.Patch.Witnesses.Ordered
@@ -411,11 +415,12 @@ writeAndReadPatch c compr p = do
     readp h i = do Sealed x <- createValidHashed h (parse i)
                    return . patchInfoAndPatch i $ unsafeCoerceP x
 
--- | Hash validation wrapper around 'createHashed'.
+-- | Wrapper around 'createHashed' to adapt the 'String'/'PatchHash' mismatch
+-- without re-validating an already validated PatchHash.
 createValidHashed :: PatchHash
                   -> (PatchHash -> IO (Sealed (a wX)))
                   -> IO (Sealed (Darcs.Patch.PatchInfoAnd.Hopefully a wX))
-createValidHashed h f = createHashed (getValidHash h) (f . mkValidHash)
+createValidHashed = withValidHash createHashed
 
 -- | Write a 'PatchSet' to the tentative inventory.
 writeTentativeInventory :: RepoPatch p => Cache -> Compression
@@ -586,20 +591,22 @@ removeFromTentativeInventory repo compr to_remove = do
 -- thereby committing the tentative changes that were made so far.
 -- This includes inventories, pending, rebase, and the index.
 finalizeRepositoryChanges :: (RepoPatch p, ApplyState p ~ Tree)
-                          => Repository rt p wR wU wT
+                          => Repository 'RW p wR wU wT
                           -> UpdatePending
                           -> Compression
-                          -> IO (Repository rt p wT wU wT)
-finalizeRepositoryChanges r updatePending compr
-    | formatHas HashedInventory (repoFormat r) =
-        withRepoDir r $ do
+                          -> DryRun
+                          -> IO (Repository 'RO p wT wU wT)
+finalizeRepositoryChanges r updatePending compr dryrun
+    | formatHas HashedInventory (repoFormat r) = do
+        let r' = unsafeCoerceR r
+        when (dryrun == NoDryRun) $
+          withRepoDir r $ do
             debugMessage "Finalizing changes..."
             withSignalsBlocked $ do
                 finalizeTentativeRebase
                 finalizeTentativeChanges r compr
                 recordedState <- readPristine r
                 finalizePending r updatePending recordedState
-            let r' = unsafeCoerceR r
             debugMessage "Done finalizing changes..."
             ps <- readPatches r'
             pi_exists <- doesPatchIndexExist (repoLocation r')
@@ -608,7 +615,7 @@ finalizeRepositoryChanges r updatePending compr
               `catchIOError` \e ->
                 hPutStrLn stderr $ "Cannot create or update patch index: "++ show e
             updateIndex r'
-            return r'
+        return $ unsafeEndTransaction r'
     | otherwise = fail Old.oldRepoFailMsg
 
 -- TODO: rename this and document the transaction protocol (revert/finalize)
@@ -617,9 +624,9 @@ finalizeRepositoryChanges r updatePending compr
 -- changes, revertRepositoryChanges also re-initialises the tentative state.
 -- It's therefore used before makign any changes to the repo.
 revertRepositoryChanges :: RepoPatch p
-                        => Repository rt p wR wU wT
+                        => Repository 'RO p wR wU wT
                         -> UpdatePending
-                        -> IO (Repository rt p wR wU wR)
+                        -> IO (Repository 'RW p wR wU wR)
 revertRepositoryChanges r upe
   | formatHas HashedInventory (repoFormat r) =
       withRepoDir r $ do
@@ -629,7 +636,7 @@ revertRepositoryChanges r upe
         revertTentativeChanges
         let r' = unsafeCoerceT r
         revertTentativeRebase r'
-        return r'
+        return $ unsafeStartTransaction r'
   | otherwise = fail Old.oldRepoFailMsg
 
 checkIndexIsWritable :: IO ()
@@ -688,9 +695,9 @@ repoXor repo = do
   return $ foldl' sha1Xor sha1zero hashes
 
 -- | Upgrade a possible old-style rebase in progress to the new style.
-upgradeOldStyleRebase :: forall rt p wR wU wT.
+upgradeOldStyleRebase :: forall p wR wU wT.
                          (RepoPatch p, ApplyState p ~ Tree)
-                      => Repository rt p wR wU wT -> Compression -> IO ()
+                      => Repository 'RW p wR wU wT -> Compression -> IO ()
 upgradeOldStyleRebase repo compr = do
   PatchSet ts _ <- readTentativePatches repo
   Inventory _ invEntries <- readInventoryPrivate tentativeHashedInventoryPath
@@ -712,7 +719,7 @@ upgradeOldStyleRebase repo compr = do
             $ removeFromFormat RebaseInProgress
             $ repoFormat repo)
             formatPath
-          _ <- finalizeRepositoryChanges repo NoUpdatePending compr
+          _ <- finalizeRepositoryChanges repo NoUpdatePending compr NoDryRun
           return ()
         _ -> do
           ePutDocLn

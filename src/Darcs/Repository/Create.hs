@@ -56,8 +56,9 @@ import Darcs.Repository.Paths
     )
 import Darcs.Repository.Identify ( seekRepo )
 import Darcs.Repository.InternalTypes
-    ( Repository
+    ( AccessType(..)
     , PristineType(..)
+    , Repository
     , mkRepo
     )
 import Darcs.Repository.PatchIndex ( createOrUpdatePatchIndexDisk )
@@ -103,7 +104,7 @@ createRepositoryFiles patchfmt withWorkingDir = do
 
 data EmptyRepository where
   EmptyRepository :: (RepoPatch p, ApplyState p ~ Tree)
-                  => Repository rt p Origin Origin Origin
+                  => Repository 'RO p Origin Origin Origin
                   -> EmptyRepository
 
 createRepository :: PatchFormat -> WithWorkingDir -> WithPatchIndex -> UseCache
@@ -124,26 +125,26 @@ mkRepoV1
   :: AbsoluteOrRemotePath
   -> RepoFormat
   -> Cache
-  -> Repository rt (RepoPatchV1 V1.Prim) Origin Origin Origin
+  -> Repository 'RO (RepoPatchV1 V1.Prim) Origin Origin Origin
 mkRepoV1 rdir repofmt cache = mkRepo rdir repofmt HashedPristine cache
 
 mkRepoV2
   :: AbsoluteOrRemotePath
   -> RepoFormat
   -> Cache
-  -> Repository rt (RepoPatchV2 V2.Prim) Origin Origin Origin
+  -> Repository 'RO (RepoPatchV2 V2.Prim) Origin Origin Origin
 mkRepoV2 rdir repofmt cache = mkRepo rdir repofmt HashedPristine cache
 
 mkRepoV3
   :: AbsoluteOrRemotePath
   -> RepoFormat
   -> Cache
-  -> Repository rt (RepoPatchV3 V2.Prim) Origin Origin Origin
+  -> Repository 'RO (RepoPatchV3 V2.Prim) Origin Origin Origin
 mkRepoV3 rdir repofmt cache = mkRepo rdir repofmt HashedPristine cache
 
 createRepositoryV1
   :: WithWorkingDir -> WithPatchIndex -> UseCache
-  -> IO (Repository rt (RepoPatchV1 V1.Prim) Origin Origin Origin)
+  -> IO (Repository 'RO (RepoPatchV1 V1.Prim) Origin Origin Origin)
 createRepositoryV1 withWorkingDir withPatchIndex useCache = do
   rfmt <- createRepositoryFiles PatchFormat1 withWorkingDir
   rdir <- ioAbsoluteOrRemote here
@@ -155,7 +156,7 @@ createRepositoryV1 withWorkingDir withPatchIndex useCache = do
 
 createRepositoryV2
   :: WithWorkingDir -> WithPatchIndex -> UseCache
-  -> IO (Repository rt (RepoPatchV2 V2.Prim) Origin Origin Origin)
+  -> IO (Repository 'RO (RepoPatchV2 V2.Prim) Origin Origin Origin)
 createRepositoryV2 withWorkingDir withPatchIndex useCache = do
   rfmt <- createRepositoryFiles PatchFormat2 withWorkingDir
   rdir <- ioAbsoluteOrRemote here
@@ -166,7 +167,7 @@ createRepositoryV2 withWorkingDir withPatchIndex useCache = do
   return repo
 
 maybeCreatePatchIndex :: (RepoPatch p, ApplyState p ~ Tree)
-                      => WithPatchIndex -> Repository rt p Origin wU Origin -> IO ()
+                      => WithPatchIndex -> Repository 'RO p Origin wU Origin -> IO ()
 maybeCreatePatchIndex NoPatchIndex _ = return ()
 maybeCreatePatchIndex YesPatchIndex repo =
   createOrUpdatePatchIndexDisk repo emptyPatchSet

@@ -30,7 +30,7 @@ import Darcs.UI.Commands
 import Darcs.UI.Completion ( knownFileArgs )
 import Darcs.UI.Flags
     ( DarcsFlag, diffingOpts
-    , useCache, dryRun, umask, diffAlgorithm, quiet, pathsFromArgs )
+    , useCache, umask, diffAlgorithm, quiet, pathsFromArgs )
 import Darcs.UI.Options ( (^), parseFlags, (?) )
 import qualified Darcs.UI.Options.All as O
 
@@ -95,7 +95,7 @@ removeCmd fps opts relargs = do
     paths <- pathsFromArgs fps relargs
     when (any isRoot paths) $
         fail "Cannot remove a repository's root directory!"
-    withRepoLock (dryRun ? opts) (useCache ? opts) (umask ? opts) $
+    withRepoLock (useCache ? opts) (umask ? opts) $
       RepoJob $ \repository -> do
         recorded_and_pending <- readPristineAndPending repository
         let exploded_paths =

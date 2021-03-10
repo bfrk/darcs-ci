@@ -35,7 +35,7 @@ import Darcs.UI.Commands
 import Darcs.UI.Completion ( fileArgs )
 import Darcs.UI.Flags
     ( DarcsFlag
-    , changesReverse, verbosity, useCache, dryRun
+    , changesReverse, verbosity, useCache
     , reorder, umask
     , fixUrl
     , withContext
@@ -45,6 +45,7 @@ import qualified Darcs.UI.Options.All as O
 import Darcs.Util.Path ( toFilePath, AbsolutePath )
 import Darcs.Repository
     ( Repository
+    , AccessType(..)
     , SealedPatchSet
     , withRepoLock
     , readPatches
@@ -180,7 +181,7 @@ applyCmd :: PatchApplier pa
          -> [String]
          -> IO ()
 applyCmd patchApplier (_,orig) opts args =
-  withRepoLock (dryRun ? opts) (useCache ? opts) (umask ? opts) $
+  withRepoLock (useCache ? opts) (umask ? opts) $
   repoJob patchApplier $ \patchProxy repository -> do
     bundle <- readBundle args
     applyCmdCommon patchApplier patchProxy opts bundle repository
@@ -199,13 +200,13 @@ applyCmd patchApplier (_,orig) opts args =
     readBundle _ = error "impossible case"
 
 applyCmdCommon
-    :: forall rt pa p wR wU
+    :: forall pa p wR wU
      . (PatchApplier pa, RepoPatch p, ApplyState p ~ Tree)
     => pa
     -> PatchProxy p
     -> [DarcsFlag]
     -> B.ByteString
-    -> Repository rt p wR wU wR
+    -> Repository 'RW p wR wU wR
     -> IO ()
 applyCmdCommon patchApplier patchProxy opts bundle repository = do
   us <- readPatches repository

@@ -156,7 +156,7 @@ addCmd fps opts args
 
 addFiles :: [DarcsFlag] -> [AnchoredPath] -> IO ()
 addFiles opts paths =
-  withRepoLock (dryRun ? opts) (useCache ? opts) (umask ? opts) $
+  withRepoLock (useCache ? opts) (umask ? opts) $
   RepoJob $ \repository -> do
     -- TODO do not expand here, and use findM/findIO or such later
     -- (needs adding to hashed-storage first though)

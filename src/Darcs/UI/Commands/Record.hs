@@ -42,13 +42,14 @@ import Darcs.Patch.Witnesses.Ordered ( (:>)(..), FL(..), nullFL, (+>+) )
 import Darcs.Repository
     ( RepoJob(..)
     , Repository
+    , AccessType(..)
     , finalizeRepositoryChanges
     , readPendingAndWorking
     , readPristine
     , tentativelyAddPatch
     , withRepoLock
     )
-import Darcs.Repository.Flags ( DryRun(NoDryRun), UpdatePending(..) )
+import Darcs.Repository.Flags ( UpdatePending(..) )
 import Darcs.Repository.Pending ( tentativelyRemoveFromPW )
 import Darcs.Repository.Pristine ( readTentativePristine )
 import Darcs.UI.Commands
@@ -221,7 +222,7 @@ reportNonExisting lfa (paths_only_in_working, _) = do
 recordCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 recordCmd fps cfg args = do
     checkNameIsNotOption (O.patchname ? cfg) (isInteractive cfg)
-    withRepoLock NoDryRun (O.useCache ? cfg) (O.umask ? cfg) $ RepoJob $ \(repository :: Repository rt p wR wU wR) -> do
+    withRepoLock (O.useCache ? cfg) (O.umask ? cfg) $ RepoJob $ \(repository :: Repository 'RW p wR wU wR) -> do
       existing_files <- do
         files <- pathSetFromArgs fps args
         files' <-
@@ -258,7 +259,7 @@ checkNameIsNotOption (Just name) True   =
         unless confirmed $ putStrLn "Okay, aborting the record." >> exitFailure
 
 doRecord :: (RepoPatch p, ApplyState p ~ Tree)
-         => Repository rt p wR wU wR -> Config -> Maybe [AnchoredPath]
+         => Repository 'RW p wR wU wR -> Config -> Maybe [AnchoredPath]
          -> (FL (PrimOf p) :> FL (PrimOf p)) wR wU -> IO ()
 doRecord repository cfg files pw@(pending :> working) = do
     date <- getDate (O.pipe ? cfg)
@@ -290,7 +291,7 @@ doRecord repository cfg files pw@(pending :> working) = do
                           doActualRecord repository cfg name date my_author my_log logf deps chs pw
 
 doActualRecord :: (RepoPatch p, ApplyState p ~ Tree)
-               => Repository rt p wR wU wR
+               => Repository 'RW p wR wU wR
                -> Config
                -> String -> String -> String
                -> [String] -> Maybe String
@@ -311,7 +312,7 @@ doActualRecord _repository cfg name date my_author my_log logf deps chs
       "record it" (Just failuremessage)
     tentativelyRemoveFromPW _repository chs pending working
     _repository <-
-      finalizeRepositoryChanges _repository YesUpdatePending (O.compress ? cfg)
+      finalizeRepositoryChanges _repository YesUpdatePending (O.compress ? cfg) (O.dryRun ? cfg)
       `clarifyErrors` failuremessage
     debugMessage "Syncing timestamps..."
     removeLogFile logf

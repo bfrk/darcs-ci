@@ -24,7 +24,7 @@ import Control.Monad ( when )
 import Data.Maybe ( fromMaybe )
 
 import Darcs.UI.Commands ( DarcsCommand(..), withStdOpts, nodefaults, amInHashedRepository )
-import Darcs.UI.Flags ( DarcsFlag, diffingOpts, useCache, dryRun, umask)
+import Darcs.UI.Flags ( DarcsFlag, diffingOpts, useCache, umask)
 import Darcs.UI.Options ( (?) )
 import qualified Darcs.UI.Options.All as O
 import Darcs.Repository ( addToPending, withRepoLock, RepoJob(..) )
@@ -96,7 +96,7 @@ setpref = DarcsCommand
 
 setprefCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 setprefCmd _ opts [pref,val] =
- withRepoLock (dryRun ? opts) (useCache ? opts) (umask ? opts) $ RepoJob $ \repository -> do
+ withRepoLock (useCache ? opts) (umask ? opts) $ RepoJob $ \repository -> do
   when (' ' `elem` pref) $ do
     putStrLn $ "'"++pref++
                "' is not a valid preference name: no spaces allowed!"

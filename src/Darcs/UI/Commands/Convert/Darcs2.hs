@@ -55,6 +55,7 @@ import Darcs.Patch.Witnesses.Sealed ( FlippedSeal(..), mapSeal )
 import Darcs.Repository
     ( RepoJob(..)
     , Repository
+    , AccessType(..)
     , applyToWorking
     , createRepositoryV2
     , finalizeRepositoryChanges
@@ -230,15 +231,15 @@ toDarcs2 _ opts' args = do
     applySome opts (W3 _repo) xs = do
       _repo <- unW2 <$> foldFL_M (applyOne opts) (W2 _repo) xs
       -- commit after applying a bunch of patches
-      _repo <- finalizeRepositoryChanges _repo (updatePending opts) GzipCompression
+      _repo <- finalizeRepositoryChanges _repo (updatePending opts) GzipCompression (O.dryRun ? opts)
       _repo <- revertRepositoryChanges _repo (updatePending opts)
       return (W3 _repo)
 
     applyAll :: (RepoPatch p, ApplyState p ~ Tree)
              => [DarcsFlag]
-             -> Repository rt p wX wX wX
+             -> Repository 'RW p wX wX wX
              -> FL (FL (PatchInfoAnd p)) wX wY
-             -> IO (Repository rt p wY wY wY)
+             -> IO (Repository 'RW p wY wY wY)
     applyAll opts r xss = unW3 <$> foldFL_M (applySome opts) (W3 r) xss
 
     updatePristine :: [DarcsFlag] -> UpdatePristine

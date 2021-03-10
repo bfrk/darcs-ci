@@ -79,8 +79,12 @@ import Darcs.Repository.Flags
     , UseIndex(..)
     , DiffOpts(..)
     )
-
-import Darcs.Repository.InternalTypes ( Repository, repoFormat, repoLocation )
+import Darcs.Repository.InternalTypes
+    ( AccessType(..)
+    , Repository
+    , repoFormat
+    , repoLocation
+    )
 import Darcs.Repository.Format(formatHas, RepoProperty(NoWorkingDir))
 import qualified Darcs.Repository.Pending as Pending
 import Darcs.Repository.Prefs ( filetypeFunction, isBoring )
@@ -273,18 +277,25 @@ readPendingAndMovesAndUnrecorded repo useidx scan lfm mbpaths = do
   debugMessage "readPendingAndMovesAndUnrecorded: start"
   (pending_tree, Sealed pending) <- readPending repo
   moves <- getMoves lfm repo mbpaths
-  let pending' = pending +>+ moves
-  relevant <- maybeRestrictSubpaths pending' repo mbpaths
-  pending_tree' <-
+  -- we want to include any user specified paths before and after pending
+  -- and detected moves
+  relevant <- maybeRestrictSubpaths (pending +>+ moves) repo mbpaths
+  pending_tree_with_moves <-
     applyTreeFilter relevant <$> applyToTree moves pending_tree
-  let useidx' = if nullFL moves then useidx else IgnoreIndex
+  debugMessage "readPendingAndMovesAndUnrecorded: before readIndexOrPlainTree"
+  -- the moves are detected i.e. they are already applied in the working tree;
+  -- also note that we have to use the amended pending tree to restrict the
+  -- working tree in case we don't use the index (here and below)
+  index <- readIndexOrPlainTree repo useidx relevant pending_tree_with_moves
   debugMessage "readPendingAndMovesAndUnrecorded: before filteredWorking"
-  index <-
-    applyToTree moves =<< readIndexOrPlainTree repo useidx relevant pending_tree
-  debugMessage "readPendingAndMovesAndUnrecorded: after filteredWorking"
-  working_tree <- filteredWorking repo useidx' scan relevant index pending_tree'
+  -- TODO this conditional looks wrong; so if we do have detected moves,
+  -- then we cannot use the index to read the working state? Why not?
+  let useidx' = if nullFL moves then useidx else IgnoreIndex
+  working_tree <-
+    filteredWorking repo useidx' scan relevant index pending_tree_with_moves
   debugMessage "readPendingAndMovesAndUnrecorded: done"
-  return (pending_tree', working_tree, unsafeCoercePEnd (pending :> moves))
+  return
+    (pending_tree_with_moves, working_tree, unsafeCoercePEnd (pending :> moves))
 
 -- | @filteredWorking useidx scan relevant from_index pending_tree@ reads the
 -- working tree and filters it according to options and @relevant@ file paths.
@@ -694,7 +705,7 @@ getReplaces YesLookForReplaces diffalg _repo pending working = do
 -- TODO: add witnesses for pending so we can make the types precise: currently
 -- the passed patch can be applied in any context, not just after pending.
 addPendingDiffToPending :: (RepoPatch p, ApplyState p ~ Tree)
-                        => Repository rt p wR wU wR
+                        => Repository 'RW p wR wU wR
                         -> FreeLeft (FL (PrimOf p)) -> IO ()
 addPendingDiffToPending repo newP = do
     (_, Sealed toPend) <- readPending repo
@@ -710,7 +721,7 @@ addPendingDiffToPending repo newP = do
 -- changes between pending and working as is possible, and including anything
 -- that doesn't commute, and the patch itself in the new pending patch.
 addToPending :: (RepoPatch p, ApplyState p ~ Tree)
-             => Repository rt p wR wU wR
+             => Repository 'RW p wR wU wR
              -> DiffOpts
              -> FL (PrimOf p) wU wY -> IO ()
 addToPending repo dopts p = do

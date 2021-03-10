@@ -52,6 +52,7 @@ import Darcs.UI.Options ( parseFlags, (?), (^) )
 import qualified Darcs.UI.Options.All as O
 import Darcs.Repository
     ( Repository
+    , AccessType(..)
     , identifyRepositoryFor
     , ReadingOrWriting(..)
     , withRepoLock
@@ -231,7 +232,7 @@ pullCmd
 pullCmd patchApplier (_,o) opts repos =
   do
     pullingFrom <- mapM (fixUrl o) repos
-    withRepoLock (dryRun ? opts) (useCache ? opts) (umask ? opts) $
+    withRepoLock (useCache ? opts) (umask ? opts) $
      repoJob patchApplier $ \patchProxy initRepo -> do
       let repository = modifyCache (addReposToCache pullingFrom) initRepo
       Sealed fork <- fetchPatches o opts repos "pull" repository
@@ -244,12 +245,12 @@ pullCmd patchApplier (_,o) opts repos =
 
 fetchCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 fetchCmd (_,o) opts repos =
-    withRepoLock (dryRun ? opts) (useCache ? opts) (umask ? opts) $ RepoJob $
+    withRepoLock (useCache ? opts) (umask ? opts) $ RepoJob $
         fetchPatches o opts repos "fetch" >=> makeBundle opts
 
 fetchPatches :: (RepoPatch p, ApplyState p ~ Tree)
              => AbsolutePath -> [DarcsFlag] -> [String] -> String
-             -> Repository rt p wR wU wR
+             -> Repository 'RW p wR wU wR
              -> IO (Sealed (Fork (PatchSet p)
                                  (FL (PatchInfoAnd p))
                                  (FL (PatchInfoAnd p)) Origin wR))

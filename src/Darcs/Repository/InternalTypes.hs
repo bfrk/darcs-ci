@@ -13,19 +13,26 @@
 -- You should have received a copy of the GNU General Public License
 -- along with this program; if not, write to the Free Software Foundation,
 -- Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
-module Darcs.Repository.InternalTypes ( Repository, PristineType(..)
-                                      , repoCache, modifyCache
-                                      , repoFormat
-                                      , repoLocation
-                                      , withRepoDir
-                                      , repoPristineType
-                                      , unsafeCoerceRepoType
-                                      , unsafeCoercePatchType
-                                      , unsafeCoerceR
-                                      , unsafeCoerceU
-                                      , unsafeCoerceT
-                                      , mkRepo
-                                      ) where
+module Darcs.Repository.InternalTypes
+    ( Repository
+    , PristineType(..)
+    , AccessType(..)
+    , repoAccessType
+    , repoCache
+    , modifyCache
+    , repoFormat
+    , repoLocation
+    , withRepoDir
+    , repoPristineType
+    , unsafeCoerceRepoType
+    , unsafeCoercePatchType
+    , unsafeCoerceR
+    , unsafeCoerceU
+    , unsafeCoerceT
+    , unsafeEndTransaction
+    , unsafeStartTransaction
+    , mkRepo
+    ) where
 
 import Darcs.Prelude
 
@@ -41,19 +48,25 @@ data PristineType
   | HashedPristine
     deriving ( Show, Eq )
 
+data AccessType = RO | RW deriving (Eq)
+
+data SAccessType (rt :: AccessType) where
+  SRO :: SAccessType 'RO
+  SRW :: SAccessType 'RW
+
 -- |A @Repository@ is a token representing the state of a repository on disk.
 -- It is parameterized by the patch type in the repository, and witnesses for
 -- the recorded state of the repository (i.e. what darcs get would retrieve),
 -- the unrecorded state (what's in the working tree now),
 -- and the tentative state, which represents work in progress that will
 -- eventually become the new recorded state unless something goes wrong.
-data Repository rt (p :: * -> * -> *) wRecordedstate wUnrecordedstate wTentativestate =
-  Repo !String !RepoFormat !PristineType Cache deriving ( Show )
+data Repository (rt :: AccessType) (p :: * -> * -> *) wRecordedstate wUnrecordedstate wTentativestate =
+  Repo !String !RepoFormat !PristineType Cache (SAccessType rt)
 
 type role Repository nominal nominal nominal nominal nominal
 
 repoLocation :: Repository rt p wR wU wT -> String
-repoLocation (Repo loc _ _ _) = loc
+repoLocation (Repo loc _ _ _ _) = loc
 
 -- | Perform an action with the current working directory set to the
 -- 'repoLocation'.
@@ -61,16 +74,20 @@ withRepoDir :: Repository rt p wR wU wT -> IO a -> IO a
 withRepoDir repo = withCurrentDirectory (repoLocation repo)
 
 repoFormat :: Repository rt p wR wU wT -> RepoFormat
-repoFormat (Repo _ fmt _ _) = fmt
+repoFormat (Repo _ fmt _ _ _) = fmt
 
 repoPristineType :: Repository rt p wR wU wT -> PristineType
-repoPristineType (Repo _ _ pr _) = pr
+repoPristineType (Repo _ _ pr _ _) = pr
 
 repoCache :: Repository rt p wR wU wT -> Cache
-repoCache (Repo _ _ _ c) = c
+repoCache (Repo _ _ _ c _) = c
 
 modifyCache :: (Cache -> Cache) -> Repository rt p wR wU wT -> Repository rt p wR wU wT
-modifyCache g (Repo l f p c) = Repo l f p (g c)
+modifyCache g (Repo l f p c a) = Repo l f p (g c) a
+
+repoAccessType :: Repository rt p wR wU wT -> AccessType
+repoAccessType (Repo _ _ _ _ SRO) = RO
+repoAccessType (Repo _ _ _ _ SRW) = RW
 
 unsafeCoerceRepoType :: Repository rt p wR wU wT -> Repository rt' p wR wU wT
 unsafeCoerceRepoType = unsafeCoerce
@@ -87,5 +104,11 @@ unsafeCoerceU = unsafeCoerce
 unsafeCoerceT :: Repository rt p wR wU wT -> Repository rt p wR wU wT'
 unsafeCoerceT = unsafeCoerce
 
-mkRepo :: AbsoluteOrRemotePath -> RepoFormat -> PristineType -> Cache -> Repository rt p wR wU wT
-mkRepo p = Repo (toPath p)
+unsafeStartTransaction :: Repository 'RO p wR wU wT -> Repository 'RW p wR wU wT
+unsafeStartTransaction (Repo l f p c SRO) = Repo l f p c SRW
+
+unsafeEndTransaction :: Repository 'RW p wR wU wT -> Repository 'RO p wR wU wT
+unsafeEndTransaction (Repo l f p c SRW) = Repo l f p c SRO
+
+mkRepo :: AbsoluteOrRemotePath -> RepoFormat -> PristineType -> Cache -> Repository 'RO p wR wU wT
+mkRepo p f pr c = Repo (toPath p) f pr c SRO

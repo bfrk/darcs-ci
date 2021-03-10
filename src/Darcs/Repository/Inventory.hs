@@ -6,6 +6,7 @@ module Darcs.Repository.Inventory
     , InventoryHash
     , PatchHash
     , PristineHash
+    , withValidHash
     , inventoryPatchNames
     , parseInventory
     , parseHeadInventory -- not used
@@ -77,6 +78,11 @@ instance ValidHash PristineHash where
   mkValidHash s
     | okayHash s = PristineHash s
     | otherwise = error "Bad pristine hash!"
+
+-- | Safely work under an already validated PatchHash.
+withValidHash :: (String -> (String -> a) -> b)
+              -> PatchHash -> (PatchHash -> a) -> b
+withValidHash f (PatchHash s) g = f s (g . PatchHash)
 
 -- * Inventories
 

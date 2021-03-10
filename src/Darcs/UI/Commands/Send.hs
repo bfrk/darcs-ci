@@ -66,6 +66,7 @@ import qualified Darcs.UI.Options.All as O
 import Darcs.Patch.PatchInfoAnd ( PatchInfoAnd, hopefully, patchDesc )
 import Darcs.Repository
     ( Repository
+    , AccessType(..)
     , repoLocation
     , PatchSet
     , identifyRepositoryFor
@@ -189,7 +190,7 @@ sendCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 sendCmd fps opts [""] = sendCmd fps opts []
 sendCmd (_,o) opts [unfixedrepodir] =
  withRepository (useCache ? opts) $ RepoJob $
-  \(repository :: Repository rt p wR wU wR) -> do
+  \(repository :: Repository 'RO p wR wU wR) -> do
   when (O.mail ? opts && dryRun ? opts == O.NoDryRun) $ do
     -- If --mail is used and the user has not provided a --sendmail-command
     -- and we can detect that the system has no default way to send emails, 

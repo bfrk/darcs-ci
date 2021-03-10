@@ -42,6 +42,7 @@ import Darcs.Repository.Working
     , setScriptsExecutablePatches )
 import Darcs.Repository.InternalTypes
     ( Repository
+    , AccessType(..)
     , repoLocation
     , repoFormat
     , repoCache
@@ -239,7 +240,7 @@ cloneRepository repourl mysimplename v useCache cloneKind um rdarcs sse remoteRe
             _toRepo <-
               tentativelyRemovePatches _toRepo GzipCompression NoUpdatePending to_remove
             _toRepo <-
-              finalizeRepositoryChanges _toRepo NoUpdatePending GzipCompression
+              finalizeRepositoryChanges _toRepo NoUpdatePending GzipCompression NoDryRun
             runDefault (unapply to_remove) `catch` \(e :: SomeException) ->
                 fail ("Couldn't undo patch in working tree.\n" ++ show e)
             when (sse == YesSetScriptsExecutable) $ setScriptsExecutablePatches to_remove
@@ -267,7 +268,7 @@ putVerbose Verbose d = putDocLn d
 putVerbose _ _ = return ()
 
 copyBasicRepoNotPacked  :: forall rt p wR wU wT.
-                           Repository rt p wR wU wT -- remote
+                           Repository 'RO p wR wU wT -- remote
                         -> Repository rt p wR wU wT -- existing empty local
                         -> Verbosity
                         -> RemoteDarcs
@@ -280,7 +281,7 @@ copyBasicRepoNotPacked fromRepo toRepo verb rdarcs withWorkingDir = do
   createPristineDirectoryTree toRepo "." withWorkingDir
 
 copyCompleteRepoNotPacked :: forall rt p wR wU wT. (RepoPatch p, ApplyState p ~ Tree)
-                        => Repository rt p wR wU wT -- remote
+                        => Repository 'RO p wR wU wT -- remote
                         -> Repository rt p wR wU wT -- existing basic local
                         -> Verbosity
                         -> CloneKind
@@ -294,9 +295,9 @@ copyCompleteRepoNotPacked _ toRepo verb cloneKind = do
          when pi $ createPIWithInterrupt toRepo ps
 
 copyBasicRepoPacked ::
-  forall rt p wR wU wT.
-     Repository rt p wR wU wT -- remote
-  -> Repository rt p wR wU wT -- existing empty local repository
+  forall p wR wU wT.
+     Repository 'RO p wR wU wT -- remote
+  -> Repository 'RO p wR wU wT -- existing empty local repository
   -> Verbosity
   -> RemoteDarcs
   -> WithWorkingDir
@@ -324,7 +325,7 @@ copyBasicRepoPacked fromRepo toRepo verb rdarcs withWorkingDir =
 
 copyBasicRepoPacked2 ::
   forall rt p wR wU wT.
-     Repository rt p wR wU wT -- remote
+     Repository 'RO p wR wU wT -- remote
   -> Repository rt p wR wU wT -- existing empty local repository
   -> Verbosity
   -> WithWorkingDir
@@ -340,7 +341,7 @@ copyBasicRepoPacked2 fromRepo toRepo verb withWorkingDir = do
 
 copyCompleteRepoPacked ::
   forall rt p wR wU wT. (RepoPatch p, ApplyState p ~ Tree)
-  => Repository rt p wR wU wT -- remote
+  => Repository 'RO p wR wU wT -- remote
   -> Repository rt p wR wU wT -- existing basic local repository
   -> Verbosity
   -> CloneKind
@@ -355,7 +356,7 @@ copyCompleteRepoPacked from to verb cloneKind =
 
 copyCompleteRepoPacked2 ::
   forall rt p wR wU wT. (RepoPatch p, ApplyState p ~ Tree)
-  => Repository rt p wR wU wT
+  => Repository 'RO p wR wU wT
   -> Repository rt p wR wU wT
   -> Verbosity
   -> CloneKind
@@ -374,9 +375,9 @@ copyCompleteRepoPacked2 fromRepo toRepo verb cloneKind = do
 cleanDir :: FilePath -> IO ()
 cleanDir d = mapM_ (\x -> removeFile $ d </> x) =<< listDirectory d
 
-copyRepoOldFashioned :: forall rt p wR wU wT. (RepoPatch p, ApplyState p ~ Tree)
-                        => Repository rt p wR wU wT  -- remote repo
-                        -> Repository rt p wR wU wT  -- local empty repo
+copyRepoOldFashioned :: forall p wR wU wT. (RepoPatch p, ApplyState p ~ Tree)
+                        => Repository 'RO p wR wU wT  -- remote repo
+                        -> Repository 'RO p wR wU wT  -- local empty repo
                         -> Verbosity
                         -> WithWorkingDir
                         -> IO ()
@@ -395,8 +396,11 @@ copyRepoOldFashioned fromrepository _toRepo verb withWorkingDir = do
   local_patches <- readPatches _toRepo
   replacePristine _toRepo emptyTree
   let patchesToApply = progressFL "Applying patch" $ patchSet2FL local_patches
-  sequence_ $ mapFL (applyToTentativePristineCwd (repoCache _toRepo) ApplyNormal) $ bunchFL 100 patchesToApply
-  _toRepo <- finalizeRepositoryChanges _toRepo NoUpdatePending GzipCompression
+  sequence_ $
+    mapFL (applyToTentativePristineCwd (repoCache _toRepo) ApplyNormal) $
+    bunchFL 100 patchesToApply
+  _toRepo <-
+    finalizeRepositoryChanges _toRepo NoUpdatePending GzipCompression NoDryRun
   putVerbose verb $ text "Writing pristine and working tree contents..."
   createPristineDirectoryTree _toRepo "." withWorkingDir
 

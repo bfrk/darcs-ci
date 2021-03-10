@@ -31,7 +31,7 @@ import Darcs.UI.Completion ( knownFileArgs )
 import Darcs.UI.Flags
     ( DarcsFlag
     , allowCaseDifferingFilenames, allowWindowsReservedFilenames
-    , useCache, dryRun, umask, pathsFromArgs
+    , useCache, umask, pathsFromArgs
     )
 import Darcs.UI.Options ( (^), (?) )
 import qualified Darcs.UI.Options.All as O
@@ -46,6 +46,7 @@ import Darcs.Repository.State
     )
 import Darcs.Repository
     ( Repository
+    , AccessType(..)
     , withRepoLock
     , RepoJob(..)
     , addPendingDiffToPending
@@ -208,17 +209,21 @@ moveFile opts old new = withRepoAndState opts $ \(repo, work, cur, recorded) -> 
 
 moveFilesToDir :: [DarcsFlag] -> [AnchoredPath] -> AnchoredPath -> IO ()
 moveFilesToDir opts froms to =
-  withRepoAndState opts $ \(repo, work, cur, _) ->
-    moveToDir repo opts cur work froms to
+  withRepoAndState opts $ \(repo, work, cur, _) -> do
+    froms_exist <- and <$> forM froms (treeHas cur)
+    if froms_exist then
+      moveToDir repo opts cur work froms to
+    else
+      fail "Some of the paths you want to move aren't know to darcs. Use `darcs add` to add them first."
 
 withRepoAndState :: [DarcsFlag]
-                 -> (forall rt p wR wU .
+                 -> (forall p wR wU .
                         (ApplyState p ~ Tree, RepoPatch p) =>
-                            (Repository rt p wR wU wR, Tree IO, Tree IO, Tree IO)
+                            (Repository 'RW p wR wU wR, Tree IO, Tree IO, Tree IO)
                                 -> IO ())
                  -> IO ()
 withRepoAndState opts f =
-    withRepoLock (dryRun ? opts) (useCache ? opts) (umask ? opts) $
+    withRepoLock (useCache ? opts) (umask ? opts) $
     RepoJob $ \repo -> do
         work <-
           readUnrecordedFiltered repo (O.useIndex ? opts)
@@ -228,7 +233,7 @@ withRepoAndState opts f =
         f (repo, work, cur, recorded)
 
 simpleMove :: (RepoPatch p, ApplyState p ~ Tree)
-           => Repository rt p wR wU wR
+           => Repository 'RW p wR wU wR
            -> [DarcsFlag] -> Tree IO -> Tree IO -> AnchoredPath -> AnchoredPath
            -> IO ()
 simpleMove repository opts cur work old new = do
@@ -236,7 +241,7 @@ simpleMove repository opts cur work old new = do
     putInfo opts $ hsep $ map text ["Finished moving:", displayPath old, "to:", displayPath new]
 
 moveToDir :: (RepoPatch p, ApplyState p ~ Tree)
-          => Repository rt p wR wU wR
+          => Repository 'RW p wR wU wR
           -> [DarcsFlag] -> Tree IO -> Tree IO -> [AnchoredPath] -> AnchoredPath
           -> IO ()
 moveToDir repository opts cur work moved finaldir = do
@@ -249,7 +254,7 @@ moveToDir repository opts cur work moved finaldir = do
     putInfo opts $ hsep $ map text $ ["Finished moving:"] ++ map displayPath moved ++ ["to:", displayPath finaldir]
 
 doMoves :: (RepoPatch p, ApplyState p ~ Tree)
-          => Repository rt p wR wU wR
+          => Repository 'RW p wR wU wR
           -> [DarcsFlag] -> Tree IO -> Tree IO
           -> [(AnchoredPath, AnchoredPath)] -> IO ()
 doMoves repository opts cur work moves = do

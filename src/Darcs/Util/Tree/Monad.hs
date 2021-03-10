@@ -224,7 +224,7 @@ readFile p =
        t <- gets tree
        let f = findFile t p
        case f of
-         Nothing -> throw $ userError $ "No such file " ++ show p
+         Nothing -> throw $ userError $ "No such file " ++ displayPath p
          Just x -> lift (readBlob x)
 
 -- | Change content of a file at a given path. The change will be
@@ -262,11 +262,13 @@ rename from to =
        let item = find tr from
            found_to = find tr to
        unless (isNothing found_to) $
-              throw $ userError $ "Error renaming: destination " ++ show to ++ " exists."
-       unless (isNothing item) $ do
+              throw $ userError $ "Error renaming: destination " ++ displayPath to ++ " exists."
+       if isJust item then do
               modifyItem from Nothing
               modifyItem to item
               renameChanged from to
+       else
+        throw $ userError $ "Error renaming: source " ++ displayPath from ++ " does not exist."
 
 -- | Copy an item from some path to another path.
 copy :: Monad m => AnchoredPath -> AnchoredPath -> TreeMonad m ()

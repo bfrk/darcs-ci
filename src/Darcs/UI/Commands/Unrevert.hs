@@ -38,7 +38,6 @@ import Darcs.Repository
     )
 import Darcs.Repository.Flags
     ( AllowConflicts(..)
-    , DryRun(NoDryRun)
     , ExternalMerge(..)
     , Reorder(..)
     , UpdatePending(..)
@@ -126,7 +125,7 @@ unrevert = DarcsCommand
 
 unrevertCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 unrevertCmd _ opts [] =
- withRepoLock NoDryRun (useCache ? opts) (umask ? opts) $ RepoJob $ \_repository -> do
+ withRepoLock (useCache ? opts) (umask ? opts) $ RepoJob $ \_repository -> do
   us <- readPatches _repository
   Sealed them <- unrevertPatchBundle us
   pristine <- readPristine _repository
@@ -145,7 +144,9 @@ unrevertCmd _ opts [] =
   (to_unrevert :> to_keep) <- runInvertibleSelection pw selection_config
   tentativelyAddToPending _repository to_unrevert
   withSignalsBlocked $
-      do _repository <- finalizeRepositoryChanges _repository YesUpdatePending (compress ? opts)
+      do _repository <-
+            finalizeRepositoryChanges _repository YesUpdatePending
+              (compress ? opts) (O.dryRun ? opts)
          _ <- applyToWorking _repository (verbosity ? opts) to_unrevert
          recorded <- readPatches _repository
          debugMessage "I'm about to writeUnrevert."

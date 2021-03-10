@@ -108,7 +108,7 @@ repairCmd :: [DarcsFlag] -> IO ()
 repairCmd opts
   | O.yes (O.dryRun ? opts) = checkCmd opts
   | otherwise =
-    withRepoLock O.NoDryRun (useCache ? opts) (umask ? opts) $
+    withRepoLock (useCache ? opts) (umask ? opts) $
     RepoJob $ \repo -> do
       replayRepository
         (diffAlgorithm ? opts)

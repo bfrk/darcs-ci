@@ -18,6 +18,7 @@
 
 module Darcs.Repository
     ( Repository
+    , AccessType(..)
     , repoLocation
     , repoFormat
     , repoPristineType
@@ -151,6 +152,7 @@ import Darcs.Util.Cache
     )
 import Darcs.Repository.InternalTypes
     ( Repository
+    , AccessType(..)
     , PristineType(..)
     , modifyCache
     , repoLocation

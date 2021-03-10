@@ -24,7 +24,7 @@ import Data.List ( intercalate )
 import Control.Monad ( when, unless, liftM )
 import Text.Html ( tag, stringToHtml )
 import Darcs.Util.Path ( AbsolutePath )
-import Darcs.UI.Flags ( DarcsFlag, useCache, hasXmlOutput, verbose, enumeratePatches )
+import Darcs.UI.Flags ( DarcsFlag, useCache, hasXmlOutput, enumeratePatches )
 import Darcs.UI.Options ( (^), oid, (?) )
 import qualified Darcs.UI.Options.All as O
 import Darcs.UI.Commands ( DarcsCommand(..), withStdOpts, nodefaults, amInRepository )
@@ -130,7 +130,6 @@ actuallyShowRepo
   => PutInfo -> Repository rt p wR wU wR -> [DarcsFlag] -> IO ()
 actuallyShowRepo out r opts = do
   when (hasXmlOutput opts) (putStr "<repository>\n")
-  when (verbose opts) (out "Show" $ show r)
   out "Format" $ showInOneLine $ repoFormat r
   let loc = repoLocation r
   out "Root" loc

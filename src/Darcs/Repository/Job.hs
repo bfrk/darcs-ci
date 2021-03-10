@@ -42,7 +42,7 @@ import Darcs.Patch.Prim.V1 ( Prim )
 import Darcs.Patch.RepoPatch ( RepoPatch )
 
 import Darcs.Repository.Flags
-    ( UseCache(..), UpdatePending(..), DryRun(..), UMask (..)
+    ( UseCache(..), UpdatePending(..), UMask (..)
     )
 import Darcs.Repository.Format
     ( RepoProperty( Darcs2
@@ -58,8 +58,10 @@ import Darcs.Repository.Identify ( identifyRepository )
 import Darcs.Repository.Hashed( revertRepositoryChanges )
 import Darcs.Repository.InternalTypes
     ( Repository
+    , AccessType(..)
     , repoFormat
     , unsafeCoercePatchType
+    , unsafeStartTransaction
     )
 import Darcs.Repository.Paths ( lockPath )
 import Darcs.Repository.Rebase
@@ -107,33 +109,35 @@ withUMask umask job =
 -- in the kind of patch they work on. @RepoJob@ is used to wrap up the polymorphism,
 -- and the various functions that act on a @RepoJob@ are responsible for instantiating
 -- the underlying action with the appropriate patch type.
-data RepoJob a
+data RepoJob rt a
     -- = RepoJob (forall p wR wU . RepoPatch p => Repository p wR wU wR -> IO a)
     -- TODO: Unbind Tree from RepoJob, possibly renaming existing RepoJob
     =
     -- |The most common @RepoJob@; the underlying action can accept any patch type that
     -- a darcs repository may use.
-      RepoJob (forall rt p wR wU . (RepoPatch p, ApplyState p ~ Tree) => Repository rt p wR wU wR -> IO a)
+      RepoJob (forall p wR wU . (RepoPatch p, ApplyState p ~ Tree) => Repository rt p wR wU wR -> IO a)
     -- |A job that only works on darcs 1 patches
-    | V1Job (forall rt wR wU . Repository rt (RepoPatchV1 V1.Prim) wR wU wR -> IO a)
+    | V1Job (forall wR wU . Repository rt (RepoPatchV1 V1.Prim) wR wU wR -> IO a)
     -- |A job that only works on darcs 2 patches
-    | V2Job (forall rt wR wU . Repository rt (RepoPatchV2 V2.Prim) wR wU wR -> IO a)
+    | V2Job (forall wR wU . Repository rt (RepoPatchV2 V2.Prim) wR wU wR -> IO a)
     -- |A job that works on any repository where the patch type @p@ has 'PrimOf' @p@ = 'Prim'.
     --
     -- This was added to support darcsden, which inspects the internals of V1 prim patches.
     --
     -- In future this should be replaced with a more abstract inspection API as part of 'PrimPatch'.
-    | PrimV1Job (forall rt p wR wU . (RepoPatch p, ApplyState p ~ Tree, IsPrimV1 (PrimOf p))
+    | PrimV1Job (forall p wR wU . (RepoPatch p, ApplyState p ~ Tree, IsPrimV1 (PrimOf p))
                => Repository rt p wR wU wR -> IO a)
     -- A job that works on normal darcs repositories, but will want access to the rebase patch if it exists.
-    | RebaseAwareJob (forall rt p wR wU . (RepoPatch p, ApplyState p ~ Tree) => Repository rt p wR wU wR -> IO a)
-    | RebaseJob (forall rt p wR wU . (RepoPatch p, ApplyState p ~ Tree) => Repository rt p wR wU wR -> IO a)
-    | OldRebaseJob (forall rt p wR wU . (RepoPatch p, ApplyState p ~ Tree) => Repository rt p wR wU wR -> IO a)
-    | StartRebaseJob (forall rt p wR wU . (RepoPatch p, ApplyState p ~ Tree) => Repository rt p wR wU wR -> IO a)
+    | RebaseAwareJob (forall p wR wU . (RepoPatch p, ApplyState p ~ Tree) => Repository rt p wR wU wR -> IO a)
+    | RebaseJob (forall p wR wU . (RepoPatch p, ApplyState p ~ Tree) => Repository rt p wR wU wR -> IO a)
+    | OldRebaseJob (forall p wR wU . (RepoPatch p, ApplyState p ~ Tree) => Repository rt p wR wU wR -> IO a)
+    | StartRebaseJob (forall p wR wU . (RepoPatch p, ApplyState p ~ Tree) => Repository rt p wR wU wR -> IO a)
 
-onRepoJob :: RepoJob a
-          -> (forall rt p wR wU . (RepoPatch p, ApplyState p ~ Tree) => (Repository rt p wR wU wR -> IO a) -> Repository rt p wR wU wR -> IO a)
-          -> RepoJob a
+onRepoJob :: RepoJob rt1 a -- original repojob passed to withXxx
+          -> (forall p wR wU . (RepoPatch p, ApplyState p ~ Tree) =>
+              (Repository rt1 p wR wU wR -> IO a)
+              -> Repository rt2 p wR wU wR -> IO a)
+          -> RepoJob rt2 a -- result job takes a Repo rt2
 onRepoJob (RepoJob job) f = RepoJob (f job)
 onRepoJob (V1Job job) f = V1Job (f job)
 onRepoJob (V2Job job) f = V2Job (f job)
@@ -144,7 +148,7 @@ onRepoJob (OldRebaseJob job) f = OldRebaseJob (f job)
 onRepoJob (StartRebaseJob job) f = StartRebaseJob (f job)
 
 -- | apply a given RepoJob to a repository in the current working directory
-withRepository :: UseCache -> RepoJob a -> IO a
+withRepository :: UseCache -> RepoJob 'RO a -> IO a
 withRepository useCache = withRepositoryLocation useCache "."
 
 -- | This is just an internal type to Darcs.Repository.Job for
@@ -177,7 +181,7 @@ checkPrimV1 RepoV2 = Dict
 checkPrimV1 RepoV3 = Dict
 
 -- | apply a given RepoJob to a repository in a given url
-withRepositoryLocation :: UseCache -> String -> RepoJob a -> IO a
+withRepositoryLocation :: UseCache -> String -> RepoJob 'RO a -> IO a
 withRepositoryLocation useCache url repojob = do
     repo <- identifyRepository useCache url
 
@@ -186,7 +190,7 @@ withRepositoryLocation useCache url repojob = do
 
         -- in order to pass SRepoType and RepoPatchType at different types, we need a polymorphic
         -- function that we call in two different ways, rather than directly varying the argument.
-        runJob1 :: Bool -> Repository rtDummy pDummy wR wU wR -> RepoJob a -> IO a
+        runJob1 :: Bool -> Repository rt pDummy wR wU wR -> RepoJob rt a -> IO a
         runJob1 hasRebase =
           if formatHas Darcs3 rf
           then runJob RepoV3 hasRebase
@@ -206,7 +210,7 @@ runJob
   => RepoPatchType p
   -> Bool
   -> Repository rt pDummy wR wU wR
-  -> RepoJob a
+  -> RepoJob rt a
   -> IO a
 runJob patchType hasRebase repo repojob = do
 
@@ -282,11 +286,9 @@ runJob patchType hasRebase repo repojob = do
 
 -- | Apply a given RepoJob to a repository in the current working directory.
 -- However, before doing the job, take the repo lock and initializes a repo
--- transaction, unless this is a dry-run.
-withRepoLock :: DryRun -> UseCache -> UMask -> RepoJob a -> IO a
-withRepoLock YesDryRun useCache _ repojob =
-  withRepository useCache $ onRepoJob repojob $ \job repository -> job repository
-withRepoLock NoDryRun useCache um repojob =
+-- transaction.
+withRepoLock :: UseCache -> UMask -> RepoJob 'RW a -> IO a
+withRepoLock useCache um repojob =
   withLock lockPath $
     withRepository useCache $ onRepoJob repojob $ \job repository -> do
       maybe (return ()) fail $ writeProblem (repoFormat repository)
@@ -294,17 +296,17 @@ withRepoLock NoDryRun useCache um repojob =
 
 -- | run a lock-taking job in an old-fashion repository.
 --   only used by `darcs optimize upgrade`.
-withOldRepoLock :: RepoJob a -> IO a
+withOldRepoLock :: RepoJob 'RW a -> IO a
 withOldRepoLock repojob =
     withRepository NoUseCache $ onRepoJob repojob $ \job repository ->
-    withLock lockPath $ job repository
+    withLock lockPath $ job $ unsafeStartTransaction repository
 
 -- | Apply a given RepoJob to a repository in the current working directory,
 -- taking a lock. If lock not takeable, do nothing. If old-fashioned
 -- repository, do nothing. The job must not touch pending or pending.tentative,
 -- because there is no call to revertRepositoryChanges. This entry point is
 -- currently only used for attemptCreatePatchIndex.
-withRepoLockCanFail :: UseCache -> RepoJob () -> IO ()
+withRepoLockCanFail :: UseCache -> RepoJob 'RO () -> IO ()
 withRepoLockCanFail useCache repojob = do
   eitherDone <-
     withLockCanFail lockPath $
