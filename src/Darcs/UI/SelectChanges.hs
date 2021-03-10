@@ -71,7 +71,7 @@ import Data.Maybe ( isJust )
 import System.Exit ( exitSuccess )
 
 import Darcs.Patch
-    ( RepoPatch, PrimOf
+    ( IsRepoType, RepoPatch, PrimOf
     , commuteFL, invert
     , listTouchedFiles
     )
@@ -1018,7 +1018,7 @@ getDefault True InLast   = 'y'
 getDefault False InFirst = 'y'
 getDefault False InLast  = 'n'
 
-askAboutDepends :: (RepoPatch p, ApplyState p ~ Tree)
+askAboutDepends :: (IsRepoType rt, RepoPatch p, ApplyState p ~ Tree)
                 => Repository rt p wR wU wT -> FL (PrimOf p) wT wY
                 -> PatchSelectionOptions
                 -> [PatchInfo] -> IO [PatchInfo]

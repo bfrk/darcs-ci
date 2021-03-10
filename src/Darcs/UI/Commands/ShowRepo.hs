@@ -24,7 +24,7 @@ import Data.List ( intercalate )
 import Control.Monad ( when, unless, liftM )
 import Text.Html ( tag, stringToHtml )
 import Darcs.Util.Path ( AbsolutePath )
-import Darcs.UI.Flags ( DarcsFlag, useCache, hasXmlOutput, enumeratePatches )
+import Darcs.UI.Flags ( DarcsFlag, useCache, hasXmlOutput, verbose, enumeratePatches )
 import Darcs.UI.Options ( (^), oid, (?) )
 import qualified Darcs.UI.Options.All as O
 import Darcs.UI.Commands ( DarcsCommand(..), withStdOpts, nodefaults, amInRepository )
@@ -41,7 +41,7 @@ import Darcs.Repository
 import Darcs.Repository.Hashed( repoXor )
 import Darcs.Repository.PatchIndex ( isPatchIndexDisabled, doesPatchIndexExist )
 import Darcs.Repository.Prefs ( getPreflist, getMotd )
-import Darcs.Patch ( RepoPatch )
+import Darcs.Patch ( IsRepoType, RepoPatch )
 import Darcs.Patch.Set ( patchSet2RL )
 import Darcs.Patch.Witnesses.Ordered ( lengthRL )
 import qualified Data.ByteString.Char8 as BC  (unpack)
@@ -126,10 +126,11 @@ putInfo m t i = unless (null i) (putStr $ m t i)
 -- output a labelled text string or an XML tag and contained value.
 
 actuallyShowRepo
-  :: (RepoPatch p, ApplyState p ~ Tree)
+  :: (IsRepoType rt, RepoPatch p, ApplyState p ~ Tree)
   => PutInfo -> Repository rt p wR wU wR -> [DarcsFlag] -> IO ()
 actuallyShowRepo out r opts = do
   when (hasXmlOutput opts) (putStr "<repository>\n")
+  when (verbose opts) (out "Show" $ show r)
   out "Format" $ showInOneLine $ repoFormat r
   let loc = repoLocation r
   out "Root" loc
@@ -148,7 +149,7 @@ actuallyShowRepo out r opts = do
   showRepoMOTD out r
   when (hasXmlOutput opts) (putStr "</repository>\n")
 
-showXor :: (RepoPatch p, ApplyState p ~ Tree)
+showXor :: (IsRepoType rt, RepoPatch p, ApplyState p ~ Tree)
         => PutInfo -> Repository rt p wR wU wR -> IO ()
 showXor out repo = do
   theXor <- repoXor repo
@@ -174,5 +175,5 @@ showRepoMOTD out repo = getMotd (repoLocation repo) >>= out "MOTD" . BC.unpack
 
 -- Support routines to provide information used by the PutInfo operations above.
 
-numPatches :: (RepoPatch p, ApplyState p ~ Tree) => Repository rt p wR wU wR -> IO Int
+numPatches :: (IsRepoType rt, RepoPatch p, ApplyState p ~ Tree) => Repository rt p wR wU wR -> IO Int
 numPatches r = (lengthRL . patchSet2RL) `liftM` readPatches r

@@ -17,6 +17,11 @@ import Darcs.Patch.Named ( Named(..) )
 import Darcs.Patch.Read ( ReadPatch(..) )
 import Darcs.Patch.Rebase.Suspended ( Suspended, readSuspended )
 import Darcs.Patch.RepoPatch ( RepoPatch )
+import Darcs.Patch.RepoType
+  ( RepoType(..), IsRepoType(..), SRepoType(..)
+  , RebaseType(..), SRebaseType(..)
+  )
+
 import Darcs.Patch.Witnesses.Sealed ( Sealed(..), mapSeal )
 import Darcs.Patch.Witnesses.Ordered ( FL(..), mapFL_FL )
 
@@ -36,15 +41,15 @@ import Darcs.Patch.Witnesses.Ordered ( FL(..), mapFL_FL )
 -- patch has no effect on the context of the rest of the
 -- repository; in a sense the patches within it are
 -- dangling off to one side from the main repository.
-data WrappedNamed p wX wY where
-  NormalP :: !(Named p wX wY) -> WrappedNamed p wX wY
+data WrappedNamed (rt :: RepoType) p wX wY where
+  NormalP :: !(Named p wX wY) -> WrappedNamed rt p wX wY
   RebaseP
     :: (PrimPatchBase p, FromPrim p, Effect p)
     => !PatchInfo
     -> !(Suspended p wX)
-    -> WrappedNamed p wX wX
+    -> WrappedNamed ('RepoType 'IsRebase) p wX wX
 
-fromRebasing :: WrappedNamed p wX wY -> Named p wX wY
+fromRebasing :: WrappedNamed rt p wX wY -> Named p wX wY
 fromRebasing (NormalP n) = n
 fromRebasing (RebaseP {}) = error "internal error: found rebasing internal patch"
 
@@ -63,15 +68,21 @@ data ReadRebasing p wX wY where
   ReadNormal    :: p wX wY -> ReadRebasing p wX wY
   ReadSuspended :: Suspended p wX -> ReadRebasing p wX wX
 
-instance RepoPatch p => ReadPatch (WrappedNamed p) where
-  readPatch' = fmap (mapSeal wrapNamed) readPatch' where
+instance (RepoPatch p, IsRepoType rt) => ReadPatch (WrappedNamed rt p) where
+  readPatch' =
+    case singletonRepoType :: SRepoType rt of
+      SRepoType SIsRebase ->
+        let wrapNamed :: Named (ReadRebasing p) wX wY -> WrappedNamed rt p wX wY
+            wrapNamed (NamedP i [] (ReadSuspended s :>: NilFL)) = RebaseP i s
+            wrapNamed (NamedP i deps ps) =
+              NormalP (NamedP i deps (mapFL_FL unRead ps))
 
-    wrapNamed :: Named (ReadRebasing p) wX wY -> WrappedNamed p wX wY
-    wrapNamed (NamedP i [] (ReadSuspended s :>: NilFL)) = RebaseP i s
-    wrapNamed (NamedP i deps ps) = NormalP (NamedP i deps (mapFL_FL unRead ps))
+            unRead (ReadNormal p) = p
+            unRead (ReadSuspended _) = error "unexpected suspended patch"
 
-    unRead (ReadNormal p) = p
-    unRead (ReadSuspended _) = error "unexpected suspended patch"
+        in fmap (mapSeal wrapNamed) readPatch'
+
+      _ -> fmap (mapSeal NormalP) readPatch'
 
 instance PatchListFormat p => PatchListFormat (ReadRebasing p) where
   patchListFormat = coerce (patchListFormat :: ListFormat p)

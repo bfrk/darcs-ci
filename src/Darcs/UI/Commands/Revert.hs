@@ -26,6 +26,7 @@ import Darcs.UI.Flags
     ( DarcsFlag
     , diffAlgorithm
     , diffingOpts
+    , dryRun
     , isInteractive
     , pathSetFromArgs
     , umask
@@ -34,6 +35,7 @@ import Darcs.UI.Flags
     )
 import Darcs.UI.Options ( (^), (?) )
 import qualified Darcs.UI.Options.All as O
+import Darcs.Repository.Flags ( UpdatePending(..) )
 import Darcs.UI.Commands
     ( DarcsCommand(..)
     , amInHashedRepository
@@ -133,7 +135,7 @@ revert = DarcsCommand
 
 revertCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 revertCmd fps opts args =
-  withRepoLock (useCache ? opts) (umask ? opts) $
+  withRepoLock (dryRun ? opts) (useCache ? opts) YesUpdatePending (umask ? opts) $
   RepoJob $ \repository -> do
     existing_paths <- existingPaths repository =<< pathSetFromArgs fps args
     announceFiles verbosity existing_paths "Reverting changes in"

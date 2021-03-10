@@ -211,6 +211,7 @@ Library
                       Darcs.Patch.RegChars
                       Darcs.Patch.Repair
                       Darcs.Patch.RepoPatch
+                      Darcs.Patch.RepoType
                       Darcs.Patch.Set
                       Darcs.Patch.Show
                       Darcs.Patch.Split

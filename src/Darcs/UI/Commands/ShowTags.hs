@@ -70,7 +70,7 @@ tagsCmd _ opts _ = let repodir = fromMaybe "." (getRepourl opts) in
     withRepositoryLocation (useCache ? opts) repodir $ RepoJob $ \repo ->
         readPatches repo >>= printTags
   where
-    printTags :: PatchSet p wW wZ -> IO ()
+    printTags :: PatchSet rt p wW wZ -> IO ()
     printTags = mapM_ process . patchSetTags
     process :: String -> IO ()
     process t = normalize t t False >>= putStrLn

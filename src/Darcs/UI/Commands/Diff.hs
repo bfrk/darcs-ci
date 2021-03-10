@@ -117,7 +117,7 @@ diffCommand = DarcsCommand
     , commandPrereq = amInHashedRepository
     , commandCompleteArgs = knownFileArgs
     , commandArgdefaults = nodefaults
-    , commandOptions = withStdOpts diffBasicOpts diffAdvancedOpts
+    , commandOptions = diffOpts
     }
   where
     diffBasicOpts
@@ -126,6 +126,7 @@ diffCommand = DarcsCommand
       ^ O.repoDir
       ^ O.storeInMemory
     diffAdvancedOpts = O.pauseForGui
+    diffOpts = diffBasicOpts `withStdOpts` diffAdvancedOpts
 
 diffCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 diffCmd fps opts args
@@ -267,5 +268,5 @@ getDiffCmdAndArgs cmd opts f1 f2 = helper (O.extDiff ? opts) where
         Right (cmd, "-rN":getDiffOpts extDiff++[f1,f2])
 
 getDiffOpts :: O.ExternalDiff -> [String]
-getDiffOpts O.ExternalDiff {O.diffOptions=os,O.diffUnified=u} = addUnified os where
+getDiffOpts O.ExternalDiff {O.diffOpts=os,O.diffUnified=u} = addUnified os where
   addUnified = if u then ("-u":) else id

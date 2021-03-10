@@ -119,17 +119,17 @@ import Darcs.Util.Tree.Monad( virtualTreeIO )
 
 -- | A 'Bundle' is a context together with some patches. The context
 -- consists of unavailable patches.
-data Bundle p wX wY where
-  Bundle :: (FL (PatchInfoAnd p) :> FL (PatchInfoAnd p)) wX wY
-         -> Bundle p wX wY
+data Bundle rt p wX wY where
+  Bundle :: (FL (PatchInfoAnd rt p) :> FL (PatchInfoAnd rt p)) wX wY
+         -> Bundle rt p wX wY
 
 -- | Interpret a 'Bundle' in the context of a 'PatchSet'. This means we
 -- match up a possible tag in the context of the 'Bundle'. This fails if
 -- the tag couldn't be found.
 interpretBundle :: Commute p
-                => PatchSet p Origin wT
-                -> Bundle p wA wB
-                -> Either String (PatchSet p Origin wB)
+                => PatchSet rt p Origin wT
+                -> Bundle rt p wA wB
+                -> Either String (PatchSet rt p Origin wB)
 interpretBundle ref (Bundle (context :> patches)) =
   flip appendPSFL patches <$> interpretContext ref context
 
@@ -143,7 +143,7 @@ hashBundle to_be_sent =
         vcat (mapFL (showPatch ForStorage) to_be_sent) <> newline
 
 makeBundle :: (ApplyState p ~ Tree, RepoPatch p) => Maybe (Tree IO)
-           -> PatchSet p wStart wX -> FL (Named p) wX wY -> IO Doc
+           -> PatchSet rt p wStart wX -> FL (Named p) wX wY -> IO Doc
 makeBundle state repo to_be_sent
   | _ :> context <- contextPatches repo =
     format context <$>
@@ -172,7 +172,7 @@ hashFailureMessage =
   \The most likely culprit is CRLF newlines."
 
 parseBundle :: RepoPatch p
-            => B.ByteString -> Either String (Sealed (Bundle p wX))
+            => B.ByteString -> Either String (Sealed (Bundle rt p wX))
 parseBundle =
     fmap fst . parse pUnsignedBundle . dropInitialTrash . decodeGpgClearsigned
   where
@@ -183,7 +183,7 @@ parseBundle =
           | B.null rest -> rest
           | otherwise -> dropInitialTrash rest
 
-pUnsignedBundle :: forall p wX. RepoPatch p => Parser (Sealed (Bundle p wX))
+pUnsignedBundle :: forall rt p wX. RepoPatch p => Parser (Sealed (Bundle rt p wX))
 pUnsignedBundle = pContextThenPatches <|> pPatchesThenContext
   where
     packBundle context patches =
@@ -212,7 +212,7 @@ pBundleHash = lexString bundleHashName >> lexWord
 bundleHashName :: B.ByteString
 bundleHashName = BC.pack "Patch bundle hash:"
 
-unavailablePatchesFL :: [PatchInfo] -> FL (PatchInfoAnd p) wX wY
+unavailablePatchesFL :: [PatchInfo] -> FL (PatchInfoAnd rt p) wX wY
 unavailablePatchesFL = foldr ((:>:) . piUnavailable) (unsafeCoercePEnd NilFL)
   where
     piUnavailable i = patchInfoAndPatch i . unavailable $
@@ -231,9 +231,9 @@ patchesName :: B.ByteString
 patchesName = BC.pack "New patches:"
 
 readContextFile :: Commute p
-                => PatchSet p Origin wX
+                => PatchSet rt p Origin wX
                 -> FilePath
-                -> IO (SealedPatchSet p Origin)
+                -> IO (SealedPatchSet rt p Origin)
 readContextFile ref = fmap Sealed . (parseAndInterpret <=< mmapFilePS)
   where
     parseAndInterpret =
@@ -242,9 +242,9 @@ readContextFile ref = fmap Sealed . (parseAndInterpret <=< mmapFilePS)
 -- | Interpret a context file in the context of a 'PatchSet'. This means we
 -- match up a possible tag. This fails if the tag couldn't be found.
 interpretContext :: Commute p
-                 => PatchSet p Origin wT
-                 -> FL (PatchInfoAnd p) wA wB
-                 -> Either String (PatchSet p Origin wB)
+                 => PatchSet rt p Origin wT
+                 -> FL (PatchInfoAnd rt p) wA wB
+                 -> Either String (PatchSet rt p Origin wB)
 interpretContext ref context =
   case context of
     tag :>: rest
@@ -257,7 +257,7 @@ interpretContext ref context =
     _ -> Right $ PatchSet NilRL (unsafeCoercePStart (reverseFL context))
 
 parseContextFile :: B.ByteString
-                 -> Either String (FL (PatchInfoAnd p) wX wY)
+                 -> Either String (FL (PatchInfoAnd rt p) wX wY)
 parseContextFile =
     fmap fst . parse pUnsignedContext . decodeGpgClearsigned
   where
@@ -265,9 +265,9 @@ parseContextFile =
 
 -- | Minimize the context of an 'FL' of patches to be packed into a bundle.
 minContext :: (RepoPatch p)
-           => PatchSet p wStart wB -- context to be minimized
-           -> FL (PatchInfoAnd p) wB wC
-           -> Sealed ((PatchSet p :> FL (PatchInfoAnd p)) wStart)
+           => PatchSet rt p wStart wB -- context to be minimized
+           -> FL (PatchInfoAnd rt p) wB wC
+           -> Sealed ((PatchSet rt p :> FL (PatchInfoAnd rt p)) wStart)
 minContext (PatchSet behindTag topCommon) to_be_sent =
   case genCommuteWhatWeCanRL commuteFL (topCommon :> to_be_sent) of
     (c :> to_be_sent' :> _) -> seal (PatchSet behindTag c :> to_be_sent') 

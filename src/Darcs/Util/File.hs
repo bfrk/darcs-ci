@@ -31,7 +31,7 @@ import System.Posix.Files( setFileMode, ownerModes )
 #endif
 import System.FilePath.Posix ( (</>) )
 
-import Darcs.Util.Exception ( catchall, ifDoesNotExistError )
+import Darcs.Util.Exception ( catchall, catchNonExistence )
 import Darcs.Util.Path( FilePathLike, getCurrentDirectory, setCurrentDirectory, toFilePath )
 
 withCurrentDirectory :: FilePathLike p
@@ -52,10 +52,10 @@ getFileStatus f =
 
 doesDirectoryReallyExist :: FilePath -> IO Bool
 doesDirectoryReallyExist f =
-    ifDoesNotExistError False (isDirectory `fmap` getSymbolicLinkStatus f)
+    catchNonExistence (isDirectory `fmap` getSymbolicLinkStatus f) False
 
 removeFileMayNotExist :: FilePathLike p => p -> IO ()
-removeFileMayNotExist f = ifDoesNotExistError () (removeFile $ toFilePath f)
+removeFileMayNotExist f = catchNonExistence (removeFile $ toFilePath f) ()
 
 -- |osxCacheDir assumes @~/Library/Caches/@ exists.
 osxCacheDir :: IO (Maybe FilePath)

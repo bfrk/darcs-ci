@@ -55,7 +55,7 @@ import Darcs.Patch.Witnesses.Sealed
     , unFreeLeft
     )
 import Darcs.Repository
-    ( RepoJob (..), Repository, AccessType(RO)
+    ( RepoJob (..), Repository
     , readPristine
     , unrecordedChanges, withRepository
     )
@@ -195,7 +195,7 @@ whatsnewHelp =
 
 whatsnewCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 whatsnewCmd fps opts args =
-   withRepository (useCache ? opts) $ RepoJob $ \(repo :: Repository 'RO p wR wU wR) -> do
+   withRepository (useCache ? opts) $ RepoJob $ \(repo :: Repository rt p wR wU wR) -> do
     existing_files <- do
       files <- pathSetFromArgs fps args
       files' <-

@@ -31,22 +31,17 @@ import Darcs.UI.Completion ( knownFileArgs )
 import Darcs.UI.Flags
     ( DarcsFlag
     , allowCaseDifferingFilenames, allowWindowsReservedFilenames
-    , useCache, umask, pathsFromArgs
+    , useCache, dryRun, umask, pathsFromArgs
     )
 import Darcs.UI.Options ( (^), (?) )
 import qualified Darcs.UI.Options.All as O
 import Darcs.Repository.Diff ( treeDiff )
-import Darcs.Repository.Flags ( DiffAlgorithm(..) )
+import Darcs.Repository.Flags ( UpdatePending (..), DiffAlgorithm(..) )
 import Darcs.Repository.Prefs ( filetypeFunction )
 import System.Directory ( renameDirectory, renameFile )
-import Darcs.Repository.State
-    ( readPristine
-    , readPristineAndPending
-    , readUnrecordedFiltered
-    )
+import Darcs.Repository.State ( readPristineAndPending, readPristine )
 import Darcs.Repository
     ( Repository
-    , AccessType(..)
     , withRepoLock
     , RepoJob(..)
     , addPendingDiffToPending
@@ -68,6 +63,7 @@ import Darcs.Util.Tree
     , treeHasDir
     , treeHasFile
     )
+import Darcs.Util.Tree.Plain( readPlainTree )
 import Darcs.Util.Path
     ( AbsolutePath
     , AnchoredPath
@@ -217,23 +213,21 @@ moveFilesToDir opts froms to =
       fail "Some of the paths you want to move aren't know to darcs. Use `darcs add` to add them first."
 
 withRepoAndState :: [DarcsFlag]
-                 -> (forall p wR wU .
+                 -> (forall rt p wR wU .
                         (ApplyState p ~ Tree, RepoPatch p) =>
-                            (Repository 'RW p wR wU wR, Tree IO, Tree IO, Tree IO)
+                            (Repository rt p wR wU wR, Tree IO, Tree IO, Tree IO)
                                 -> IO ())
                  -> IO ()
 withRepoAndState opts f =
-    withRepoLock (useCache ? opts) (umask ? opts) $
+    withRepoLock (dryRun ? opts) (useCache ? opts) YesUpdatePending (umask ? opts) $
     RepoJob $ \repo -> do
-        work <-
-          readUnrecordedFiltered repo (O.useIndex ? opts)
-            O.EvenLookForBoring O.NoLookForMoves Nothing
+        work <- readPlainTree "."
         cur <- readPristineAndPending repo
         recorded <- readPristine repo
         f (repo, work, cur, recorded)
 
 simpleMove :: (RepoPatch p, ApplyState p ~ Tree)
-           => Repository 'RW p wR wU wR
+           => Repository rt p wR wU wR
            -> [DarcsFlag] -> Tree IO -> Tree IO -> AnchoredPath -> AnchoredPath
            -> IO ()
 simpleMove repository opts cur work old new = do
@@ -241,7 +235,7 @@ simpleMove repository opts cur work old new = do
     putInfo opts $ hsep $ map text ["Finished moving:", displayPath old, "to:", displayPath new]
 
 moveToDir :: (RepoPatch p, ApplyState p ~ Tree)
-          => Repository 'RW p wR wU wR
+          => Repository rt p wR wU wR
           -> [DarcsFlag] -> Tree IO -> Tree IO -> [AnchoredPath] -> AnchoredPath
           -> IO ()
 moveToDir repository opts cur work moved finaldir = do
@@ -254,7 +248,7 @@ moveToDir repository opts cur work moved finaldir = do
     putInfo opts $ hsep $ map text $ ["Finished moving:"] ++ map displayPath moved ++ ["to:", displayPath finaldir]
 
 doMoves :: (RepoPatch p, ApplyState p ~ Tree)
-          => Repository 'RW p wR wU wR
+          => Repository rt p wR wU wR
           -> [DarcsFlag] -> Tree IO -> Tree IO
           -> [(AnchoredPath, AnchoredPath)] -> IO ()
 doMoves repository opts cur work moves = do

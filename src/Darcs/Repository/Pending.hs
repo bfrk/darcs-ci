@@ -67,11 +67,11 @@ import Darcs.Patch.Witnesses.Sealed ( Sealed(Sealed), mapSeal )
 import Darcs.Patch.Witnesses.Unsafe ( unsafeCoercePStart )
 
 import Darcs.Repository.Flags ( UpdatePending (..))
-import Darcs.Repository.InternalTypes ( Repository, withRepoDir, unsafeCoerceT )
+import Darcs.Repository.InternalTypes ( Repository, withRepoLocation, unsafeCoerceT )
 import Darcs.Repository.Paths ( pendingPath )
 
 import Darcs.Util.ByteString ( gzReadFilePS )
-import Darcs.Util.Exception ( ifDoesNotExistError )
+import Darcs.Util.Exception ( catchNonExistence )
 import Darcs.Util.Lock  ( writeDocBinFile, removeFileMayNotExist )
 import Darcs.Util.Printer ( Doc, ($$), text, vcat, (<+>), renderString )
 import Darcs.Util.Progress ( debugMessage )
@@ -102,12 +102,13 @@ readNewPending = readPendingFile newSuffix
 readPendingFile :: ReadPatch prim => String -> Repository rt p wR wU wT
                 -> IO (Sealed (FL prim wX))
 readPendingFile suffix _ =
-  ifDoesNotExistError (Sealed NilFL) $ do
+  do
     let filepath = pendingPath ++ suffix
     raw <- gzReadFilePS filepath
     case readPatch raw of
       Right p -> return (mapSeal unFLM p)
       Left e -> fail $ unlines ["Corrupt pending patch: " ++ show filepath, e]
+  `catchNonExistence` Sealed NilFL
 
 -- Wrapper around FL where printed format uses { } except around singletons.
 -- Now that the Show behaviour of FL p can be customised (using
@@ -295,7 +296,7 @@ makeNewPending :: (RepoPatch p, ApplyState p ~ Tree)
                  -> IO ()
 makeNewPending _                  NoUpdatePending _ _ = return ()
 makeNewPending repo YesUpdatePending origp recordedState =
-    withRepoDir repo $
+    withRepoLocation repo $
     do let newname = pendingPath ++ ".new"
        debugMessage $ "Writing new pending:  " ++ newname
        Sealed sfp <- return $ siftForPending origp
@@ -326,9 +327,9 @@ finalizePending :: (RepoPatch p, ApplyState p ~ Tree)
                 -> Tree IO
                 -> IO ()
 finalizePending repo NoUpdatePending _ =
-  withRepoDir repo $ removeFileMayNotExist pendingPath
+  withRepoLocation repo $ removeFileMayNotExist pendingPath
 finalizePending repo upe@YesUpdatePending recordedState =
-  withRepoDir repo $ do
+  withRepoLocation repo $ do
       Sealed tpend <- readTentativePending repo
       makeNewPending repo upe tpend recordedState
 
@@ -353,7 +354,7 @@ tentativelyAddToPending :: forall rt p wR wU wT wX wY. RepoPatch p
                         -> FL (PrimOf p) wX wY
                         -> IO ()
 tentativelyAddToPending repo patch =
-    withRepoDir repo $ do
+    withRepoLocation repo $ do
         Sealed pend <- readTentativePending repo
         writeTentativePending repo (pend +>+ unsafeCoercePStart patch)
 
@@ -364,4 +365,4 @@ setTentativePending :: forall rt p wR wU wT wP. RepoPatch p
                     -> IO ()
 setTentativePending repo patch = do
     Sealed prims <- return $ siftForPending patch
-    withRepoDir repo $ writeTentativePending repo prims
+    withRepoLocation repo $ writeTentativePending repo prims

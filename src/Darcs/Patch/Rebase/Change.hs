@@ -70,6 +70,7 @@ import Darcs.Patch.Rebase.PushFixup
   , pushFixupIdMB_FLIdFLFL
   )
 import Darcs.Patch.RepoPatch ( RepoPatch )
+import Darcs.Patch.RepoType ( RepoType(..), RebaseType(..) )
 import Darcs.Patch.Show ( ShowPatchBasic(..), ShowPatchFor(..), ShowContextPatch(..) )
 import Darcs.Patch.Unwind ( Unwound(..), fullUnwind )
 import Darcs.Patch.Witnesses.Maybe ( Maybe2(..) )
@@ -98,7 +99,7 @@ deriving instance Show2 prim => Show (RebaseChange prim wX wY)
 
 -- |Get hold of the 'Named' patch inside a 'RebaseChange' and wrap it in a
 -- 'PatchInfoAnd'.
-rcToPia :: RebaseChange prim wX wY -> Sealed2 (PatchInfoAnd prim)
+rcToPia :: RebaseChange prim wX wY -> Sealed2 (PatchInfoAnd ('RepoType 'NoRebase) prim)
 rcToPia (RC _ toEdit) = Sealed2 (n2pia toEdit)
 
 instance PrimPatch prim => PrimPatchBase (RebaseChange prim) where

@@ -52,8 +52,8 @@ progressRL k xxs@(xs :<: x) =
 
 -- | Evaluate an 'RL' list and report progress. In addition to printing
 -- the number of patches we got, show the name of the last tag we got.
-progressRLShowTags :: String -> RL (PatchInfoAnd p) wX wY
-                   -> RL (PatchInfoAnd p) wX wY
+progressRLShowTags :: String -> RL (PatchInfoAnd rt p) wX wY
+                   -> RL (PatchInfoAnd rt p) wX wY
 progressRLShowTags _ NilRL = NilRL
 progressRLShowTags k xxs@(xs :<: x) =
     if xxsLen < minlist
@@ -62,7 +62,7 @@ progressRLShowTags k xxs@(xs :<: x) =
   where
     xxsLen = lengthRL xxs
 
-    pl :: RL (PatchInfoAnd p) wX wY -> RL (PatchInfoAnd p) wX wY
+    pl :: RL (PatchInfoAnd rt p) wX wY -> RL (PatchInfoAnd rt p) wX wY
     pl NilRL = NilRL
     pl (NilRL :<: y) = unsafePerformIO $ do endTedious k
                                             return (NilRL :<: y)

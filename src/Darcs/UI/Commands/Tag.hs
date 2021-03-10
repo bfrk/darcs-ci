@@ -37,15 +37,10 @@ import Darcs.Patch.Witnesses.Ordered ( FL(..), (:>)(..) )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(..), mapSeal )
 
 import Darcs.Repository
-    ( AccessType(..)
-    , RepoJob(..)
-    , Repository
-    , finalizeRepositoryChanges
-    , readPatches
-    , tentativelyAddPatch
-    , withRepoLock
+    ( withRepoLock, Repository, RepoJob(..), readPatches
+    , tentativelyAddPatch, finalizeRepositoryChanges,
     )
-import Darcs.Repository.Flags ( UpdatePending(..) )
+import Darcs.Repository.Flags ( UpdatePending(..), DryRun(NoDryRun) )
 
 import Darcs.UI.Commands
     ( DarcsCommand(..), withStdOpts, nodefaults, amInHashedRepository, putFinished )
@@ -127,7 +122,7 @@ tag = DarcsCommand
 
 tagCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 tagCmd _ opts args =
-  withRepoLock (useCache ? opts) (umask ? opts) $ RepoJob $ \(repository :: Repository 'RW p wR wU wR) -> do
+  withRepoLock NoDryRun (useCache ? opts) YesUpdatePending (umask ? opts) $ RepoJob $ \(repository :: Repository rt p wR wU wR) -> do
     date <- getDate (hasPipe opts)
     the_author <- getAuthor (author ? opts) (hasPipe opts)
     patches <- readPatches repository
@@ -142,7 +137,7 @@ tagCmd _ opts args =
     let mypatch = infopatch myinfo NilFL
     _ <- tentativelyAddPatch repository (compress ? opts) (verbosity ? opts) YesUpdatePending
              $ n2pia $ adddeps mypatch deps
-    _ <- finalizeRepositoryChanges repository YesUpdatePending (compress ? opts) (O.dryRun ? opts)
+    _ <- finalizeRepositoryChanges repository YesUpdatePending (compress ? opts)
     putFinished opts $ "tagging '"++name++"'"
   where  get_name_log ::(PrimPatch prim) => FL prim wA wA -> [String] -> [String] -> IO (String, [String])
          get_name_log nilFL a tags
@@ -175,10 +170,10 @@ tagCmd _ opts args =
 -- since the last tag, plus that tag itself.
 
 askAboutTagDepends
-     :: forall p wX wY . (RepoPatch p, ApplyState p ~ Tree)
+     :: forall rt p wX wY . (RepoPatch p, ApplyState p ~ Tree)
      => [DarcsFlag]
-     -> FL (PatchInfoAnd p) wX wY
-     -> IO (Sealed (FL (PatchInfoAnd p) wX))
+     -> FL (PatchInfoAnd rt p) wX wY
+     -> IO (Sealed (FL (PatchInfoAnd rt p) wX))
 askAboutTagDepends flags ps = do
   let opts = S.PatchSelectionOptions
              { S.verbosity = verbosity ? flags

@@ -66,7 +66,6 @@ import qualified Darcs.UI.Options.All as O
 import Darcs.Patch.PatchInfoAnd ( PatchInfoAnd, hopefully, patchDesc )
 import Darcs.Repository
     ( Repository
-    , AccessType(..)
     , repoLocation
     , PatchSet
     , identifyRepositoryFor
@@ -78,7 +77,7 @@ import Darcs.Repository
     , prefsUrl )
 import Darcs.Patch.Set ( Origin )
 import Darcs.Patch.Apply( ApplyState )
-import Darcs.Patch ( RepoPatch, description, applyToTree, effect, invert )
+import Darcs.Patch ( IsRepoType, RepoPatch, description, applyToTree, effect, invert )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(..) )
 import Darcs.Patch.Witnesses.Unsafe ( unsafeCoerceP )
 import Darcs.Patch.Witnesses.Ordered
@@ -190,7 +189,7 @@ sendCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 sendCmd fps opts [""] = sendCmd fps opts []
 sendCmd (_,o) opts [unfixedrepodir] =
  withRepository (useCache ? opts) $ RepoJob $
-  \(repository :: Repository 'RO p wR wU wR) -> do
+  \(repository :: Repository rt p wR wU wR) -> do
   when (O.mail ? opts && dryRun ? opts == O.NoDryRun) $ do
     -- If --mail is used and the user has not provided a --sendmail-command
     -- and we can detect that the system has no default way to send emails, 
@@ -220,9 +219,9 @@ sendCmd (_,o) opts [unfixedrepodir] =
         sendToThem repository opts wtds repodir them
 sendCmd _ _ _ = error "impossible case"
 
-sendToThem :: (RepoPatch p, ApplyState p ~ Tree)
+sendToThem :: (IsRepoType rt, RepoPatch p, ApplyState p ~ Tree)
            => Repository rt p wR wU wT -> [DarcsFlag] -> [WhatToDo] -> String
-           -> PatchSet p Origin wX -> IO ()
+           -> PatchSet rt p Origin wX -> IO ()
 sendToThem repo opts wtds their_name them = do
   us <- readPatches repo
   common :> us' <- return $ findCommonWithThem us them
@@ -268,10 +267,10 @@ sendToThem repo opts wtds their_name them = do
     Nothing     -> sendBundle opts to_be_sent bundle fname wtds their_name
 
 
-prepareBundle :: forall p wX wY wZ. (RepoPatch p, ApplyState p ~ Tree)
-              => [DarcsFlag] -> PatchSet p Origin wZ
-              -> Either (FL (PatchInfoAnd p) wX wY)
-                        (Tree IO, (FL (PatchInfoAnd p) :\/: FL (PatchInfoAnd p)) wX wY)
+prepareBundle :: forall rt p wX wY wZ. (RepoPatch p, ApplyState p ~ Tree)
+              => [DarcsFlag] -> PatchSet rt p Origin wZ
+              -> Either (FL (PatchInfoAnd rt p) wX wY)
+                        (Tree IO, (FL (PatchInfoAnd rt p) :\/: FL (PatchInfoAnd rt p)) wX wY)
               -> IO Doc
 prepareBundle opts common e = do
   unsig_bundle <-
@@ -286,12 +285,12 @@ prepareBundle opts common e = do
                                       (mapFL_FL hopefully to_be_sent)
   signString (parseFlags O.sign opts) unsig_bundle
 
-sendBundle :: forall p wX wY . (RepoPatch p, ApplyState p ~ Tree)
-           => [DarcsFlag] -> FL (PatchInfoAnd p) wX wY
+sendBundle :: forall rt p wX wY . (RepoPatch p, ApplyState p ~ Tree)
+           => [DarcsFlag] -> FL (PatchInfoAnd rt p) wX wY
              -> Doc -> String -> [WhatToDo] -> String -> IO ()
 sendBundle opts to_be_sent bundle fname wtds their_name=
          let
-           auto_subject :: forall pp wA wB . FL (PatchInfoAnd pp) wA wB -> String
+           auto_subject :: forall pp wA wB . FL (PatchInfoAnd rt pp) wA wB -> String
            auto_subject (p:>:NilFL)  = "darcs patch: " ++ trim (patchDesc p) 57
            auto_subject (p:>:ps) = "darcs patch: " ++ trim (patchDesc p) 43 ++
                             " (and " ++ show (lengthFL ps) ++ " more)"
@@ -374,8 +373,8 @@ cleanup opts (Just mailfile) = when (isNothing (hasLogfile opts) || willRemoveLo
                                       removeFileMayNotExist mailfile
 cleanup _ Nothing = return ()
 
-writeBundleToFile :: forall p wX wY . (RepoPatch p, ApplyState p ~ Tree)
-                  => [DarcsFlag] -> FL (PatchInfoAnd p) wX wY -> Doc ->
+writeBundleToFile :: forall rt p wX wY . (RepoPatch p, ApplyState p ~ Tree)
+                  => [DarcsFlag] -> FL (PatchInfoAnd rt p) wX wY -> Doc ->
                     AbsolutePathOrStd -> [WhatToDo] -> String -> IO ()
 writeBundleToFile opts to_be_sent bundle fname wtds their_name =
     do (d,f,_) <- getDescription opts their_name to_be_sent
@@ -436,7 +435,7 @@ collectTargets flags = [ f t | t <- O._to (O.headerFields ? flags) ] where
     f em = SendMail em
 
 getDescription :: RepoPatch p
-               => [DarcsFlag] -> String -> FL (PatchInfoAnd p) wX wY -> IO (Doc, Maybe String, Maybe String)
+               => [DarcsFlag] -> String -> FL (PatchInfoAnd rt p) wX wY -> IO (Doc, Maybe String, Maybe String)
 getDescription opts their_name patches =
     case get_filename of
         Just file -> do

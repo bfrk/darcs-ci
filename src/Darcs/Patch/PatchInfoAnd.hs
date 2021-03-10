@@ -63,6 +63,7 @@ import Darcs.Patch.FromPrim ( PrimPatchBase(..) )
 import Darcs.Patch.Read ( ReadPatch(..) )
 import Darcs.Patch.Show ( ShowPatch(..) )
 import Darcs.Patch.Repair ( Repair(..), RepairToFL )
+import Darcs.Patch.RepoType ( RepoType(..) )
 import Darcs.Patch.Show ( ShowPatchBasic(..), ShowContextPatch(..) )
 import Darcs.Patch.Summary ( Summary )
 import Darcs.Patch.Witnesses.Eq ( Eq2(..), EqCheck(..) )
@@ -97,12 +98,12 @@ data Hopefully a wX wY
 data SimpleHopefully a wX wY = Actually (a wX wY) | Unavailable String
     deriving Show
 
-type PatchInfoAnd p = PatchInfoAndG (Named p)
+type PatchInfoAnd rt p = PatchInfoAndG rt (Named p)
 
 -- | @'PatchInfoAnd' p wA wB@ represents a hope we have to get a
 -- patch through its info. We're not sure we have the patch, but we
 -- know its info.
-data PatchInfoAndG p wA wB =
+data PatchInfoAndG (rt :: RepoType) p wA wB =
   PIAP !PatchInfo
        (Hopefully p wA wB)
   deriving (Show)
@@ -128,39 +129,39 @@ fmapH f (Hashed h sh) = Hashed h (ff sh)
     where ff (Actually a) = Actually (f a)
           ff (Unavailable e) = Unavailable e
 
-info :: PatchInfoAndG p wA wB -> PatchInfo
+info :: PatchInfoAndG rt p wA wB -> PatchInfo
 info (PIAP i _) = i
 
-patchDesc :: forall p wX wY . PatchInfoAnd p wX wY -> String
+patchDesc :: forall rt p wX wY . PatchInfoAnd rt p wX wY -> String
 patchDesc p = justName $ info p
 
-winfo :: PatchInfoAnd p wA wB -> WPatchInfo wA wB
+winfo :: PatchInfoAnd rt p wA wB -> WPatchInfo wA wB
 winfo (PIAP i _) = WPatchInfo i
 
 -- | @'piap' i p@ creates a PatchInfoAnd containing p with info i.
-piap :: PatchInfo -> p wA wB -> PatchInfoAndG p wA wB
+piap :: PatchInfo -> p wA wB -> PatchInfoAndG rt p wA wB
 piap i p = PIAP i (Hopefully $ Actually p)
 
 -- | @n2pia@ creates a PatchInfoAnd representing a @Named@ patch.
-n2pia :: (Ident p, PatchId p ~ PatchInfo) => p wX wY -> PatchInfoAndG p wX wY
+n2pia :: (Ident p, PatchId p ~ PatchInfo) => p wX wY -> PatchInfoAndG rt p wX wY
 n2pia x = ident x `piap` x
 
-patchInfoAndPatch :: PatchInfo -> Hopefully p wA wB -> PatchInfoAndG p wA wB
+patchInfoAndPatch :: PatchInfo -> Hopefully p wA wB -> PatchInfoAndG rt p wA wB
 patchInfoAndPatch =  PIAP
 
 fmapFLPIAP :: (FL p wX wY -> FL q wX wY)
-           -> PatchInfoAnd p wX wY -> PatchInfoAnd q wX wY
+           -> PatchInfoAnd rt p wX wY -> PatchInfoAnd rt q wX wY
 fmapFLPIAP f (PIAP i hp) = PIAP i (fmapH (fmapFL_Named f) hp)
 
 fmapPIAP :: (p wX wY -> q wX wY)
-           -> PatchInfoAndG p wX wY -> PatchInfoAndG q wX wY
+           -> PatchInfoAndG rt p wX wY -> PatchInfoAndG rt q wX wY
 fmapPIAP f (PIAP i hp) = PIAP i (fmapH f hp)
 
 -- | @'hopefully' hp@ tries to get a patch from a 'PatchInfoAnd'
 -- value. If it fails, it outputs an error \"failed to read patch:
 -- \<description of the patch>\". We get the description of the patch
 -- from the info part of 'hp'
-hopefully :: PatchInfoAndG p wA wB -> p wA wB
+hopefully :: PatchInfoAndG rt p wA wB -> p wA wB
 hopefully = conscientiously $ \e -> text "failed to read patch:" $$ e
 
 -- | Using a special exception type here means that is is treated as
@@ -179,7 +180,7 @@ instance Show PatchNotAvailable where
 -- Note: this function must be lazy in its second argument, which is why we
 -- use a lazy pattern match.
 conscientiously :: (Doc -> Doc)
-                -> PatchInfoAndG p wA wB -> p wA wB
+                -> PatchInfoAndG rt p wA wB -> p wA wB
 conscientiously er ~(PIAP pinf hp) =
     case hopefully2either hp of
       Right p -> p
@@ -187,7 +188,7 @@ conscientiously er ~(PIAP pinf hp) =
 
 -- | @hopefullyM@ is a version of @hopefully@ which calls @fail@ in a
 -- monad instead of erroring.
-hopefullyM :: PatchInfoAndG p wA wB -> Maybe (p wA wB)
+hopefullyM :: PatchInfoAndG rt p wA wB -> Maybe (p wA wB)
 hopefullyM (PIAP _ hp) = case hopefully2either hp of
                               Right p -> return p
                               Left _ -> Nothing
@@ -209,7 +210,7 @@ createHashed h f = mapSeal (Hashed h) `fmap` unsafeInterleaveIO (f' `catchNonSig
           return (Sealed (Actually x))
   handler e = return $ seal $ Unavailable $ prettyException e
 
-extractHash :: PatchInfoAndG p wA wB -> Either (p wA wB) String
+extractHash :: PatchInfoAndG rt p wA wB -> Either (p wA wB) String
 extractHash (PIAP _ (Hashed s _)) = Right s
 extractHash hp = Left $ conscientiously (\e -> text "unable to read patch:" $$ e) hp
 
@@ -218,11 +219,11 @@ unavailable = Hopefully . Unavailable
 
 -- * Instances defined only for PatchInfoAnd
 
-instance Show2 p => Show1 (PatchInfoAnd p wX)
+instance Show2 p => Show1 (PatchInfoAnd rt p wX)
 
-instance Show2 p => Show2 (PatchInfoAnd p)
+instance Show2 p => Show2 (PatchInfoAnd rt p)
 
-instance RepairToFL p => Repair (PatchInfoAnd p) where
+instance RepairToFL p => Repair (PatchInfoAnd rt p) where
     applyAndTryToFix p = do mp' <- applyAndTryToFix $ hopefully p
                             case mp' of
                               Nothing -> return Nothing
@@ -230,38 +231,38 @@ instance RepairToFL p => Repair (PatchInfoAnd p) where
 
 -- * Instances defined for PatchInfoAndG
 
-instance PrimPatchBase p => PrimPatchBase (PatchInfoAndG p) where
-   type PrimOf (PatchInfoAndG p) = PrimOf p
+instance PrimPatchBase p => PrimPatchBase (PatchInfoAndG rt p) where
+   type PrimOf (PatchInfoAndG rt p) = PrimOf p
 
 -- Equality on PatchInfoAndG is solely determined by the PatchInfo
 -- It is a global invariant of darcs that once a patch is recorded,
 -- it should always have the same representation in the same context.
-instance Eq2 (PatchInfoAndG p) where
+instance Eq2 (PatchInfoAndG rt p) where
     unsafeCompare (PIAP i _) (PIAP i2 _) = i == i2
 
-type instance PatchId (PatchInfoAndG p) = PatchInfo
+type instance PatchId (PatchInfoAndG rt p) = PatchInfo
 
-instance Ident (PatchInfoAndG p) where
+instance Ident (PatchInfoAndG rt p) where
     ident (PIAP i _) = i
 
-instance IdEq2 (PatchInfoAndG p)
+instance IdEq2 (PatchInfoAndG rt p)
 
-instance PatchListFormat (PatchInfoAndG p)
+instance PatchListFormat (PatchInfoAndG rt p)
 
-instance ShowPatchBasic p => ShowPatchBasic (PatchInfoAndG p) where
+instance ShowPatchBasic p => ShowPatchBasic (PatchInfoAndG rt p) where
     showPatch f (PIAP n p) =
       case hopefully2either p of
         Right x -> showPatch f x
         Left _ -> showPatchInfo f n
 
-instance ShowContextPatch p => ShowContextPatch (PatchInfoAndG p) where
+instance ShowContextPatch p => ShowContextPatch (PatchInfoAndG rt p) where
   showContextPatch f (PIAP n p) =
     case hopefully2either p of
       Right x -> showContextPatch f x
       Left _ -> return $ showPatchInfo f n
 
 instance (Summary p, PatchListFormat p,
-          ShowPatch p) => ShowPatch (PatchInfoAndG p) where
+          ShowPatch p) => ShowPatch (PatchInfoAndG rt p) where
     description (PIAP n _) = displayPatchInfo n
     summary (PIAP _ p) =
       case hopefully2either p of
@@ -273,47 +274,47 @@ instance (Summary p, PatchListFormat p,
         Right x -> content x
         Left _ -> text $ "[patch content is unavailable]"
 
-instance (PatchId p ~ PatchInfo, Commute p) => Commute (PatchInfoAndG p) where
+instance (PatchId p ~ PatchInfo, Commute p) => Commute (PatchInfoAndG rt p) where
     commute (x :> y) = do y' :> x' <- commute (hopefully x :> hopefully y)
                           return $ (ident y `piap` y') :> (ident x `piap` x')
 
 instance (PatchId p ~ PatchInfo, CleanMerge p) =>
-         CleanMerge (PatchInfoAndG p) where
+         CleanMerge (PatchInfoAndG rt p) where
     cleanMerge (x :\/: y)
       | ident x == ident y = error "cannot cleanMerge identical PatchInfoAndG"
       | otherwise = do
           y' :/\: x' <- cleanMerge (hopefully x :\/: hopefully y)
           return $ (ident y `piap` y') :/\: (ident x `piap` x')
 
-instance (PatchId p ~ PatchInfo, Merge p) => Merge (PatchInfoAndG p) where
+instance (PatchId p ~ PatchInfo, Merge p) => Merge (PatchInfoAndG rt p) where
     merge (x :\/: y)
       | ident x == ident y = error "cannot merge identical PatchInfoAndG"
       | otherwise =
           case merge (hopefully x :\/: hopefully y) of
             y' :/\: x' -> (ident y `piap` y') :/\: (ident x `piap` x')
 
-instance PatchInspect p => PatchInspect (PatchInfoAndG p) where
+instance PatchInspect p => PatchInspect (PatchInfoAndG rt p) where
     listTouchedFiles = listTouchedFiles . hopefully
     hunkMatches f = hunkMatches f . hopefully
 
-instance Apply p => Apply (PatchInfoAndG p) where
-    type ApplyState (PatchInfoAndG p) = ApplyState p
+instance Apply p => Apply (PatchInfoAndG rt p) where
+    type ApplyState (PatchInfoAndG rt p) = ApplyState p
     apply = apply . hopefully
     unapply = unapply .hopefully
 
 instance ( ReadPatch p, Ident p, PatchId p ~ PatchInfo
-         ) => ReadPatch (PatchInfoAndG p) where
+         ) => ReadPatch (PatchInfoAndG rt p) where
     readPatch' = mapSeal n2pia <$> readPatch'
 
-instance Effect p => Effect (PatchInfoAndG p) where
+instance Effect p => Effect (PatchInfoAndG rt p) where
     effect = effect . hopefully
 
-instance IsHunk (PatchInfoAndG p) where
+instance IsHunk (PatchInfoAndG rt p) where
     isHunk _ = Nothing
 
-instance PatchDebug p => PatchDebug (PatchInfoAndG p)
+instance PatchDebug p => PatchDebug (PatchInfoAndG rt p)
 
-instance (Commute p, Conflict p) => Conflict (PatchInfoAnd p) where
+instance (Commute p, Conflict p) => Conflict (PatchInfoAnd rt p) where
     -- Note: this relies on the laziness of 'hopefully' for efficiency
     -- and correctness in the face of lazy repositories
     resolveConflicts context patches =

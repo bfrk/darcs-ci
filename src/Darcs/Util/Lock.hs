@@ -309,7 +309,7 @@ worldReadableTemp f = wrt 0
 
 withNamedTemp :: FilePath -> (FilePath -> IO a) -> IO a
 withNamedTemp n f = do
-    -- debugMessage $ "withNamedTemp: " ++ show n
+    debugMessage $ "withNamedTemp: " ++ show n
     bracket (worldReadableTemp n) removeFileMayNotExist f
 
 readBinFile :: FilePathLike p => p -> IO B.ByteString

@@ -12,6 +12,7 @@ import Darcs.Patch.Witnesses.Unsafe ( unsafeCoerceP )
 
 import Darcs.Patch.V2 ( RepoPatchV2 )
 import qualified Darcs.Patch.V2.Prim as V2
+import Darcs.Patch.RepoType ( RepoType(..), RebaseType(..) )
 
 import Darcs.UI.SelectChanges
     ( PatchSelectionOptions(..)
@@ -44,7 +45,7 @@ dontReadContents whch =
        launchNuclearMissilesPatches = unsafeCoerceP $ lnmPatches [ "P " ++ show i | i <- [1..5::Int] ]
        lnmPatches [] = NilFL
        lnmPatches (n:names) = buildPatch n  :>: lnmPatches names
-       buildPatch :: String -> PatchInfoAnd Patch wX wY
+       buildPatch :: String -> PatchInfoAnd ('RepoType 'NoRebase) Patch wX wY
        buildPatch name = patchInfoAndPatch (rawPatchInfo "1999" name "harness" [] False) (error "Patch content read!")
        pso = PatchSelectionOptions
            { verbosity = Quiet

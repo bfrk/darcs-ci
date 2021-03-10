@@ -100,7 +100,11 @@ import Data.Char ( toLower )
 import Data.Typeable ( Typeable )
 
 import Darcs.Util.Path ( AbsolutePath )
-import Darcs.Patch ( hunkMatches, listTouchedFiles )
+import Darcs.Patch
+    ( IsRepoType
+    , hunkMatches
+    , listTouchedFiles
+    )
 import Darcs.Patch.Info ( justName, justAuthor, justLog, makePatchname,
                           piDate, piTag )
 
@@ -140,7 +144,7 @@ type Matchable p =
   , PatchId p ~ PatchInfo
   )
 
--- | Constraint for a patch type @p@ that ensures @'PatchInfoAnd' p@
+-- | Constraint for a patch type @p@ that ensures @'PatchInfoAnd' rt p@
 -- is 'Matchable'.
 type MatchableRP p =
   ( Apply p
@@ -523,8 +527,8 @@ hasIndexRange (_:fs) = hasIndexRange fs
 -- patches in @matchFirstPatchset fs ps@ are the context for the ones
 -- we don't want.
 matchFirstPatchset :: MatchableRP p
-                   => [MatchFlag] -> PatchSet p wStart wX
-                   -> Maybe (SealedPatchSet p wStart)
+                   => [MatchFlag] -> PatchSet rt p wStart wX
+                   -> Maybe (SealedPatchSet rt p wStart)
 matchFirstPatchset fs patchset
   | Just n <- hasLastn fs = Just $ patchSetDrop n patchset
   | Just (_, b) <- hasIndexRange fs = Just $ patchSetDrop b patchset
@@ -538,8 +542,8 @@ matchFirstPatchset fs patchset
 -- | @matchSecondPatchset fs ps@ returns the part of @ps@ before its
 -- second matcher, ie the one that comes last dependencywise.
 matchSecondPatchset :: MatchableRP p
-                    => [MatchFlag] -> PatchSet p wStart wX
-                    -> Maybe (SealedPatchSet p wStart)
+                    => [MatchFlag] -> PatchSet rt p wStart wX
+                    -> Maybe (SealedPatchSet rt p wStart)
 matchSecondPatchset fs ps
   | Just (a, _) <- hasIndexRange fs = Just $ patchSetDrop (a - 1) ps
   | Just m <- secondMatcher fs =
@@ -599,8 +603,8 @@ instance Show MatchFailure where
 matchAPatchset
   :: MatchableRP p
   => Matcher
-  -> PatchSet p wStart wX
-  -> SealedPatchSet p wStart
+  -> PatchSet rt p wStart wX
+  -> SealedPatchSet rt p wStart
 matchAPatchset m (PatchSet NilRL NilRL) =
   throw $ MatchFailure $ show m
 matchAPatchset m (PatchSet (ts :<: Tagged t _ ps) NilRL) =
@@ -611,8 +615,8 @@ matchAPatchset m (PatchSet ts (ps :<: p))
 
 splitOnMatchingTag :: MatchableRP p
                    => Matcher
-                   -> PatchSet p wStart wX
-                   -> PatchSet p wStart wX
+                   -> PatchSet rt p wStart wX
+                   -> PatchSet rt p wStart wX
 splitOnMatchingTag _ s@(PatchSet NilRL NilRL) = s
 splitOnMatchingTag m s@(PatchSet (ts :<: Tagged t _ ps) NilRL)
     | applyMatcher m t = s
@@ -634,8 +638,8 @@ splitOnMatchingTag m (PatchSet ts (ps:<:p))
 -- 'error' if there is no matching tag.
 getMatchingTag :: MatchableRP p
                => Matcher
-               -> PatchSet p wStart wX
-               -> SealedPatchSet p wStart
+               -> PatchSet rt p wStart wX
+               -> SealedPatchSet rt p wStart
 getMatchingTag m ps =
   case splitOnMatchingTag m ps of
     PatchSet NilRL _ -> throw $ userError $ "Couldn't find a tag matching " ++ show m
@@ -648,10 +652,10 @@ getMatchingTag m ps =
 -- patches that are not depended on by the tag; otherwise rollback patches that
 -- follow the latest matching patch.
 rollbackToPatchSetMatch :: ( ApplyMonad (ApplyState p) m
-                           , MatchableRP p, ApplyState p ~ Tree
+                           , IsRepoType rt, MatchableRP p, ApplyState p ~ Tree
                            )
                         => PatchSetMatch
-                        -> PatchSet p Origin wX
+                        -> PatchSet rt p Origin wX
                         -> m ()
 rollbackToPatchSetMatch psm repo =
   case psm of
@@ -665,9 +669,9 @@ rollbackToPatchSetMatch psm repo =
 
 -- | @applyInvToMatcher@ m ps applies the inverse of the patches in @ps@,
 -- starting at the end, until we hit a patch that matches the 'Matcher' @m@.
-applyInvToMatcher :: (MatchableRP p, ApplyMonad (ApplyState p) m)
+applyInvToMatcher :: (IsRepoType rt, MatchableRP p, ApplyMonad (ApplyState p) m)
                   => Matcher
-                  -> PatchSet p Origin wX
+                  -> PatchSet rt p Origin wX
                   -> m ()
 applyInvToMatcher m (PatchSet NilRL NilRL) =
   throw $ MatchFailure $ show m
@@ -678,8 +682,8 @@ applyInvToMatcher m (PatchSet xs (ps :<: p))
   | otherwise = applyInvp p >> applyInvToMatcher m (PatchSet xs ps)
 
 -- | @applyNInv@ n ps applies the inverse of the last @n@ patches of @ps@.
-applyNInv :: (MatchableRP p, ApplyMonad (ApplyState p) m)
-          => Int -> PatchSet p Origin wX -> m ()
+applyNInv :: (IsRepoType rt, MatchableRP p, ApplyMonad (ApplyState p) m)
+          => Int -> PatchSet rt p Origin wX -> m ()
 applyNInv n _ | n <= 0 = return ()
 applyNInv _ (PatchSet NilRL NilRL) = throw $ userError "Index out of range"
 applyNInv n (PatchSet (ts :<: Tagged t _ ps) NilRL) =
@@ -691,7 +695,7 @@ applyNInv n (PatchSet xs (ps :<: p)) =
 -- patch', and to apply its inverse. If we fail to fetch the patch
 -- then we share our sorrow with the user.
 applyInvp :: (Apply p, ApplyMonad (ApplyState p) m)
-          => PatchInfoAnd p wX wY -> m ()
+          => PatchInfoAnd rt p wX wY -> m ()
 applyInvp = unapply . fromHopefully
     where fromHopefully = conscientiously $ \e ->
                      text "Sorry, patch not available:"
@@ -702,15 +706,15 @@ applyInvp = unapply . fromHopefully
 
 -- | matchingHead returns the repository up to some tag. The tag t is the last
 -- tag such that there is a patch after t that is matched by the user's query.
-matchingHead :: forall p wR. MatchableRP p
-             => [MatchFlag] -> PatchSet p Origin wR
-             -> (PatchSet p :> FL (PatchInfoAnd p)) Origin wR
+matchingHead :: forall rt p wR. MatchableRP p
+             => [MatchFlag] -> PatchSet rt p Origin wR
+             -> (PatchSet rt p :> FL (PatchInfoAnd rt p)) Origin wR
 matchingHead matchFlags set =
     case mh set of
         (start :> patches) -> start :> reverseRL patches
   where
-    mh :: forall wX . PatchSet p Origin wX
-       -> (PatchSet p :> RL (PatchInfoAnd p)) Origin wX
+    mh :: forall wX . PatchSet rt p Origin wX
+       -> (PatchSet rt p :> RL (PatchInfoAnd rt p)) Origin wX
     mh s@(PatchSet _ x)
         | or (mapRL (matchAPatch matchFlags) x) = contextPatches s
     mh (PatchSet (ts :<: Tagged t _ ps) x) =

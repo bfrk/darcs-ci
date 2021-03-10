@@ -296,7 +296,7 @@ abortRun flags msg = if parseFlags dryRun flags == YesDryRun
 
 -- | Set the DARCS_PATCHES and DARCS_PATCHES_XML environment variables with
 -- info about the given patches, for use in post-hooks.
-setEnvDarcsPatches :: RepoPatch p => FL (PatchInfoAnd p) wX wY -> IO ()
+setEnvDarcsPatches :: RepoPatch p => FL (PatchInfoAnd rt p) wX wY -> IO ()
 setEnvDarcsPatches ps = do
     let k = "Defining set of chosen patches"
     let filepaths = map (anchorPath ".") (listTouchedFiles ps)

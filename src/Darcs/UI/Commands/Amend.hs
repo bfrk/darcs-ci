@@ -55,8 +55,8 @@ import Darcs.UI.PatchHeader ( updatePatchHeader, AskAboutDeps(..)
                             , HijackOptions(..)
                             , runHijackT )
 
-import Darcs.Repository.Flags ( UpdatePending(..) )
-import Darcs.Patch ( RepoPatch, description, PrimOf
+import Darcs.Repository.Flags ( UpdatePending(..), DryRun(NoDryRun) )
+import Darcs.Patch ( IsRepoType, RepoPatch, description, PrimOf
                    , effect, invert, invertFL, sortCoalesceFL
                    )
 import Darcs.Patch.Apply ( ApplyState )
@@ -72,7 +72,6 @@ import Darcs.Patch.Rebase.Name ( RebaseName(..) )
 import Darcs.Util.Path ( AnchoredPath )
 import Darcs.Repository
     ( Repository
-    , AccessType(..)
     , withRepoLock
     , RepoJob(..)
     , identifyRepositoryFor
@@ -191,8 +190,8 @@ amendrecord = commandAlias "amend-record" Nothing amend
 
 doAmend :: Config -> Maybe [AnchoredPath] -> IO ()
 doAmend cfg files =
-  withRepoLock (O.useCache ? cfg) (O.umask ? cfg) $
-      RebaseAwareJob $ \(repository :: Repository 'RW p wR wU wR) -> do
+  withRepoLock NoDryRun (O.useCache ? cfg) YesUpdatePending (O.umask ? cfg) $
+      RebaseAwareJob $ \(repository :: Repository rt p wR wU wR) -> do
     patchSet <- readPatches repository
     FlippedSeal patches <- filterNotInRemote cfg repository patchSet
     withSelectedPatchFromList "amend" patches (patchSelOpts cfg) $ \ (_ :> oldp) -> do
@@ -243,10 +242,11 @@ doAmend cfg files =
                            go NilFL
 
 
-addChangesToPatch :: (RepoPatch p, ApplyState p ~ Tree)
+addChangesToPatch :: forall rt p wR wU wT wX wY wP
+                   . (IsRepoType rt, RepoPatch p, ApplyState p ~ Tree)
                   => Config
-                  -> Repository 'RW p wR wU wT
-                  -> PatchInfoAnd p wX wT
+                  -> Repository rt p wR wU wT
+                  -> PatchInfoAnd rt p wX wT
                   -> FL (PrimOf p) wT wY
                   -> FL (PrimOf p) wT wP
                   -> FL (PrimOf p) wP wU
@@ -314,18 +314,18 @@ addChangesToPatch cfg _repository oldp chs pending working =
       tentativelyRemoveFromPW _repository chs pending working
       _repository <-
         finalizeRepositoryChanges _repository YesUpdatePending (O.compress ? cfg)
-          (O.dryRun ? cfg) `clarifyErrors` failmsg
+          `clarifyErrors` failmsg
       case O.verbosity ? cfg of
         O.NormalVerbosity -> putDocLn "Finished amending patch."
         O.Verbose -> putDocLn $ "Finished amending patch:" $$ description newp
         _ -> return ()
       setEnvDarcsPatches (newp :>: NilFL)
 
-filterNotInRemote :: RepoPatch p
+filterNotInRemote :: (IsRepoType rt, RepoPatch p)
                   => Config
-                  -> Repository 'RW p wR wU wT
-                  -> PatchSet p Origin wR
-                  -> IO (FlippedSeal (RL (PatchInfoAnd p)) wR)
+                  -> Repository rt p wR wU wT
+                  -> PatchSet rt p Origin wR
+                  -> IO (FlippedSeal (RL (PatchInfoAnd rt p)) wR)
 filterNotInRemote cfg repository patchSet = do
     nirs <- mapM getNotInRemotePath (O.notInRemote ? cfg)
     if null nirs

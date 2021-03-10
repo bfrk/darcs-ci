@@ -393,7 +393,7 @@ main = do hSetBinaryMode stdout True
           clp  <- cmdArgs_ defaultConfigAnn
           run $
             if full clp then clp
-              { suites   = "snu"
+              { suites   = "snuh"
               , formats  = "123"
               , diffalgs = "mp"
               , index = "yn"

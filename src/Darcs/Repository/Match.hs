@@ -33,7 +33,7 @@ import Darcs.Patch.Match
 import Darcs.Patch.Bundle ( readContextFile )
 import Darcs.Patch.ApplyMonad ( ApplyMonad(..) )
 import Darcs.Patch.Apply( ApplyState )
-import Darcs.Patch ( RepoPatch )
+import Darcs.Patch ( RepoPatch, IsRepoType )
 import Darcs.Patch.Set ( Origin, PatchSet(..), SealedPatchSet, patchSetDrop )
 
 import Darcs.Repository.Flags
@@ -50,16 +50,16 @@ import Darcs.Util.Path ( toFilePath )
 -- | Create a new pristine and working tree in the current working directory,
 -- corresponding to the state of the 'PatchSet' returned by 'getOnePatchSet'
 -- for the same 'PatchSetMatch'.
-getRecordedUpToMatch :: (ApplyMonad (ApplyState p) DefaultIO, RepoPatch p, ApplyState p ~ Tree)
+getRecordedUpToMatch :: (ApplyMonad (ApplyState p) DefaultIO, IsRepoType rt, RepoPatch p, ApplyState p ~ Tree)
                      => Repository rt p wR wU wT
                      -> PatchSetMatch
                      -> IO ()
 getRecordedUpToMatch r = withRecordedMatch r . rollbackToPatchSetMatch
 
-getOnePatchset :: RepoPatch p
+getOnePatchset :: (IsRepoType rt, RepoPatch p)
                => Repository rt p wR wU wR
                -> PatchSetMatch
-               -> IO (SealedPatchSet p Origin)
+               -> IO (SealedPatchSet rt p Origin)
 getOnePatchset repository pm =
   case pm of
     IndexMatch n -> patchSetDrop (n-1) <$> readPatches repository
@@ -69,9 +69,9 @@ getOnePatchset repository pm =
       ref <- readPatches repository
       readContextFile ref (toFilePath path)
 
-withRecordedMatch :: RepoPatch p
+withRecordedMatch :: (IsRepoType rt, RepoPatch p)
                   => Repository rt p wR wU wT
-                  -> (PatchSet p Origin wR -> DefaultIO ())
+                  -> (PatchSet rt p Origin wR -> DefaultIO ())
                   -> IO ()
 withRecordedMatch r job
     = do createPristineDirectoryTree r "." WithWorkingDir

@@ -51,7 +51,7 @@ import Darcs.Repository
     , unrecordedChanges
     , withRepoLock
     )
-import Darcs.Repository.Flags( UpdatePending(..) )
+import Darcs.Repository.Flags( UpdatePending(..), DryRun(NoDryRun) )
 import Darcs.Util.Lock( writeDocBinFile )
 import Darcs.UI.Commands ( DarcsCommand(..), withStdOpts, nodefaults, commandAlias
                          , putVerbose
@@ -119,7 +119,7 @@ unrecord = DarcsCommand
 
 unrecordCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 unrecordCmd _ opts _ =
-    withRepoLock (useCache ? opts) (umask ? opts) $
+    withRepoLock NoDryRun (useCache ? opts) YesUpdatePending (umask ? opts) $
         RepoJob $ \_repository -> do
             (_ :> removal_candidates) <- preselectPatches opts _repository
             let direction = if changesReverse ? opts then Last else LastReversed
@@ -134,8 +134,7 @@ unrecordCmd _ opts _ =
             setEnvDarcsPatches to_unrecord
             _repository <- tentativelyRemovePatches _repository (compress ? opts)
                      YesUpdatePending to_unrecord
-            _ <- finalizeRepositoryChanges _repository YesUpdatePending
-                  (compress ? opts) (O.dryRun ? opts)
+            _ <- finalizeRepositoryChanges _repository YesUpdatePending (compress ? opts)
             putInfo opts "Finished unrecording."
 
 unpullDescription :: String
@@ -220,7 +219,7 @@ genericObliterateCmd :: String
 genericObliterateCmd cmdname _ opts _ =
     let cacheOpt = useCache ? opts
         verbOpt = verbosity ? opts
-    in withRepoLock cacheOpt (umask ? opts) $
+    in withRepoLock (dryRun ? opts) cacheOpt YesUpdatePending (umask ? opts) $
         RepoJob $ \_repository -> do
             -- FIXME we may need to honour --ignore-times here, although this
             -- command does not take that option (yet)
@@ -262,15 +261,15 @@ genericObliterateCmd cmdname _ opts _ =
                     tentativelyAddToPending _repository $ invert $ effect removed
                     withSignalsBlocked $ do
                         _repository <- finalizeRepositoryChanges _repository
-                                        YesUpdatePending (compress ? opts) (O.dryRun ? opts)
+                                        YesUpdatePending (compress ? opts)
                         debugMessage "Applying patches to working tree..."
                         void $ applyToWorking _repository verbOpt (invert p_after_pending)
                     putFinished opts (presentParticiple cmdname)
 
 savetoBundle :: (RepoPatch p, ApplyState p ~ Tree)
              => [DarcsFlag]
-             -> FL (PatchInfoAnd p) wX wR
-             -> PatchSet p Origin wR
+             -> FL (PatchInfoAnd rt p) wX wR
+             -> PatchSet rt p Origin wR
              -> IO ()
 savetoBundle _ NilFL _ = return ()
 savetoBundle opts removed@(x :>: _) orig = do

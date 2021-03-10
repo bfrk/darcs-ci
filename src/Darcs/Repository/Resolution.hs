@@ -94,8 +94,8 @@ data StandardResolution prim wX =
   }
 
 standardResolution :: (Commute p, PrimPatchBase p, Conflict p)
-                   => RL (PatchInfoAnd p) wO wX
-                   -> RL (PatchInfoAnd p) wX wY
+                   => RL (PatchInfoAnd rt p) wO wX
+                   -> RL (PatchInfoAnd rt p) wX wY
                    -> StandardResolution (PrimOf p) wY
 standardResolution context interesting =
   case mergeList $ catMaybes $ map conflictMangled conflicts of
@@ -227,7 +227,7 @@ run c replacements =
           rr [] = return ExitSuccess
 
 patchsetConflictResolutions :: RepoPatch p
-                            => PatchSet p Origin wX
+                            => PatchSet rt p Origin wX
                             -> StandardResolution (PrimOf p) wX
 patchsetConflictResolutions (PatchSet ts xs) =
   -- optimization: all patches before the latest known clean tag

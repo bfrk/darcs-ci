@@ -48,6 +48,7 @@ import Darcs.UI.Flags
 import Darcs.UI.Options ( (^), (?) )
 import qualified Darcs.UI.Options.All as O
 
+import Darcs.Repository.Flags ( UpdatePending (..) )
 import Darcs.Repository
     ( withRepoLock
     , RepoJob(..)
@@ -125,7 +126,7 @@ markconflictsCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> I
 markconflictsCmd fps opts args = do
   paths <- maybeToOnly <$> pathSetFromArgs fps args
   debugDocLn $ "::: paths =" <+>  (text . show) paths
-  withRepoLock (useCache ? opts) (umask ? opts) $
+  withRepoLock (dryRun ? opts) (useCache ? opts) YesUpdatePending (umask ? opts) $
     RepoJob $ \_repository -> do
 
 {-

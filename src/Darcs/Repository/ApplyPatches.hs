@@ -61,7 +61,7 @@ import Darcs.Util.Progress ( beginTedious, endTedious, finishedOneIO, tediousSiz
 import Darcs.Util.Tree ( Tree )
 
 applyPatches :: (MonadProgress m, ApplyMonad (ApplyState p) m, Apply p)
-             => FL (PatchInfoAnd p) wX wY -> m ()
+             => FL (PatchInfoAnd rt p) wX wY -> m ()
 applyPatches ps = runProgressActions "Applying patch" (mapFL doApply ps)
   where
     doApply hp = ProgressAction { paAction = apply (hopefully hp)

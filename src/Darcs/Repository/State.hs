@@ -79,12 +79,8 @@ import Darcs.Repository.Flags
     , UseIndex(..)
     , DiffOpts(..)
     )
-import Darcs.Repository.InternalTypes
-    ( AccessType(..)
-    , Repository
-    , repoFormat
-    , repoLocation
-    )
+
+import Darcs.Repository.InternalTypes ( Repository, repoFormat, repoLocation )
 import Darcs.Repository.Format(formatHas, RepoProperty(NoWorkingDir))
 import qualified Darcs.Repository.Pending as Pending
 import Darcs.Repository.Prefs ( filetypeFunction, isBoring )
@@ -509,10 +505,10 @@ filterOutConflicts
                                   --  unrecorded changes
   -> UseIndex                     -- ^Whether to use the index when reading
                                   --  the working state
-  -> FL (PatchInfoAnd p) wX wR -- ^Recorded patches from repository, starting from
+  -> FL (PatchInfoAnd rt p) wX wR -- ^Recorded patches from repository, starting from
                                   --  same context as the patches to filter
-  -> FL (PatchInfoAnd p) wX wZ -- ^Patches to filter
-  -> IO (Bool, Sealed (FL (PatchInfoAnd p) wX))
+  -> FL (PatchInfoAnd rt p) wX wZ -- ^Patches to filter
+  -> IO (Bool, Sealed (FL (PatchInfoAnd rt p) wX))
                                   -- ^True iff any patches were removed,
                                   --  possibly filtered patches
 filterOutConflicts repository useidx us them
@@ -705,7 +701,7 @@ getReplaces YesLookForReplaces diffalg _repo pending working = do
 -- TODO: add witnesses for pending so we can make the types precise: currently
 -- the passed patch can be applied in any context, not just after pending.
 addPendingDiffToPending :: (RepoPatch p, ApplyState p ~ Tree)
-                        => Repository 'RW p wR wU wR
+                        => Repository rt p wR wU wR
                         -> FreeLeft (FL (PrimOf p)) -> IO ()
 addPendingDiffToPending repo newP = do
     (_, Sealed toPend) <- readPending repo
@@ -721,7 +717,7 @@ addPendingDiffToPending repo newP = do
 -- changes between pending and working as is possible, and including anything
 -- that doesn't commute, and the patch itself in the new pending patch.
 addToPending :: (RepoPatch p, ApplyState p ~ Tree)
-             => Repository 'RW p wR wU wR
+             => Repository rt p wR wU wR
              -> DiffOpts
              -> FL (PrimOf p) wU wY -> IO ()
 addToPending repo dopts p = do

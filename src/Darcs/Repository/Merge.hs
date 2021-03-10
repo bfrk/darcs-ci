@@ -37,7 +37,7 @@ import Darcs.Util.Tree( Tree )
 import Darcs.Util.External ( backupByCopying )
 
 import Darcs.Patch
-    ( RepoPatch, PrimOf, merge
+    ( RepoPatch, IsRepoType, PrimOf, merge
     , effect
     , listConflictedFiles )
 import Darcs.Patch.Apply ( ApplyState )
@@ -223,16 +223,16 @@ drop anything we don't need.
 TODO: We should return a properly coerced @Repository rt p wR wU wT@.
 -}
 
-tentativelyMergePatches_ :: (RepoPatch p, ApplyState p ~ Tree)
+tentativelyMergePatches_ :: (IsRepoType rt, RepoPatch p, ApplyState p ~ Tree)
                          => MakeChanges
                          -> Repository rt p wR wU wR -> String
                          -> AllowConflicts
                          -> ExternalMerge -> WantGuiPause
                          -> Compression -> Verbosity -> Reorder
                          -> DiffOpts
-                         -> Fork (PatchSet p)
-                                 (FL (PatchInfoAnd p))
-                                 (FL (PatchInfoAnd p)) Origin wR wY
+                         -> Fork (PatchSet rt p)
+                                 (FL (PatchInfoAnd rt p))
+                                 (FL (PatchInfoAnd rt p)) Origin wR wY
                          -> IO (Sealed (FL (PrimOf p) wU))
 tentativelyMergePatches_ mc _repo cmd allowConflicts externalMerge wantGuiPause
   compression verbosity reorder diffingOpts@DiffOpts{..} (Fork context us them) = do
@@ -317,27 +317,27 @@ tentativelyMergePatches_ mc _repo cmd allowConflicts externalMerge wantGuiPause
         setTentativePending _repo (effect pw' +>+ resolution)
     return $ seal (effect them''content +>+ resolution)
 
-tentativelyMergePatches :: (RepoPatch p, ApplyState p ~ Tree)
+tentativelyMergePatches :: (IsRepoType rt, RepoPatch p, ApplyState p ~ Tree)
                         => Repository rt p wR wU wR -> String
                         -> AllowConflicts
                         -> ExternalMerge -> WantGuiPause
                         -> Compression -> Verbosity -> Reorder
                         -> DiffOpts
-                        -> Fork (PatchSet p)
-                                (FL (PatchInfoAnd p))
-                                (FL (PatchInfoAnd p)) Origin wR wY
+                        -> Fork (PatchSet rt p)
+                                (FL (PatchInfoAnd rt p))
+                                (FL (PatchInfoAnd rt p)) Origin wR wY
                         -> IO (Sealed (FL (PrimOf p) wU))
 tentativelyMergePatches = tentativelyMergePatches_ MakeChanges
 
 
-considerMergeToWorking :: (RepoPatch p, ApplyState p ~ Tree)
+considerMergeToWorking :: (IsRepoType rt, RepoPatch p, ApplyState p ~ Tree)
                        => Repository rt p wR wU wR -> String
                        -> AllowConflicts
                        -> ExternalMerge -> WantGuiPause
                        -> Compression -> Verbosity -> Reorder
                        -> DiffOpts
-                       -> Fork (PatchSet p)
-                               (FL (PatchInfoAnd p))
-                               (FL (PatchInfoAnd p)) Origin wR wY
+                       -> Fork (PatchSet rt p)
+                               (FL (PatchInfoAnd rt p))
+                               (FL (PatchInfoAnd rt p)) Origin wR wY
                        -> IO (Sealed (FL (PrimOf p) wU))
 considerMergeToWorking = tentativelyMergePatches_ DontMakeChanges

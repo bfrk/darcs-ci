@@ -34,7 +34,7 @@ import Darcs.Repository.Inventory
 import Darcs.Repository.InternalTypes
     ( Repository
     , repoCache
-    , withRepoDir
+    , withRepoLocation
     )
 import Darcs.Repository.Paths
     ( hashedInventory
@@ -64,7 +64,7 @@ data DirLayout = PlainLayout | BucketedLayout
 
 -- | Remove unreferenced entries in the pristine cache.
 cleanPristine :: Repository rt p wR wU wT -> IO ()
-cleanPristine r = withRepoDir r $ do
+cleanPristine r = withRepoLocation r $ do
     debugMessage "Cleaning out the pristine cache..."
     i <- gzReadFilePS hashedInventoryPath
     cleanPristineDir (repoCache r) [peekPristineHash i]

@@ -23,7 +23,7 @@ import Darcs.UI.Flags
     ( DarcsFlag
     , externalMerge, allowConflicts
     , compress, diffingOpts
-    , reorder, verbosity, verbose
+    , dryRun, reorder, verbosity, verbose
     , useCache, wantGuiPause
     , umask, changesReverse
     , diffAlgorithm, isInteractive
@@ -36,7 +36,7 @@ import Darcs.UI.PatchHeader ( HijackT, HijackOptions(..), runHijackT
                             , getAuthor
                             , updatePatchHeader, AskAboutDeps(..) )
 import Darcs.Repository
-    ( Repository, RepoJob(..), AccessType(..), withRepoLock, withRepository
+    ( Repository, RepoJob(..), withRepoLock, withRepository
     , tentativelyAddPatch, finalizeRepositoryChanges
     , tentativelyRemovePatches, readPatches
     , tentativelyAddToPending, unrecordedChanges, applyToWorking
@@ -76,6 +76,7 @@ import Darcs.Patch.Rebase.Name ( RebaseName(..), commuteNameNamed )
 import Darcs.Patch.Rebase.Suspended ( Suspended(..), addToEditsToSuspended )
 import Darcs.Patch.Permutations ( partitionConflictingFL )
 import Darcs.Patch.Progress ( progressRL )
+import Darcs.Patch.RepoType ( RepoType(..), RebaseType(..) )
 import Darcs.Patch.Set ( PatchSet, Origin, patchSet2RL )
 import Darcs.Patch.Split ( primSplitter )
 import Darcs.UI.ApplyPatches
@@ -213,7 +214,7 @@ suspend = DarcsCommand
 
 suspendCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 suspendCmd _ opts _args =
-    withRepoLock (useCache ? opts) (umask ? opts) $
+    withRepoLock (dryRun ? opts) (useCache ? opts) YesUpdatePending (umask ? opts) $
     StartRebaseJob $
     \_repository -> do
     suspended <- readTentativeRebase _repository
@@ -233,18 +234,17 @@ suspendCmd _ opts _args =
         $ mapM_ (getAuthor "suspend" False Nothing)
         $ mapFL info psToSuspend
     _repository <- doSuspend opts _repository suspended psToSuspend
-    _repository <-
-      finalizeRepositoryChanges _repository YesUpdatePending
-        (compress ? opts) (O.dryRun ? opts)
+    _repository <- finalizeRepositoryChanges _repository YesUpdatePending (compress ? opts)
     return ()
 
 doSuspend
-    :: (RepoPatch p, ApplyState p ~ Tree)
+    :: forall p wR wU wX
+     . (RepoPatch p, ApplyState p ~ Tree)
     => [DarcsFlag]
-    -> Repository 'RW p wR wU wR
+    -> Repository ('RepoType 'IsRebase) p wR wU wR
     -> Suspended p wR
-    -> FL (PatchInfoAnd p) wX wR
-    -> IO (Repository 'RW p wR wU wX)
+    -> FL (PatchInfoAnd ('RepoType 'IsRebase) p) wX wR
+    -> IO (Repository ('RepoType 'IsRebase) p wR wU wX)
 doSuspend opts _repository suspended psToSuspend = do
     pend <- unrecordedChanges (diffingOpts opts) _repository Nothing
     FlippedSeal psAfterPending <-
@@ -334,7 +334,7 @@ reify = DarcsCommand
 
 unsuspendCmd :: String -> Bool -> (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 unsuspendCmd cmd reifyFixups _ opts _args =
-  withRepoLock (useCache ? opts) (umask ? opts) $
+  withRepoLock (dryRun ? opts) (useCache ? opts) YesUpdatePending (umask ? opts) $
   RebaseJob $
   \_repository -> do
     IsEq <- requireNoUnrecordedChanges _repository
@@ -404,15 +404,13 @@ unsuspendCmd cmd reifyFixups _ opts _args =
       unseal Items $
       unseal (simplifyPushes da (mapFL_FL NameFixup renames)) ps_to_keep
     withSignalsBlocked $ do
-      _repository <-
-        finalizeRepositoryChanges _repository YesUpdatePending
-          (compress ? opts) (O.dryRun ? opts)
+      _repository <- finalizeRepositoryChanges _repository YesUpdatePending (compress ? opts)
       void $ applyToWorking _repository (verbosity ? opts) effect_to_apply
 
     where doAdd :: (RepoPatch p, ApplyState p ~ Tree)
-                => Repository 'RW p wR wU wT
+                => Repository ('RepoType 'IsRebase) p wR wU wT
                 -> FL (WDDNamed p) wT wT2
-                -> HijackT IO (Repository 'RW p wR wU wT2, FL RebaseName wT2 wT2)
+                -> HijackT IO (Repository ('RepoType 'IsRebase) p wR wU wT2, FL RebaseName wT2 wT2)
           doAdd _repo NilFL = return (_repo, NilFL)
           doAdd _repo ((p :: WDDNamed p wT wU) :>:ps) = do
               case wddDependedOn p of
@@ -460,7 +458,7 @@ unsuspendCmd cmd reifyFixups _ opts _args =
               return (_repo, rename2 :>: renames)
 
           requireNoUnrecordedChanges :: (RepoPatch p, ApplyState p ~ Tree)
-                                     => Repository 'RW p wR wU wR
+                                     => Repository rt p wR wU wR
                                      -> IO (EqCheck wR wU)
           requireNoUnrecordedChanges repo = do
             pend <-
@@ -491,9 +489,9 @@ inject = DarcsCommand
 
 injectCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 injectCmd _ opts _args =
-    withRepoLock (useCache ? opts) (umask ? opts) $
+    withRepoLock (dryRun ? opts) (useCache ? opts) YesUpdatePending (umask ? opts) $
     RebaseJob $
-    \(_repository :: Repository 'RW p wR wU wR) -> do
+    \(_repository :: Repository ('RepoType 'IsRebase) p wR wU wR) -> do
     Items selects <- readTentativeRebase _repository
 
     -- TODO this selection doesn't need to respect dependencies
@@ -528,9 +526,7 @@ injectCmd _ opts _args =
       unseal (simplifyPushes da (mapFL_FL NameFixup name_fixups)) $
       simplifyPushes da (mapFL_FL PrimFixup rest_fixups) $
       RC NilFL toeditNew :>: rest_selects
-    _repository <-
-      finalizeRepositoryChanges _repository YesUpdatePending
-        (compress ? opts) (O.dryRun ? opts)
+    _repository <- finalizeRepositoryChanges _repository YesUpdatePending (compress ? opts)
     return ()
 
 obliterate :: DarcsCommand
@@ -555,9 +551,9 @@ obliterate = DarcsCommand
 
 obliterateCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 obliterateCmd _ opts _args =
-    withRepoLock (useCache ? opts) (umask ? opts) $
+    withRepoLock (dryRun ? opts) (useCache ? opts) YesUpdatePending (umask ? opts) $
     RebaseJob $
-    \(_repository :: Repository 'RW p wR wU wR) -> (do
+    \(_repository :: Repository ('RepoType 'IsRebase) p wR wU wR) -> (do
     Items selects <- readTentativeRebase _repository
 
     -- TODO this selection doesn't need to respect dependencies
@@ -584,9 +580,7 @@ obliterateCmd _ opts _args =
     let ps_to_keep = do_obliterate chosen keep
     writeTentativeRebase _repository (unseal Items ps_to_keep)
 
-    _repository <-
-      finalizeRepositoryChanges _repository YesUpdatePending
-        (compress ? opts) (O.dryRun ? opts)
+    _repository <- finalizeRepositoryChanges _repository YesUpdatePending (compress ? opts)
     return ()
    ) :: IO ()
 
@@ -672,6 +666,8 @@ apply = DarcsCommand
 data RebasePatchApplier = RebasePatchApplier
 
 instance PatchApplier RebasePatchApplier where
+    type ApplierRepoTypeConstraint RebasePatchApplier rt = rt ~ 'RepoType 'IsRebase
+
     repoJob RebasePatchApplier f = StartRebaseJob (f PatchProxy)
     applyPatches RebasePatchApplier PatchProxy = applyPatchesForRebaseCmd
 
@@ -680,10 +676,10 @@ applyPatchesForRebaseCmd
      . ( RepoPatch p, ApplyState p ~ Tree )
     => String
     -> [DarcsFlag]
-    -> Repository 'RW p wR wU wR
-    -> Fork (PatchSet p)
-            (FL (PatchInfoAnd p))
-            (FL (PatchInfoAnd p)) Origin wR wZ
+    -> Repository ('RepoType 'IsRebase) p wR wU wR
+    -> Fork (PatchSet ('RepoType 'IsRebase) p)
+            (FL (PatchInfoAnd ('RepoType 'IsRebase) p))
+            (FL (PatchInfoAnd ('RepoType 'IsRebase) p)) Origin wR wZ
     -> IO ()
 applyPatchesForRebaseCmd cmdName opts _repository (Fork common us' to_be_applied) = do
     applyPatchesStart cmdName opts to_be_applied
@@ -713,9 +709,7 @@ applyPatchesForRebaseCmd cmdName opts _repository (Fork common us' to_be_applied
     -- TODO This is a nasty hack, caused by the fact that most functions
     -- in Darcs.Repository.State require the recorded state to be equal to the
     -- tentative state and thus must not be called after the repo was changed.
-    _repository <-
-      finalizeRepositoryChanges _repository YesUpdatePending
-        (compress ? opts) (O.dryRun ? opts)
+    _repository <- finalizeRepositoryChanges _repository YesUpdatePending (compress ? opts)
     _repository <- revertRepositoryChanges _repository YesUpdatePending
 
     Sealed pw <-
@@ -818,8 +812,8 @@ upgrade = DarcsCommand
 
 upgradeCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 upgradeCmd _ opts _args =
-  withRepoLock (useCache ? opts) (umask ? opts) $
-  OldRebaseJob $ \(_repo :: Repository 'RW p wR wU wR) ->
+  withRepoLock (dryRun ? opts) (useCache ? opts) YesUpdatePending (umask ? opts) $
+  OldRebaseJob $ \(_repo :: Repository ('RepoType 'IsRebase) p wR wU wR) ->
     upgradeOldStyleRebase _repo (compress ? opts)
 
 {-

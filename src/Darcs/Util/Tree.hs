@@ -506,9 +506,7 @@ overlay base over = Tree {items = M.fromList immediate, treeHash = NoHash}
 
 addMissingHashes :: (Monad m) => (TreeItem m -> m Hash) -> Tree m -> m (Tree m)
 addMissingHashes make = updateTree update -- use partiallyUpdateTree here
-    where update (SubTree t) =
-              do x <- make (SubTree t)
-                 return $ SubTree (t { treeHash = x })
+    where update (SubTree t) = make (SubTree t) >>= \x -> return $ SubTree (t { treeHash = x })
           update (File blob@(Blob con NoHash)) =
               do hash <- make $ File blob
                  return $ File (Blob con hash)

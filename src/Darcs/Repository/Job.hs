@@ -26,6 +26,7 @@ module Darcs.Repository.Job
     , withRepoLockCanFail
     , withRepository
     , withRepositoryLocation
+    , checkRepoIsNoRebase
     , withUMaskFlag
     ) where
 
@@ -40,9 +41,14 @@ import qualified Darcs.Patch.V2.Prim as V2 ( Prim(..) )
 import Darcs.Patch ( PrimOf )
 import Darcs.Patch.Prim.V1 ( Prim )
 import Darcs.Patch.RepoPatch ( RepoPatch )
+import Darcs.Patch.RepoType
+  ( RepoType(..), SRepoType(..), IsRepoType
+  , RebaseType(..), SRebaseType(..), IsRebaseType
+  , singletonRepoType
+  )
 
 import Darcs.Repository.Flags
-    ( UseCache(..), UpdatePending(..), UMask (..)
+    ( UseCache(..), UpdatePending(..), DryRun(..), UMask (..)
     )
 import Darcs.Repository.Format
     ( RepoProperty( Darcs2
@@ -58,10 +64,10 @@ import Darcs.Repository.Identify ( identifyRepository )
 import Darcs.Repository.Hashed( revertRepositoryChanges )
 import Darcs.Repository.InternalTypes
     ( Repository
-    , AccessType(..)
     , repoFormat
+    , repoLocation
+    , unsafeCoerceRepoType
     , unsafeCoercePatchType
-    , unsafeStartTransaction
     )
 import Darcs.Repository.Paths ( lockPath )
 import Darcs.Repository.Rebase
@@ -76,6 +82,7 @@ import Darcs.Util.Progress ( debugMessage )
 
 import Control.Monad ( when )
 import Control.Exception ( bracket_, finally )
+import Data.List ( intercalate )
 import Data.Constraint ( Dict(..) )
 
 import Foreign.C.String ( CString, withCString )
@@ -109,35 +116,34 @@ withUMask umask job =
 -- in the kind of patch they work on. @RepoJob@ is used to wrap up the polymorphism,
 -- and the various functions that act on a @RepoJob@ are responsible for instantiating
 -- the underlying action with the appropriate patch type.
-data RepoJob rt a
+data RepoJob a
     -- = RepoJob (forall p wR wU . RepoPatch p => Repository p wR wU wR -> IO a)
     -- TODO: Unbind Tree from RepoJob, possibly renaming existing RepoJob
     =
     -- |The most common @RepoJob@; the underlying action can accept any patch type that
     -- a darcs repository may use.
-      RepoJob (forall p wR wU . (RepoPatch p, ApplyState p ~ Tree) => Repository rt p wR wU wR -> IO a)
+      RepoJob (forall rt p wR wU . (IsRepoType rt, RepoPatch p, ApplyState p ~ Tree)
+               => Repository rt p wR wU wR -> IO a)
     -- |A job that only works on darcs 1 patches
-    | V1Job (forall wR wU . Repository rt (RepoPatchV1 V1.Prim) wR wU wR -> IO a)
+    | V1Job (forall wR wU . Repository ('RepoType 'NoRebase) (RepoPatchV1 V1.Prim) wR wU wR -> IO a)
     -- |A job that only works on darcs 2 patches
-    | V2Job (forall wR wU . Repository rt (RepoPatchV2 V2.Prim) wR wU wR -> IO a)
+    | V2Job (forall rt wR wU . IsRepoType rt => Repository rt (RepoPatchV2 V2.Prim) wR wU wR -> IO a)
     -- |A job that works on any repository where the patch type @p@ has 'PrimOf' @p@ = 'Prim'.
     --
     -- This was added to support darcsden, which inspects the internals of V1 prim patches.
     --
     -- In future this should be replaced with a more abstract inspection API as part of 'PrimPatch'.
-    | PrimV1Job (forall p wR wU . (RepoPatch p, ApplyState p ~ Tree, IsPrimV1 (PrimOf p))
+    | PrimV1Job (forall rt p wR wU . (IsRepoType rt, RepoPatch p, ApplyState p ~ Tree, IsPrimV1 (PrimOf p))
                => Repository rt p wR wU wR -> IO a)
     -- A job that works on normal darcs repositories, but will want access to the rebase patch if it exists.
-    | RebaseAwareJob (forall p wR wU . (RepoPatch p, ApplyState p ~ Tree) => Repository rt p wR wU wR -> IO a)
-    | RebaseJob (forall p wR wU . (RepoPatch p, ApplyState p ~ Tree) => Repository rt p wR wU wR -> IO a)
-    | OldRebaseJob (forall p wR wU . (RepoPatch p, ApplyState p ~ Tree) => Repository rt p wR wU wR -> IO a)
-    | StartRebaseJob (forall p wR wU . (RepoPatch p, ApplyState p ~ Tree) => Repository rt p wR wU wR -> IO a)
+    | RebaseAwareJob (forall rt p wR wU . (IsRepoType rt, RepoPatch p, ApplyState p ~ Tree) => Repository rt p wR wU wR -> IO a)
+    | RebaseJob (forall p wR wU . (RepoPatch p, ApplyState p ~ Tree) => Repository ('RepoType 'IsRebase) p wR wU wR -> IO a)
+    | OldRebaseJob (forall p wR wU . (RepoPatch p, ApplyState p ~ Tree) => Repository ('RepoType 'IsRebase) p wR wU wR -> IO a)
+    | StartRebaseJob (forall p wR wU . (RepoPatch p, ApplyState p ~ Tree) => Repository ('RepoType 'IsRebase) p wR wU wR -> IO a)
 
-onRepoJob :: RepoJob rt1 a -- original repojob passed to withXxx
-          -> (forall p wR wU . (RepoPatch p, ApplyState p ~ Tree) =>
-              (Repository rt1 p wR wU wR -> IO a)
-              -> Repository rt2 p wR wU wR -> IO a)
-          -> RepoJob rt2 a -- result job takes a Repo rt2
+onRepoJob :: RepoJob a
+          -> (forall rt p wR wU . (RepoPatch p, ApplyState p ~ Tree) => (Repository rt p wR wU wR -> IO a) -> Repository rt p wR wU wR -> IO a)
+          -> RepoJob a
 onRepoJob (RepoJob job) f = RepoJob (f job)
 onRepoJob (V1Job job) f = V1Job (f job)
 onRepoJob (V2Job job) f = V2Job (f job)
@@ -148,7 +154,7 @@ onRepoJob (OldRebaseJob job) f = OldRebaseJob (f job)
 onRepoJob (StartRebaseJob job) f = StartRebaseJob (f job)
 
 -- | apply a given RepoJob to a repository in the current working directory
-withRepository :: UseCache -> RepoJob 'RO a -> IO a
+withRepository :: UseCache -> RepoJob a -> IO a
 withRepository useCache = withRepositoryLocation useCache "."
 
 -- | This is just an internal type to Darcs.Repository.Job for
@@ -181,132 +187,173 @@ checkPrimV1 RepoV2 = Dict
 checkPrimV1 RepoV3 = Dict
 
 -- | apply a given RepoJob to a repository in a given url
-withRepositoryLocation :: UseCache -> String -> RepoJob 'RO a -> IO a
+withRepositoryLocation :: UseCache -> String -> RepoJob a -> IO a
 withRepositoryLocation useCache url repojob = do
     repo <- identifyRepository useCache url
 
     let
         rf = repoFormat repo
+        startRebase =
+            case repojob of
+                StartRebaseJob {} -> True
+                _ -> False
 
         -- in order to pass SRepoType and RepoPatchType at different types, we need a polymorphic
         -- function that we call in two different ways, rather than directly varying the argument.
-        runJob1 :: Bool -> Repository rt pDummy wR wU wR -> RepoJob rt a -> IO a
-        runJob1 hasRebase =
+        runJob1
+          :: IsRebaseType rebaseType
+          => SRebaseType rebaseType -> Repository rtDummy pDummy wR wU wR -> RepoJob a -> IO a
+        runJob1 isRebase =
           if formatHas Darcs3 rf
-          then runJob RepoV3 hasRebase
+          then runJob RepoV3 (SRepoType isRebase)
           else
             if formatHas Darcs2 rf
-            then runJob RepoV2 hasRebase
-            else runJob RepoV1 hasRebase
+            then runJob RepoV2 (SRepoType isRebase)
+            else runJob RepoV1 (SRepoType isRebase)
 
-    runJob1
-      (formatHas RebaseInProgress rf || formatHas RebaseInProgress_2_16 rf)
-      repo
-      repojob
+        runJob2 :: Repository rtDummy pDummy wR wU wR -> RepoJob a -> IO a
+        runJob2 =
+          if startRebase ||
+             formatHas RebaseInProgress rf || formatHas RebaseInProgress_2_16 rf
+            then runJob1 SIsRebase
+            else runJob1 SNoRebase
+
+    runJob2 repo repojob
+
 
 runJob
-  :: forall rt p pDummy wR wU a
-   . RepoPatch p
+  :: forall rt p rtDummy pDummy wR wU a
+   . (IsRepoType rt, RepoPatch p)
   => RepoPatchType p
-  -> Bool
-  -> Repository rt pDummy wR wU wR
-  -> RepoJob rt a
+  -> SRepoType rt
+  -> Repository rtDummy pDummy wR wU wR
+  -> RepoJob a
   -> IO a
-runJob patchType hasRebase repo repojob = do
+runJob patchType (SRepoType isRebase) repo repojob = do
 
   -- The actual type the repository should have is only known when
   -- when this function is called, so we need to "cast" it to its proper type
   let
-    therepo = unsafeCoercePatchType repo :: Repository rt p wR wU wR
+    therepo = unsafeCoercePatchType (unsafeCoerceRepoType repo) :: Repository rt p wR wU wR
+
+    patchTypeString :: String
+    patchTypeString =
+      case patchType of
+        RepoV3 -> "darcs-3"
+        RepoV2 -> "darcs-2"
+        RepoV1 -> "darcs-1"
+
+    repoAttributes :: [String]
+    repoAttributes =
+      case isRebase of
+        SIsRebase -> ["rebase"]
+        SNoRebase -> []
+
+    repoAttributesString :: String
+    repoAttributesString =
+      case repoAttributes of
+        [] -> ""
+        _ -> " " ++ intercalate "+" repoAttributes
+
+  debugMessage $ "Identified " ++ patchTypeString ++ repoAttributesString ++
+                 " repo: " ++ repoLocation repo
 
   case repojob of
     RepoJob job ->
       case checkTree patchType of
         Dict -> do
-          checkOldStyleRebaseStatus therepo
+          checkOldStyleRebaseStatus isRebase therepo
           job therepo
             `finally`
-              maybeDisplaySuspendedStatus therepo
+              maybeDisplaySuspendedStatus isRebase therepo
 
     PrimV1Job job ->
       case checkPrimV1 patchType of
         Dict -> do
-          checkOldStyleRebaseStatus therepo
+          checkOldStyleRebaseStatus isRebase therepo
           job therepo
             `finally`
-              maybeDisplaySuspendedStatus therepo
+              maybeDisplaySuspendedStatus isRebase therepo
 
     V2Job job ->
-      case patchType of
-        RepoV2 -> job therepo
-        RepoV1 ->
+      case (patchType, isRebase) of
+        (RepoV2, SNoRebase) -> job therepo
+        (RepoV2, SIsRebase) ->
+          fail "This command is not supported while a rebase is in progress."
+        (RepoV1, _        ) ->
           fail $    "This repository contains darcs v1 patches,"
                  ++ " but the command requires darcs v2 patches."
-        RepoV3 ->
+        (RepoV3, _        ) ->
           fail $    "This repository contains darcs v3 patches,"
                  ++ " but the command requires darcs v2 patches."
 
     V1Job job ->
-      case patchType of
-        RepoV1 -> job therepo
-        RepoV2 ->
+      case (patchType, isRebase) of
+        (RepoV1, SNoRebase) -> job therepo
+        (RepoV1, SIsRebase) ->
+          fail "This command is not supported while a rebase is in progress."
+        (RepoV2, _        ) ->
           fail $    "This repository contains darcs v2 patches,"
                  ++ " but the command requires darcs v1 patches."
-        RepoV3 ->
+        (RepoV3, _        ) ->
           fail $    "This repository contains darcs v3 patches,"
                  ++ " but the command requires darcs v1 patches."
 
     RebaseAwareJob job ->
-      case (checkTree patchType, hasRebase) of
-        (Dict, False) -> job therepo
-        (Dict, True) -> do
-          checkOldStyleRebaseStatus therepo
+      case (checkTree patchType, isRebase) of
+        (Dict, SNoRebase) -> job therepo
+        (Dict, SIsRebase) -> do
+          checkOldStyleRebaseStatus isRebase therepo
           rebaseJob job therepo
 
     RebaseJob job ->
-      case (checkTree patchType, hasRebase) of
-        (Dict, False) -> fail "No rebase in progress. Try 'darcs rebase suspend' first."
-        (Dict, True) -> do
-          checkOldStyleRebaseStatus therepo
+      case (checkTree patchType, isRebase) of
+        (_     , SNoRebase) -> fail "No rebase in progress. Try 'darcs rebase suspend' first."
+        (Dict, SIsRebase) -> do
+          checkOldStyleRebaseStatus isRebase therepo
           rebaseJob job therepo
 
     OldRebaseJob job ->
-      case checkTree patchType of
-        Dict -> do
+      case (checkTree patchType, isRebase) of
+        (_     , SNoRebase) -> fail "No rebase in progress."
+        (Dict, SIsRebase) -> do
           -- no checkOldStyleRebaseStatus, this is for 'rebase upgrade'
           job therepo
             `finally`
-              maybeDisplaySuspendedStatus therepo
+              maybeDisplaySuspendedStatus isRebase therepo
 
     StartRebaseJob job ->
-      case checkTree patchType of
-        Dict -> do
-          checkOldStyleRebaseStatus therepo
+      case (checkTree patchType, isRebase) of
+        (_     , SNoRebase) -> error "impossible case"
+        (Dict, SIsRebase) -> do
+          -- no checkOldStyleRebaseStatus, startRebaseJob does that
           startRebaseJob job therepo
 
 -- | Apply a given RepoJob to a repository in the current working directory.
 -- However, before doing the job, take the repo lock and initializes a repo
--- transaction.
-withRepoLock :: UseCache -> UMask -> RepoJob 'RW a -> IO a
-withRepoLock useCache um repojob =
+-- transaction, unless this is a dry-run.
+withRepoLock :: DryRun -> UseCache -> UpdatePending -> UMask -> RepoJob a -> IO a
+withRepoLock YesDryRun useCache _ _ repojob =
+  withRepository useCache $ onRepoJob repojob $ \job repository -> job repository
+withRepoLock NoDryRun useCache upe um repojob =
   withLock lockPath $
     withRepository useCache $ onRepoJob repojob $ \job repository -> do
       maybe (return ()) fail $ writeProblem (repoFormat repository)
-      withUMaskFlag um $ revertRepositoryChanges repository YesUpdatePending >>= job
+      withUMaskFlag um $ revertRepositoryChanges repository upe >>= job
 
 -- | run a lock-taking job in an old-fashion repository.
 --   only used by `darcs optimize upgrade`.
-withOldRepoLock :: RepoJob 'RW a -> IO a
+withOldRepoLock :: RepoJob a -> IO a
 withOldRepoLock repojob =
     withRepository NoUseCache $ onRepoJob repojob $ \job repository ->
-    withLock lockPath $ job $ unsafeStartTransaction repository
+    withLock lockPath $ job repository
 
 -- | Apply a given RepoJob to a repository in the current working directory,
 -- taking a lock. If lock not takeable, do nothing. If old-fashioned
 -- repository, do nothing. The job must not touch pending or pending.tentative,
 -- because there is no call to revertRepositoryChanges. This entry point is
 -- currently only used for attemptCreatePatchIndex.
-withRepoLockCanFail :: UseCache -> RepoJob 'RO () -> IO ()
+withRepoLockCanFail :: UseCache -> RepoJob () -> IO ()
 withRepoLockCanFail useCache repojob = do
   eitherDone <-
     withLockCanFail lockPath $
@@ -321,3 +368,14 @@ withRepoLockCanFail useCache repojob = do
   case eitherDone of
     Left  _ -> debugMessage "Lock could not be obtained, not doing the job."
     Right _ -> return ()
+
+-- | If the 'RepoType' of the given repo indicates that we have 'NoRebase',
+-- then 'Just' the repo with the refined type, else 'Nothing'.
+-- NB The amount of types we have to import to make this simple check is ridiculous!
+checkRepoIsNoRebase :: forall rt p wR wU wT. IsRepoType rt
+                    => Repository rt p wR wU wT
+                    -> Maybe (Repository ('RepoType 'NoRebase) p wR wU wT)
+checkRepoIsNoRebase repo =
+  case singletonRepoType :: SRepoType rt of
+    SRepoType SNoRebase -> Just repo
+    SRepoType SIsRebase -> Nothing

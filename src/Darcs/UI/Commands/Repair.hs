@@ -38,6 +38,7 @@ import Darcs.UI.Flags
 import Darcs.UI.Options ( DarcsOption, oid, (?), (^) )
 import qualified Darcs.UI.Options.All as O
 
+import Darcs.Repository.Flags ( UpdatePending (..) )
 import Darcs.Repository.Paths ( indexPath )
 import Darcs.Repository.Repair
     ( replayRepository, checkIndex, replayRepositoryInTemp
@@ -108,7 +109,7 @@ repairCmd :: [DarcsFlag] -> IO ()
 repairCmd opts
   | O.yes (O.dryRun ? opts) = checkCmd opts
   | otherwise =
-    withRepoLock (useCache ? opts) (umask ? opts) $
+    withRepoLock O.NoDryRun (useCache ? opts) YesUpdatePending (umask ? opts) $
     RepoJob $ \repo -> do
       replayRepository
         (diffAlgorithm ? opts)

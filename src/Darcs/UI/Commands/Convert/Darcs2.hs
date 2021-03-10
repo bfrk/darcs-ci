@@ -33,6 +33,7 @@ import Darcs.Patch.Info ( isTag, piRename, piTag )
 import Darcs.Patch.Named ( Named(..), getdeps, patch2patchinfo, patchcontents )
 import Darcs.Patch.PatchInfoAnd ( PatchInfoAnd, hopefully, info, n2pia )
 import Darcs.Patch.Progress ( progressFL )
+import Darcs.Patch.RepoType ( IsRepoType(..), RebaseType(..), RepoType(..) )
 import Darcs.Patch.Set ( inOrderTags, patchSet2FL, patchSet2RL )
 import qualified Darcs.Patch.V1 as V1 ( RepoPatchV1 )
 import Darcs.Patch.V1.Commute ( publicUnravel )
@@ -55,7 +56,6 @@ import Darcs.Patch.Witnesses.Sealed ( FlippedSeal(..), mapSeal )
 import Darcs.Repository
     ( RepoJob(..)
     , Repository
-    , AccessType(..)
     , applyToWorking
     , createRepositoryV2
     , finalizeRepositoryChanges
@@ -197,7 +197,7 @@ toDarcs2 _ opts' args = do
           convertFL :: FL RepoPatchV1 wX wY -> FL RepoPatchV2 wX wY
           convertFL = concatFL . mapFL_FL convertOne
           convertNamed :: Named RepoPatchV1 wX wY
-                       -> PatchInfoAnd RepoPatchV2 wX wY
+                       -> PatchInfoAnd ('RepoType 'NoRebase) RepoPatchV2 wX wY
           convertNamed n = n2pia $
                            NamedP
                             (convertInfo $ patch2patchinfo n)
@@ -220,7 +220,7 @@ toDarcs2 _ opts' args = do
     applyOne :: (RepoPatch p, ApplyState p ~ Tree)
              => [DarcsFlag]
              -> W2 (Repository rt p wR) wX
-             -> PatchInfoAnd p wX wY
+             -> PatchInfoAnd rt p wX wY
              -> IO (W2 (Repository rt p wR) wY)
     applyOne opts (W2 _repo) x = do
       _repo <- tentativelyAddPatch_ (updatePristine opts) _repo
@@ -231,15 +231,15 @@ toDarcs2 _ opts' args = do
     applySome opts (W3 _repo) xs = do
       _repo <- unW2 <$> foldFL_M (applyOne opts) (W2 _repo) xs
       -- commit after applying a bunch of patches
-      _repo <- finalizeRepositoryChanges _repo (updatePending opts) GzipCompression (O.dryRun ? opts)
+      _repo <- finalizeRepositoryChanges _repo (updatePending opts) GzipCompression
       _repo <- revertRepositoryChanges _repo (updatePending opts)
       return (W3 _repo)
 
-    applyAll :: (RepoPatch p, ApplyState p ~ Tree)
+    applyAll :: (IsRepoType rt, RepoPatch p, ApplyState p ~ Tree)
              => [DarcsFlag]
-             -> Repository 'RW p wX wX wX
-             -> FL (FL (PatchInfoAnd p)) wX wY
-             -> IO (Repository 'RW p wY wY wY)
+             -> Repository rt p wX wX wX
+             -> FL (FL (PatchInfoAnd rt p)) wX wY
+             -> IO (Repository rt p wY wY wY)
     applyAll opts r xss = unW3 <$> foldFL_M (applySome opts) (W3 r) xss
 
     updatePristine :: [DarcsFlag] -> UpdatePristine

@@ -29,7 +29,6 @@ import Darcs.UI.Commands.Util ( testTentativeAndMaybeExit )
 import Darcs.Repository.Flags ( UpdatePending(..) )
 import Darcs.Repository
     ( Repository
-    , AccessType(..)
     , tentativelyMergePatches
     , finalizeRepositoryChanges
     , applyToWorking
@@ -37,7 +36,7 @@ import Darcs.Repository
     )
 import Darcs.Repository.Pristine ( readTentativePristine )
 import Darcs.Repository.Job ( RepoJob(RepoJob) )
-import Darcs.Patch ( RepoPatch, description )
+import Darcs.Patch ( RepoPatch, RepoType, IsRepoType, description )
 import Darcs.Patch.Apply( ApplyState )
 import Darcs.Patch.FromPrim ( PrimOf )
 import Darcs.Patch.Set ( PatchSet, Origin )
@@ -49,57 +48,66 @@ import Darcs.Util.English ( presentParticiple )
 import Darcs.Util.Printer ( vcat, text )
 import Darcs.Util.Tree( Tree )
 
+import GHC.Exts ( Constraint )
+
 data PatchProxy (p :: * -> * -> *) = PatchProxy
 
 -- |This class is a hack to abstract over pull/apply and rebase pull/apply.
 class PatchApplier pa where
 
+    type ApplierRepoTypeConstraint pa (rt :: RepoType) :: Constraint
+
     repoJob
         :: pa
-        -> (forall p wR wU
-               . (RepoPatch p, ApplyState p ~ Tree)
-              => (PatchProxy p -> Repository 'RW p wR wU wR -> IO ()))
-        -> RepoJob 'RW ()
+        -> (forall rt p wR wU
+               . ( IsRepoType rt, ApplierRepoTypeConstraint pa rt
+                 , RepoPatch p, ApplyState p ~ Tree
+                 )
+              => (PatchProxy p -> Repository rt p wR wU wR -> IO ()))
+        -> RepoJob ()
 
     applyPatches
-        :: forall p wR wU wZ
-         . (RepoPatch p, ApplyState p ~ Tree)
+        :: forall rt p wR wU wZ
+         . ( ApplierRepoTypeConstraint pa rt, IsRepoType rt
+           , RepoPatch p, ApplyState p ~ Tree
+           )
         => pa
         -> PatchProxy p
         -> String
         -> [DarcsFlag]
-        -> Repository 'RW p wR wU wR
-        -> Fork (PatchSet p)
-                (FL (PatchInfoAnd p))
-                (FL (PatchInfoAnd p)) Origin wR wZ
+        -> Repository rt p wR wU wR
+        -> Fork (PatchSet rt p)
+                (FL (PatchInfoAnd rt p))
+                (FL (PatchInfoAnd rt p)) Origin wR wZ
         -> IO ()
 
 data StandardPatchApplier = StandardPatchApplier
 
 instance PatchApplier StandardPatchApplier where
+    type ApplierRepoTypeConstraint StandardPatchApplier rt = ()
     repoJob StandardPatchApplier f = RepoJob (f PatchProxy)
     applyPatches StandardPatchApplier PatchProxy = standardApplyPatches
 
-standardApplyPatches :: (RepoPatch p, ApplyState p ~ Tree)
+standardApplyPatches :: (IsRepoType rt, RepoPatch p, ApplyState p ~ Tree)
                      => String
                      -> [DarcsFlag]
-                     -> Repository 'RW p wR wU wR
-                     -> Fork (PatchSet p)
-                             (FL (PatchInfoAnd p))
-                             (FL (PatchInfoAnd p)) Origin wR wZ
+                     -> Repository rt p wR wU wR
+                     -> Fork (PatchSet rt p)
+                             (FL (PatchInfoAnd rt p))
+                             (FL (PatchInfoAnd rt p)) Origin wR wZ
                      -> IO ()
 standardApplyPatches cmdName opts repository patches@(Fork _ _ to_be_applied) = do
     applyPatchesStart cmdName opts to_be_applied
     Sealed pw <- mergeAndTest cmdName opts repository patches
     applyPatchesFinish cmdName opts repository pw (nullFL to_be_applied)
 
-mergeAndTest :: (RepoPatch p, ApplyState p ~ Tree)
+mergeAndTest :: (IsRepoType rt, RepoPatch p, ApplyState p ~ Tree)
              => String
              -> [DarcsFlag]
-             -> Repository 'RW p wR wU wR
-             -> Fork (PatchSet p)
-                     (FL (PatchInfoAnd p))
-                     (FL (PatchInfoAnd p)) Origin wR wZ
+             -> Repository rt p wR wU wR
+             -> Fork (PatchSet rt p)
+                     (FL (PatchInfoAnd rt p))
+                     (FL (PatchInfoAnd rt p)) Origin wR wZ
              -> IO (Sealed (FL (PrimOf p) wU))
 mergeAndTest cmdName opts repository patches = do
     pw <- tentativelyMergePatches repository cmdName
@@ -114,7 +122,7 @@ mergeAndTest cmdName opts repository patches = do
     return pw
 
 applyPatchesStart :: (RepoPatch p, ApplyState p ~ Tree)
-                  => String -> [DarcsFlag] -> FL (PatchInfoAnd p) wX wY -> IO ()
+                  => String -> [DarcsFlag] -> FL (PatchInfoAnd rt p) wX wY -> IO ()
 applyPatchesStart cmdName opts to_be_applied = do
     printDryRunMessageAndExit cmdName
         (verbosity ? opts)
@@ -130,10 +138,10 @@ applyPatchesStart cmdName opts to_be_applied = do
         putVerbose opts . vcat $ mapFL description to_be_applied
         setEnvDarcsPatches to_be_applied
 
-applyPatchesFinish :: (RepoPatch p, ApplyState p ~ Tree)
+applyPatchesFinish :: (IsRepoType rt, RepoPatch p, ApplyState p ~ Tree)
                    => String
                    -> [DarcsFlag]
-                   -> Repository 'RW p wR wU wR
+                   -> Repository rt p wR wU wR
                    -> FL (PrimOf p) wU wY
                    -> Bool
                    -> IO ()
@@ -141,7 +149,6 @@ applyPatchesFinish cmdName opts _repository pw any_applied = do
     withSignalsBlocked $ do
         _repository <-
             finalizeRepositoryChanges _repository YesUpdatePending (compress ? opts)
-                (O.dryRun ? opts)
         void $ applyToWorking _repository (verbosity ? opts) pw
         when (setScriptsExecutable ? opts == O.YesSetScriptsExecutable) $
             setScriptsExecutablePatches pw

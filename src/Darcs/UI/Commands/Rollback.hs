@@ -30,7 +30,8 @@ import Darcs.Patch.Set ( emptyPatchSet, patchSet2FL )
 import Darcs.Patch.Split ( reversePrimSplitter )
 import Darcs.Patch.Witnesses.Ordered ( Fork(..), FL(..), (:>)(..), concatFL, nullFL, mapFL_FL )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(..) )
-import Darcs.Repository.Flags ( AllowConflicts(..), Reorder(..), UpdatePending(..) )
+import Darcs.Repository.Flags ( AllowConflicts (..), Reorder(..),
+                                UpdatePending(..), DryRun(NoDryRun))
 import Darcs.Repository ( withRepoLock, RepoJob(..),
                           applyToWorking, readPatches,
                           finalizeRepositoryChanges, tentativelyAddToPending,
@@ -110,8 +111,8 @@ exitIfNothingSelected ps what =
     when (nullFL ps) $ putStrLn ("No " ++ what ++ " selected!") >> exitSuccess
 
 rollbackCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
-rollbackCmd fps opts args = withRepoLock (useCache ? opts)
-    (umask ? opts) $ RepoJob $ \_repo -> do
+rollbackCmd fps opts args = withRepoLock NoDryRun (useCache ? opts)
+    YesUpdatePending (umask ? opts) $ RepoJob $ \_repo -> do
         files <- pathSetFromArgs fps args
         announceFiles (verbosity ? opts) files "Rolling back changes in"
         allpatches <- readPatches _repo
@@ -145,9 +146,7 @@ rollbackCmd fps opts args = withRepoLock (useCache ? opts)
                          (Fork allpatches NilFL (rbp :>: NilFL))
         tentativelyAddToPending _repo pw
         withSignalsBlocked $ do
-            _repo <-
-              finalizeRepositoryChanges _repo YesUpdatePending
-                (compress ? opts) (O.dryRun ? opts)
+            _repo <- finalizeRepositoryChanges _repo YesUpdatePending (compress ? opts)
             void $ applyToWorking _repo (verbosity ? opts) pw
         debugMessage "Finished applying unrecorded rollback patch"
         putInfo opts $ text "Changes rolled back in working tree"

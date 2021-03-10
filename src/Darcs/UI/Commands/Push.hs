@@ -54,7 +54,7 @@ import Darcs.Repository
     , readPatches
     , withRepository
     )
-import Darcs.Patch ( RepoPatch, description )
+import Darcs.Patch ( IsRepoType, RepoPatch, description )
 import Darcs.Patch.Apply( ApplyState )
 import Darcs.Patch.Witnesses.Ordered
     ( (:>)(..), RL, FL, nullRL,
@@ -178,7 +178,7 @@ pushCmd (_, o) opts [unfixedrepodir] = do
 pushCmd _ _ [] = die "No default repository to push to, please specify one."
 pushCmd _ _ _ = die "Cannot push to more than one repo."
 
-prepareBundle :: forall rt p wR wU wT. (RepoPatch p, ApplyState p ~ Tree)
+prepareBundle :: forall rt p wR wU wT. (IsRepoType rt, RepoPatch p, ApplyState p ~ Tree)
               => [DarcsFlag] -> String -> Repository rt p wR wU wT -> IO Doc
 prepareBundle opts repodir repository = do
   old_default <- getPreflist "defaultrepo"
@@ -196,9 +196,9 @@ prepareBundle opts repodir repository = do
   runSelection us' selection_config
                    >>= bundlePatches opts common
 
-prePushChatter :: forall p a wX wY wT . (RepoPatch p, ShowPatch a) =>
-                 [DarcsFlag] -> PatchSet p Origin wX ->
-                 RL a wT wX -> PatchSet p Origin wY -> IO ()
+prePushChatter :: forall rt p a wX wY wT . (RepoPatch p, ShowPatch a) =>
+                 [DarcsFlag] -> PatchSet rt p Origin wX ->
+                 RL a wT wX -> PatchSet rt p Origin wY -> IO ()
 prePushChatter opts us us' them = do
   checkUnrelatedRepos (parseFlags O.allowUnrelatedRepos opts) us them
   let num_to_pull = snd $ countUsThem us them
@@ -211,9 +211,9 @@ prePushChatter opts us us' them = do
   when (nullRL us') $ do putInfo opts $ text "No recorded local patches to push!"
                          exitSuccess
 
-bundlePatches :: forall t p wZ wW wA. (RepoPatch p, ApplyState p ~ Tree)
-              => [DarcsFlag] -> PatchSet p wA wZ
-              -> (FL (PatchInfoAnd p) :> t) wZ wW
+bundlePatches :: forall t rt p wZ wW wA. (RepoPatch p, ApplyState p ~ Tree)
+              => [DarcsFlag] -> PatchSet rt p wA wZ
+              -> (FL (PatchInfoAnd rt p) :> t) wZ wW
               -> IO Doc
 bundlePatches opts common (to_be_pushed :> _) =
     do

@@ -31,7 +31,7 @@ import Data.Foldable ( traverse_ )
 import System.Directory ( removeFile )
 import System.Exit ( ExitCode(..), exitFailure, exitSuccess )
 
-import Darcs.Patch ( PrimOf, RepoPatch, sortCoalesceFL )
+import Darcs.Patch ( IsRepoType, PrimOf, RepoPatch, sortCoalesceFL )
 import Darcs.Patch.Apply ( ApplyState )
 import Darcs.Patch.Info ( PatchInfo, patchinfo )
 import Darcs.Patch.Named ( adddeps, infopatch )
@@ -42,14 +42,13 @@ import Darcs.Patch.Witnesses.Ordered ( (:>)(..), FL(..), nullFL, (+>+) )
 import Darcs.Repository
     ( RepoJob(..)
     , Repository
-    , AccessType(..)
     , finalizeRepositoryChanges
     , readPendingAndWorking
     , readPristine
     , tentativelyAddPatch
     , withRepoLock
     )
-import Darcs.Repository.Flags ( UpdatePending(..) )
+import Darcs.Repository.Flags ( DryRun(NoDryRun), UpdatePending(..) )
 import Darcs.Repository.Pending ( tentativelyRemoveFromPW )
 import Darcs.Repository.Pristine ( readTentativePristine )
 import Darcs.UI.Commands
@@ -222,7 +221,7 @@ reportNonExisting lfa (paths_only_in_working, _) = do
 recordCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 recordCmd fps cfg args = do
     checkNameIsNotOption (O.patchname ? cfg) (isInteractive cfg)
-    withRepoLock (O.useCache ? cfg) (O.umask ? cfg) $ RepoJob $ \(repository :: Repository 'RW p wR wU wR) -> do
+    withRepoLock NoDryRun (O.useCache ? cfg) YesUpdatePending (O.umask ? cfg) $ RepoJob $ \(repository :: Repository rt p wR wU wR) -> do
       existing_files <- do
         files <- pathSetFromArgs fps args
         files' <-
@@ -258,8 +257,8 @@ checkNameIsNotOption (Just name) True   =
         confirmed <- promptYorn $ "You specified " ++ show name ++ " as the patch name. Is that really what you want?"
         unless confirmed $ putStrLn "Okay, aborting the record." >> exitFailure
 
-doRecord :: (RepoPatch p, ApplyState p ~ Tree)
-         => Repository 'RW p wR wU wR -> Config -> Maybe [AnchoredPath]
+doRecord :: (IsRepoType rt, RepoPatch p, ApplyState p ~ Tree)
+         => Repository rt p wR wU wR -> Config -> Maybe [AnchoredPath]
          -> (FL (PrimOf p) :> FL (PrimOf p)) wR wU -> IO ()
 doRecord repository cfg files pw@(pending :> working) = do
     date <- getDate (O.pipe ? cfg)
@@ -290,8 +289,8 @@ doRecord repository cfg files pw@(pending :> working) = do
                           debugMessage ("Patch name as received from getLog: " ++ show (map ord name))
                           doActualRecord repository cfg name date my_author my_log logf deps chs pw
 
-doActualRecord :: (RepoPatch p, ApplyState p ~ Tree)
-               => Repository 'RW p wR wU wR
+doActualRecord :: (IsRepoType rt, RepoPatch p, ApplyState p ~ Tree)
+               => Repository rt p wR wU wR
                -> Config
                -> String -> String -> String
                -> [String] -> Maybe String
@@ -312,7 +311,7 @@ doActualRecord _repository cfg name date my_author my_log logf deps chs
       "record it" (Just failuremessage)
     tentativelyRemoveFromPW _repository chs pending working
     _repository <-
-      finalizeRepositoryChanges _repository YesUpdatePending (O.compress ? cfg) (O.dryRun ? cfg)
+      finalizeRepositoryChanges _repository YesUpdatePending (O.compress ? cfg)
       `clarifyErrors` failuremessage
     debugMessage "Syncing timestamps..."
     removeLogFile logf

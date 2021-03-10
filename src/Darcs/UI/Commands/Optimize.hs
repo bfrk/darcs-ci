@@ -83,7 +83,7 @@ import Darcs.Patch.Witnesses.Ordered
      , bunchFL
      , lengthRL
      )
-import Darcs.Patch ( RepoPatch )
+import Darcs.Patch ( IsRepoType, RepoPatch )
 import Darcs.Patch.Set
     ( patchSet2RL
     , patchSet2FL
@@ -124,10 +124,8 @@ import Darcs.UI.Flags
 import Darcs.UI.Options ( DarcsOption, (?), (^) )
 import qualified Darcs.UI.Options.All as O
 import Darcs.Repository.Flags
-    ( PatchFormat(PatchFormat1)
-    , UMask(..)
-    , WithWorkingDir(WithWorkingDir)
-    )
+    ( UpdatePending (..), DryRun ( NoDryRun ), UMask (..)
+    , WithWorkingDir(WithWorkingDir), PatchFormat(PatchFormat1) )
 import Darcs.Patch.Progress ( progressFL )
 import Darcs.Util.Cache ( mkRepoCache, bucketFolder )
 import Darcs.Repository.Format
@@ -227,7 +225,7 @@ optimizeClean = common
 
 optimizeCleanCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 optimizeCleanCmd _ opts _ =
-    withRepoLock (useCache ? opts) (umask ? opts) $
+    withRepoLock NoDryRun (useCache ? opts) YesUpdatePending (umask ? opts) $
     RepoJob $ \repository -> do
       cleanRepository repository -- garbage collect pristine.hashed, inventories and patches directories
       putInfo opts "Done cleaning repository!"
@@ -254,7 +252,7 @@ optimizeHttp = common
 
 optimizeHttpCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 optimizeHttpCmd _ opts _ =
-    withRepoLock (useCache ? opts) (umask ? opts) $
+    withRepoLock NoDryRun (useCache ? opts) YesUpdatePending (umask ? opts) $
     RepoJob $ \repository -> do
       cleanRepository repository -- garbage collect pristine.hashed, inventories and patches directories
       createPacks repository
@@ -272,7 +270,7 @@ optimizePristine = common
 
 optimizePristineCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 optimizePristineCmd _ opts _ =
-    withRepoLock (useCache ? opts) (umask ? opts) $
+    withRepoLock NoDryRun (useCache ? opts) YesUpdatePending (umask ? opts) $
     RepoJob $ \repository -> do
       cleanRepository repository -- garbage collect pristine.hashed, inventories and patches directories
       doOptimizePristine opts repository
@@ -296,7 +294,7 @@ optimizeUncompress = common
 
 optimizeCompressCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 optimizeCompressCmd _ opts _ =
-    withRepoLock (useCache ? opts) (umask ? opts) $
+    withRepoLock NoDryRun (useCache ? opts) YesUpdatePending (umask ? opts) $
     RepoJob $ \repository -> do
       cleanRepository repository -- garbage collect pristine.hashed, inventories and patches directories
       optimizeCompression O.GzipCompression opts
@@ -304,7 +302,7 @@ optimizeCompressCmd _ opts _ =
 
 optimizeUncompressCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 optimizeUncompressCmd _ opts _ =
-    withRepoLock (useCache ? opts) (umask ? opts) $
+    withRepoLock NoDryRun (useCache ? opts) YesUpdatePending (umask ? opts) $
     RepoJob $ \repository -> do
       cleanRepository repository -- garbage collect pristine.hashed, inventories and patches directories
       optimizeCompression O.NoCompression opts
@@ -351,7 +349,7 @@ optimizeDisablePatchIndex = common
 
 optimizeEnablePatchIndexCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 optimizeEnablePatchIndexCmd _ opts _ =
-    withRepoLock (useCache ? opts) (umask ? opts) $
+    withRepoLock NoDryRun (useCache ? opts) YesUpdatePending (umask ? opts) $
     RepoJob $ \repository -> do
       ps <- readPatches repository
       createOrUpdatePatchIndexDisk repository ps
@@ -359,7 +357,7 @@ optimizeEnablePatchIndexCmd _ opts _ =
 
 optimizeDisablePatchIndexCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 optimizeDisablePatchIndexCmd _ opts _ =
-    withRepoLock (useCache ? opts) (umask ? opts) $
+    withRepoLock NoDryRun (useCache ? opts) YesUpdatePending (umask ? opts) $
     RepoJob $ \repo -> do
       deletePatchIndex (repoLocation repo)
       putInfo opts "Done disabling patch index!"
@@ -381,7 +379,7 @@ optimizeReorder = common
 
 optimizeReorderCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 optimizeReorderCmd _ opts _ =
-    withRepoLock (useCache ? opts) (umask ? opts) $
+    withRepoLock NoDryRun (useCache ? opts) YesUpdatePending (umask ? opts) $
     RepoJob $ \repository -> do
       reorderInventory repository (O.compress ? opts)
       putInfo opts "Done reordering!"
@@ -400,7 +398,7 @@ optimizeRelink = common
 
 optimizeRelinkCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 optimizeRelinkCmd _ opts _ =
-    withRepoLock (useCache ? opts) (umask ? opts) $
+    withRepoLock NoDryRun (useCache ? opts) YesUpdatePending (umask ? opts) $
     RepoJob $ \repository -> do
       cleanRepository repository -- garbage collect pristine.hashed, inventories and patches directories
       doRelink opts
@@ -497,7 +495,7 @@ optimizeUpgradeCmd _ opts _ = do
              withOldRepoLock $ RepoJob $ actuallyUpgradeFormat opts
 
 actuallyUpgradeFormat
-  :: (RepoPatch p, ApplyState p ~ Tree)
+  :: (IsRepoType rt, RepoPatch p, ApplyState p ~ Tree)
   => [DarcsFlag] -> Repository rt p wR wU wT -> IO ()
 actuallyUpgradeFormat opts repository = do
   -- convert patches/inventory

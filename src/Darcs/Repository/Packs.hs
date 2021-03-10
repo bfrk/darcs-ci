@@ -60,7 +60,7 @@ import Darcs.Util.External ( Cachable(..), fetchFileLazyPS )
 import Darcs.Util.Global ( darcsdir )
 import Darcs.Util.Progress ( debugMessage, progressList )
 
-import Darcs.Patch ( RepoPatch )
+import Darcs.Patch ( IsRepoType, RepoPatch )
 import Darcs.Patch.PatchInfoAnd ( extractHash )
 import Darcs.Patch.Progress ( progressFL )
 import Darcs.Patch.Witnesses.Ordered ( mapFL )
@@ -150,7 +150,8 @@ fetchFilesUsingCache cache dir = mapM_ go where
      else void $ fetchFileUsingCache cache dir path
 
 -- | Create packs from the current recorded version of the repository.
-createPacks :: RepoPatch p => Repository rt p wR wU wT -> IO ()
+createPacks :: (IsRepoType rt, RepoPatch p)
+            => Repository rt p wR wU wT -> IO ()
 createPacks repo = flip finally (mapM_ removeFileIfExists
   [ darcsdir </> "meta-filelist-inventories"
   , darcsdir </> "meta-filelist-pristine"

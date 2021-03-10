@@ -100,11 +100,11 @@ Note that the first argument should be the repository that is more cheaply
 accessed (i.e. local), as 'taggedIntersection' does its best to reduce the
 number of inventories that are accessed from its second argument.
 -}
-taggedIntersection :: forall p wX wY . Commute p
-                   => PatchSet p Origin wX -> PatchSet p Origin wY ->
-                      Fork (RL (Tagged p))
-                           (RL (PatchInfoAnd p))
-                           (RL (PatchInfoAnd p)) Origin wX wY
+taggedIntersection :: forall rt p wX wY . Commute p
+                   => PatchSet rt p Origin wX -> PatchSet rt p Origin wY ->
+                      Fork (RL (Tagged rt p))
+                           (RL (PatchInfoAnd rt p))
+                           (RL (PatchInfoAnd rt p)) Origin wX wY
 taggedIntersection (PatchSet NilRL ps1) s2 = Fork NilRL ps1 (patchSet2RL s2)
 taggedIntersection s1 (PatchSet NilRL ps2) = Fork NilRL (patchSet2RL s1) ps2
 taggedIntersection s1 (PatchSet (_ :<: Tagged t2 _ _) ps2)
@@ -140,8 +140,8 @@ taggedIntersection s1 s2@(PatchSet (ts2 :<: Tagged t2 _ t2ps) ps2) =
 -- is returned.
 -- This is a simpler version of 'splitOnTag' that only looks at the heads
 -- of 'Tagged' sections and does not commute any patches.
-maybeSplitSetOnTag :: PatchInfo -> PatchSet p wStart wX
-                   -> Maybe (PatchSet p wStart wX)
+maybeSplitSetOnTag :: PatchInfo -> PatchSet rt p wStart wX
+                   -> Maybe (PatchSet rt p wStart wX)
 maybeSplitSetOnTag t0 origSet@(PatchSet (ts :<: Tagged t _ pst) ps)
     | t0 == info t = Just origSet
     | otherwise = do
@@ -154,8 +154,8 @@ maybeSplitSetOnTag _ _ = Nothing
 -- clean (and the last of the 'Tagged' list), while all patches that are not
 -- covered by the tag are in the trailing list of patches.
 -- If the tag is not in the 'PatchSet', we return 'Nothing'.
-splitOnTag :: Commute p => PatchInfo -> PatchSet p wStart wX
-           -> Maybe (PatchSet p wStart wX)
+splitOnTag :: Commute p => PatchInfo -> PatchSet rt p wStart wX
+           -> Maybe (PatchSet rt p wStart wX)
 -- If the tag we are looking for is the first Tagged tag of the patchset, just
 -- separate out the patchset's patches.
 splitOnTag t s@(PatchSet (_ :<: Tagged hp _ _) _) | info hp == t = Just s
@@ -194,8 +194,8 @@ splitOnTag _ (PatchSet NilRL NilRL) = Nothing
 
 -- | Reorder a 'PatchSet' such that the latest tag becomes clean.
 cleanLatestTag :: Commute p
-               => PatchSet p wStart wX
-               -> PatchSet p wStart wX
+               => PatchSet rt p wStart wX
+               -> PatchSet rt p wStart wX
 cleanLatestTag inp@(PatchSet ts ps) =
   case breakRL (isTag . info) ps of
     NilRL :> _ -> inp -- no tag among the ps -> we are done
@@ -206,7 +206,7 @@ cleanLatestTag inp@(PatchSet ts ps) =
 
 -- |'unwrapOneTagged' unfolds a single Tagged object in a PatchSet, adding the
 -- tag and patches to the PatchSet's patch list.
-unwrapOneTagged :: PatchSet p wX wY -> Maybe (PatchSet p wX wY)
+unwrapOneTagged :: PatchSet rt p wX wY -> Maybe (PatchSet rt p wX wY)
 unwrapOneTagged (PatchSet (ts :<: Tagged t _ tps) ps) =
     Just $ PatchSet ts (tps :<: t +<+ ps)
 unwrapOneTagged _ = Nothing
@@ -216,7 +216,7 @@ unwrapOneTagged _ = Nothing
 --
 -- This is exactly the set of patches that a new tag recorded on top
 -- of the 'PatchSet' would explicitly depend on.
-getUncovered :: PatchSet p wStart wX -> [PatchInfo]
+getUncovered :: PatchSet rt p wStart wX -> [PatchInfo]
 getUncovered patchset = case patchset of
     (PatchSet NilRL ps) -> findUncovered (mapRL infoAndExplicitDeps ps)
     (PatchSet (_ :<: Tagged t _ _) ps) ->
@@ -243,7 +243,7 @@ getUncovered patchset = case patchset of
 
     -- |infoAndExplicitDeps returns the patch info and (for tags only) the list
     -- of explicit dependencies of a patch.
-    infoAndExplicitDeps :: PatchInfoAnd p wX wY
+    infoAndExplicitDeps :: PatchInfoAnd rt p wX wY
                         -> (PatchInfo, Maybe [PatchInfo])
     infoAndExplicitDeps p
         | isTag (info p) = (info p, getdeps `fmap` hopefullyM p)
@@ -252,11 +252,11 @@ getUncovered patchset = case patchset of
 -- | Create a new 'Tagged' section for the most recent clean tag found in the
 -- tail of un-'Tagged' patches without re-ordering patches. Note that earlier
 -- tags may remain un-'Tagged' even if they are actually clean.
-slightlyOptimizePatchset :: PatchSet p wStart wX -> PatchSet p wStart wX
+slightlyOptimizePatchset :: PatchSet rt p wStart wX -> PatchSet rt p wStart wX
 slightlyOptimizePatchset (PatchSet ts0 ps0) =
     go $ PatchSet ts0 (progressRL "Optimizing inventory" ps0)
   where
-    go :: PatchSet p wStart wY -> PatchSet p wStart wY
+    go :: PatchSet rt p wStart wY -> PatchSet rt p wStart wY
     go (PatchSet ts NilRL) = PatchSet ts NilRL
     go s@(PatchSet ts (ps :<: hp))
         | isTag (info hp)
@@ -264,8 +264,8 @@ slightlyOptimizePatchset (PatchSet ts0 ps0) =
             PatchSet (ts :<: Tagged hp Nothing ps) NilRL
         | otherwise = appendPSFL (go (PatchSet ts ps)) (hp :>: NilFL)
 
-removeFromPatchSet :: (Commute p, Eq2 p) => FL (PatchInfoAnd p) wX wY
-                   -> PatchSet p wStart wY -> Maybe (PatchSet p wStart wX)
+removeFromPatchSet :: (Commute p, Eq2 p) => FL (PatchInfoAnd rt p) wX wY
+                   -> PatchSet rt p wStart wY -> Maybe (PatchSet rt p wStart wX)
 removeFromPatchSet bad (PatchSet ts ps) | all (`elem` mapRL info ps) (mapFL info bad) = do
     ps' <- fastRemoveSubsequenceRL (reverseFL bad) ps
     return (PatchSet ts ps')
@@ -273,11 +273,11 @@ removeFromPatchSet _ (PatchSet NilRL _) = Nothing
 removeFromPatchSet bad (PatchSet (ts :<: Tagged t _ tps) ps) =
     removeFromPatchSet bad (PatchSet ts (tps :<: t +<+ ps))
 
-findCommonAndUncommon :: forall p wX wY . Commute p
-                      => PatchSet p Origin wX -> PatchSet p Origin wY
-                      -> Fork (PatchSet p)
-                              (FL (PatchInfoAnd p))
-                              (FL (PatchInfoAnd p)) Origin wX wY
+findCommonAndUncommon :: forall rt p wX wY . Commute p
+                      => PatchSet rt p Origin wX -> PatchSet rt p Origin wY
+                      -> Fork (PatchSet rt p)
+                              (FL (PatchInfoAnd rt p))
+                              (FL (PatchInfoAnd rt p)) Origin wX wY
 findCommonAndUncommon us them = case taggedIntersection us them of
     Fork common us' them' ->
         case partitionFL (infoIn them') $ reverseRL us' of
@@ -298,9 +298,9 @@ findCommonAndUncommon us them = case taggedIntersection us them of
     infoIn inWhat = (`elem` mapRL info inWhat) . info
 
 findCommonWithThem :: Commute p
-                   => PatchSet p Origin wX
-                   -> PatchSet p Origin wY
-                   -> (PatchSet p :> FL (PatchInfoAnd p)) Origin wX
+                   => PatchSet rt p Origin wX
+                   -> PatchSet rt p Origin wY
+                   -> (PatchSet rt p :> FL (PatchInfoAnd rt p)) Origin wX
 findCommonWithThem us them = case taggedIntersection us them of
     Fork common us' them' ->
         case partitionFL ((`elem` mapRL info them') . info) $ reverseRL us' of
@@ -312,16 +312,16 @@ findCommonWithThem us them = case taggedIntersection us them of
                 PatchSet common (reverseFL common2) :> unsafeCoerceP only_ours
 
 findUncommon :: Commute p
-             => PatchSet p Origin wX -> PatchSet p Origin wY
-             -> (FL (PatchInfoAnd p) :\/: FL (PatchInfoAnd p)) wX wY
+             => PatchSet rt p Origin wX -> PatchSet rt p Origin wY
+             -> (FL (PatchInfoAnd rt p) :\/: FL (PatchInfoAnd rt p)) wX wY
 findUncommon us them =
     case findCommonWithThem us them of
         _common :> us' -> case findCommonWithThem them us of
             _ :> them' -> unsafeCoercePStart us' :\/: them'
 
 countUsThem :: Commute p
-            => PatchSet p Origin wX
-            -> PatchSet p Origin wY
+            => PatchSet rt p Origin wX
+            -> PatchSet rt p Origin wY
             -> (Int, Int)
 countUsThem us them =
     case taggedIntersection us them of
@@ -330,8 +330,8 @@ countUsThem us them =
                             (length $ uu \\ tt, length $ tt \\ uu)
 
 mergeThem :: (Commute p, Merge p)
-          => PatchSet p Origin wX -> PatchSet p Origin wY
-          -> Sealed (FL (PatchInfoAnd p) wX)
+          => PatchSet rt p Origin wX -> PatchSet rt p Origin wY
+          -> Sealed (FL (PatchInfoAnd rt p) wX)
 mergeThem us them =
     case taggedIntersection us them of
         Fork _ us' them' ->
@@ -339,8 +339,8 @@ mergeThem us them =
                them'' :/\: _ -> Sealed them''
 
 patchSetIntersection :: Commute p
-                   => [SealedPatchSet p Origin]
-                   -> SealedPatchSet p Origin
+                   => [SealedPatchSet rt p Origin]
+                   -> SealedPatchSet rt p Origin
 patchSetIntersection [] = seal $ PatchSet NilRL NilRL
 patchSetIntersection [x] = x
 patchSetIntersection (Sealed y : ys) =
@@ -352,8 +352,8 @@ patchSetIntersection (Sealed y : ys) =
                         commonps :> _ -> seal $ PatchSet common commonps
 
 patchSetUnion :: (Commute p, Merge p, Eq2 p)
-            => [SealedPatchSet p Origin]
-            -> SealedPatchSet p Origin
+            => [SealedPatchSet rt p Origin]
+            -> SealedPatchSet rt p Origin
 patchSetUnion [] = seal $ PatchSet NilRL NilRL
 patchSetUnion [x] = x
 patchSetUnion (Sealed y@(PatchSet tsy psy) : Sealed y2 : ys) =
@@ -362,8 +362,8 @@ patchSetUnion (Sealed y@(PatchSet tsy psy) : Sealed y2 : ys) =
             patchSetUnion $ seal (PatchSet tsy (psy +<<+ p2)) : ys
 
 areUnrelatedRepos :: Commute p
-                  => PatchSet p Origin wX
-                  -> PatchSet p Origin wY -> Bool
+                  => PatchSet rt p Origin wX
+                  -> PatchSet rt p Origin wY -> Bool
 areUnrelatedRepos us them =
     case taggedIntersection us them of
         Fork c u t -> checkit c u t
@@ -375,6 +375,6 @@ areUnrelatedRepos us them =
 
 -- | Split a 'PatchSet' at the latest clean tag. The left part is what comes
 -- before the tag, the right part is the tag and its non-dependencies.
-contextPatches :: PatchSet p wX wY
-               -> (PatchSet p :> RL (PatchInfoAnd p)) wX wY
+contextPatches :: PatchSet rt p wX wY
+               -> (PatchSet rt p :> RL (PatchInfoAnd rt p)) wX wY
 contextPatches = patchSetSplit . slightlyOptimizePatchset

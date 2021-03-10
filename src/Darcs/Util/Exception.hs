@@ -1,14 +1,13 @@
 module Darcs.Util.Exception
     ( firstJustIO
     , catchall
+    , catchNonExistence
     , clarifyErrors
     , prettyException
     , prettyError
     , die
     , handleOnly
     , handleOnlyIOError
-    , catchDoesNotExistError
-    , handleDoesNotExistError
     , ifIOError
     , ifDoesNotExistError
     ) where
@@ -37,8 +36,16 @@ import System.IO.Error
 import Darcs.Util.Global ( debugMessage )
 import Darcs.Util.SignalHandler ( catchNonSignal )
 
-catchall :: IO a -> IO a -> IO a
+catchall :: IO a
+         -> IO a
+         -> IO a
 a `catchall` b = a `catchNonSignal` (\e -> debugMessage ("catchall: "++show e) >> b)
+
+catchNonExistence :: IO a -> a -> IO a
+catchNonExistence job nonexistval =
+    catch job $
+    \e -> if isDoesNotExistError e then return nonexistval
+                                   else ioError e
 
 -- | The firstJustM returns the first Just entry in a list of monadic
 -- operations. This is close to `listToMaybe `fmap` sequence`, but the sequence
@@ -91,14 +98,6 @@ die msg = hPutStrLn stderr msg >> exitFailure
 -- normally don't want to handle such errors.
 handleOnlyIOError :: IO a -> IO a -> IO a
 handleOnlyIOError = handleOnly (not . isUserError)
-
--- | Handle only non-existence.
-handleDoesNotExistError :: IO a -> IO a -> IO a
-handleDoesNotExistError = handleOnly isDoesNotExistError
-
--- | Handle only non-existence.
-catchDoesNotExistError :: IO a -> IO a -> IO a
-catchDoesNotExistError = flip handleDoesNotExistError
 
 -- | Like 'handleOnlyIOError' but restricted to returning a given value.
 ifIOError :: a -> IO a -> IO a

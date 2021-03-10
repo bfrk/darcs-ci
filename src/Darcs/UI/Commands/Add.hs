@@ -69,6 +69,7 @@ import Darcs.UI.Flags
 import Darcs.UI.Options ( parseFlags, (?), (^) )
 import qualified Darcs.UI.Options.All as O
 
+import Darcs.Repository.Flags ( UpdatePending(..) )
 import Darcs.Patch ( PrimPatch, applyToTree, addfile, adddir, listTouchedFiles )
 import Darcs.Patch.Apply ( ApplyState )
 import Darcs.Repository.State
@@ -156,7 +157,7 @@ addCmd fps opts args
 
 addFiles :: [DarcsFlag] -> [AnchoredPath] -> IO ()
 addFiles opts paths =
-  withRepoLock (useCache ? opts) (umask ? opts) $
+  withRepoLock (dryRun ? opts) (useCache ? opts) YesUpdatePending (umask ? opts) $
   RepoJob $ \repository -> do
     -- TODO do not expand here, and use findM/findIO or such later
     -- (needs adding to hashed-storage first though)

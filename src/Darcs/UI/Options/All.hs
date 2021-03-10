@@ -814,7 +814,7 @@ withContext = (imap . cps) (Iso fw bw) $ withDefault False
 
 data ExternalDiff = ExternalDiff
   { diffCmd :: Maybe String
-  , diffOptions :: [String]
+  , diffOpts :: [String]
   , diffUnified :: Bool
   } deriving (Eq, Show)
 

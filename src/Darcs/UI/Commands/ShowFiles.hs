@@ -20,7 +20,7 @@ module Darcs.UI.Commands.ShowFiles ( showFiles ) where
 import Darcs.Prelude
 import Data.Maybe ( fromJust, isJust )
 
-import Darcs.Patch ( RepoPatch )
+import Darcs.Patch ( IsRepoType, RepoPatch )
 import Darcs.Patch.Apply ( ApplyState )
 import Darcs.Patch.Match ( PatchSetMatch, patchSetMatch )
 import Darcs.Repository ( RepoJob(..), Repository, withRepository )
@@ -135,7 +135,7 @@ manifestHelper opts prefixes =
         filesDirs True False t = [p | (p, File _) <- list t]
         filesDirs True True t = anchoredRoot : map fst (list t)
 
-slurpUpto :: (RepoPatch p, ApplyState p ~ Tree)
+slurpUpto :: (IsRepoType rt, RepoPatch p, ApplyState p ~ Tree)
           => PatchSetMatch -> Repository rt p wR wU wR -> IO (Tree IO)
 slurpUpto psm r = withDelayedDir "show.files" $ \_ -> do
   getRecordedUpToMatch r psm

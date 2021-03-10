@@ -35,24 +35,24 @@ import Darcs.UI.Commands
 import Darcs.UI.Completion ( fileArgs )
 import Darcs.UI.Flags
     ( DarcsFlag
-    , changesReverse, verbosity, useCache
+    , changesReverse, verbosity, useCache, dryRun
     , reorder, umask
     , fixUrl
     , withContext
     )
 import Darcs.UI.Options ( (^), parseFlags, (?) )
 import qualified Darcs.UI.Options.All as O
+import Darcs.Repository.Flags ( UpdatePending(..) )
 import Darcs.Util.Path ( toFilePath, AbsolutePath )
 import Darcs.Repository
     ( Repository
-    , AccessType(..)
     , SealedPatchSet
     , withRepoLock
     , readPatches
     , filterOutConflicts
     )
 import Darcs.Patch.Set ( PatchSet, Origin )
-import Darcs.Patch ( RepoPatch )
+import Darcs.Patch ( IsRepoType, RepoPatch )
 import Darcs.Patch.Apply( ApplyState )
 import Darcs.Patch.Info ( PatchInfo, displayPatchInfo )
 import Darcs.Patch.Witnesses.Ordered
@@ -181,7 +181,7 @@ applyCmd :: PatchApplier pa
          -> [String]
          -> IO ()
 applyCmd patchApplier (_,orig) opts args =
-  withRepoLock (useCache ? opts) (umask ? opts) $
+  withRepoLock (dryRun ? opts) (useCache ? opts) YesUpdatePending (umask ? opts) $
   repoJob patchApplier $ \patchProxy repository -> do
     bundle <- readBundle args
     applyCmdCommon patchApplier patchProxy opts bundle repository
@@ -200,13 +200,15 @@ applyCmd patchApplier (_,orig) opts args =
     readBundle _ = error "impossible case"
 
 applyCmdCommon
-    :: forall pa p wR wU
-     . (PatchApplier pa, RepoPatch p, ApplyState p ~ Tree)
+    :: forall rt pa p wR wU
+     . ( PatchApplier pa, RepoPatch p, ApplyState p ~ Tree
+       , ApplierRepoTypeConstraint pa rt, IsRepoType rt
+       )
     => pa
     -> PatchProxy p
     -> [DarcsFlag]
     -> B.ByteString
-    -> Repository 'RW p wR wU wR
+    -> Repository rt p wR wU wR
     -> IO ()
 applyCmdCommon patchApplier patchProxy opts bundle repository = do
   us <- readPatches repository
@@ -214,7 +216,7 @@ applyCmdCommon patchApplier patchProxy opts bundle repository = do
   Fork common us' them' <- return $ findCommonAndUncommon us them
 
   -- all patches in them' need to be available; check that
-  let check :: PatchInfoAnd p wX wY -> Maybe PatchInfo
+  let check :: PatchInfoAnd rt p wX wY -> Maybe PatchInfo
       check p = case hopefullyM p of
         Nothing -> Just (info p)
         Just _ -> Nothing
@@ -244,9 +246,9 @@ applyCmdCommon patchApplier patchProxy opts bundle repository = do
 
 getPatchBundle :: RepoPatch p
                => [DarcsFlag]
-               -> PatchSet p Origin wR
+               -> PatchSet rt p Origin wR
                -> B.ByteString
-               -> IO (Either String (SealedPatchSet p Origin))
+               -> IO (Either String (SealedPatchSet rt p Origin))
 getPatchBundle opts us fps = do
     let opt_verify = parseFlags O.verify opts
     mps <- verifyPS opt_verify $ readEmail fps
@@ -275,9 +277,9 @@ getPatchBundle opts us fps = do
                             | otherwise = p
 
 parseAndInterpretBundle :: RepoPatch p
-                        => PatchSet p Origin wR
+                        => PatchSet rt p Origin wR
                         -> B.ByteString
-                        -> Either String (SealedPatchSet p Origin)
+                        -> Either String (SealedPatchSet rt p Origin)
 parseAndInterpretBundle us content = do
     Sealed bundle <- parseBundle content
     Sealed <$> interpretBundle us bundle

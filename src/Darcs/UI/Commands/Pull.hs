@@ -50,9 +50,9 @@ import Darcs.UI.Flags
     )
 import Darcs.UI.Options ( parseFlags, (?), (^) )
 import qualified Darcs.UI.Options.All as O
+import Darcs.Repository.Flags ( UpdatePending (..) )
 import Darcs.Repository
     ( Repository
-    , AccessType(..)
     , identifyRepositoryFor
     , ReadingOrWriting(..)
     , withRepoLock
@@ -68,7 +68,7 @@ import Darcs.Repository
     )
 
 import Darcs.Patch.PatchInfoAnd ( PatchInfoAnd, info, hopefully, patchDesc )
-import Darcs.Patch ( RepoPatch, description )
+import Darcs.Patch ( IsRepoType, RepoPatch, description )
 import qualified Darcs.Patch.Bundle as Bundle ( makeBundle )
 import Darcs.Patch.Apply( ApplyState )
 import Darcs.Patch.Set ( PatchSet, Origin, emptyPatchSet, SealedPatchSet )
@@ -232,7 +232,7 @@ pullCmd
 pullCmd patchApplier (_,o) opts repos =
   do
     pullingFrom <- mapM (fixUrl o) repos
-    withRepoLock (useCache ? opts) (umask ? opts) $
+    withRepoLock (dryRun ? opts) (useCache ? opts) YesUpdatePending (umask ? opts) $
      repoJob patchApplier $ \patchProxy initRepo -> do
       let repository = modifyCache (addReposToCache pullingFrom) initRepo
       Sealed fork <- fetchPatches o opts repos "pull" repository
@@ -245,15 +245,15 @@ pullCmd patchApplier (_,o) opts repos =
 
 fetchCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 fetchCmd (_,o) opts repos =
-    withRepoLock (useCache ? opts) (umask ? opts) $ RepoJob $
+    withRepoLock (dryRun ? opts) (useCache ? opts) YesUpdatePending (umask ? opts) $ RepoJob $
         fetchPatches o opts repos "fetch" >=> makeBundle opts
 
-fetchPatches :: (RepoPatch p, ApplyState p ~ Tree)
+fetchPatches :: forall rt p wR wU . (IsRepoType rt, RepoPatch p, ApplyState p ~ Tree)
              => AbsolutePath -> [DarcsFlag] -> [String] -> String
-             -> Repository 'RW p wR wU wR
-             -> IO (Sealed (Fork (PatchSet p)
-                                 (FL (PatchInfoAnd p))
-                                 (FL (PatchInfoAnd p)) Origin wR))
+             -> Repository rt p wR wU wR
+             -> IO (Sealed (Fork (PatchSet rt p)
+                                 (FL (PatchInfoAnd rt p))
+                                 (FL (PatchInfoAnd rt p)) Origin wR))
 fetchPatches o opts unfixedrepodirs@(_:_) jobname repository = do
   here <- getCurrentDirectory
   repodirs <- (nub . filter (/= here)) `fmap` mapM (fixUrl o) unfixedrepodirs
@@ -304,11 +304,11 @@ fetchPatches o opts unfixedrepodirs@(_:_) jobname repository = do
 fetchPatches _ _ [] jobname _ = fail $
   "No default repository to " ++ jobname ++ " from, please specify one"
 
-makeBundle :: forall p wR . (RepoPatch p, ApplyState p ~ Tree)
+makeBundle :: forall rt p wR . (RepoPatch p, ApplyState p ~ Tree)
            => [DarcsFlag]
-           -> (Sealed (Fork (PatchSet p)
-                      (FL (PatchInfoAnd p))
-                      (FL (PatchInfoAnd p)) Origin wR))
+           -> (Sealed (Fork (PatchSet rt p)
+                      (FL (PatchInfoAnd rt p))
+                      (FL (PatchInfoAnd rt p)) Origin wR))
            -> IO ()
 makeBundle opts (Sealed (Fork common _ to_be_fetched)) =
     do
@@ -338,9 +338,9 @@ tuple: the first patchset(s) to be complemented against Rc and then
 the second patchset(s) to be complemented against Rc.
 -}
 
-readRepos :: RepoPatch p
+readRepos :: (IsRepoType rt, RepoPatch p)
           => Repository rt p wR wU wT -> [DarcsFlag] -> [String]
-          -> IO (SealedPatchSet p Origin,SealedPatchSet p Origin)
+          -> IO (SealedPatchSet rt p Origin,SealedPatchSet rt p Origin)
 readRepos _ _ [] = error "impossible case"
 readRepos to_repo opts us =
     do rs <- mapM (\u -> do r <- identifyRepositoryFor Reading to_repo (useCache ? opts) u

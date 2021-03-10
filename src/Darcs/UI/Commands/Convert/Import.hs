@@ -56,6 +56,7 @@ import Darcs.Patch.Witnesses.Sealed ( Sealed(..), unFreeLeft )
 
 import Darcs.Patch.Info ( PatchInfo, patchinfo )
 import Darcs.Patch.Prim ( sortCoalesceFL )
+import Darcs.Patch.RepoType ( IsRepoType(..) )
 
 import Darcs.Repository
     ( EmptyRepository(..)
@@ -228,13 +229,13 @@ fastImport _ opts [outrepo] =
     -- TODO implement --dry-run, which would be read-only?
     _repo <- revertRepositoryChanges _repo (updatePending opts)
     marks <- fastImport' _repo emptyMarks
-    _ <- finalizeRepositoryChanges _repo (updatePending opts) GzipCompression (O.dryRun ? opts)
+    _ <- finalizeRepositoryChanges _repo (updatePending opts) GzipCompression
     cleanRepository _repo
     createPristineDirectoryTree _repo "." (withWorkingDir ? opts)
     return marks
 fastImport _ _ _ = fail "I need exactly one output repository."
 
-fastImport' :: forall rt p r u . (RepoPatch p, ApplyState p ~ Tree) =>
+fastImport' :: forall rt p r u . (IsRepoType rt, RepoPatch p, ApplyState p ~ Tree) =>
                Repository rt p r u r -> Marks -> IO ()
 fastImport' repo marks = do
     pristine <- readPristine repo

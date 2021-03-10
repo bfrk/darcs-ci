@@ -34,9 +34,10 @@ import Darcs.Util.Tree( readBlob, modifyTree, findFile, TreeItem(..), Tree
 import Darcs.Util.Path( AbsolutePath )
 import Darcs.UI.Flags
     ( DarcsFlag, diffingOpts
-    , verbosity, useCache, umask, diffAlgorithm, pathsFromArgs )
+    , verbosity, useCache, dryRun, umask, diffAlgorithm, pathsFromArgs )
 import Darcs.UI.Options ( (^), (?) )
 import qualified Darcs.UI.Options.All as O
+import Darcs.Repository.Flags ( UpdatePending(..) )
 import Darcs.UI.Commands ( DarcsCommand(..), withStdOpts, nodefaults, amInHashedRepository )
 import Darcs.UI.Completion ( knownFileArgs )
 import Darcs.Repository.Diff( treeDiff )
@@ -150,7 +151,7 @@ replaceArgs fps flags args =
 
 replaceCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 replaceCmd fps opts (old : new : args@(_ : _)) =
-  withRepoLock (useCache ? opts) (umask ? opts) $ RepoJob $
+  withRepoLock  (dryRun ? opts) (useCache ? opts) YesUpdatePending (umask ? opts) $ RepoJob $
     \repository -> do
         paths <- nubSort <$> pathsFromArgs fps args
         when (null paths) $ fail "No valid repository paths were given."

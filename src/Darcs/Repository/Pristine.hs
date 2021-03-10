@@ -36,7 +36,7 @@ import Darcs.Repository.InternalTypes
     ( Repository
     , repoCache
     , repoFormat
-    , withRepoDir
+    , withRepoLocation
     )
 import Darcs.Repository.Old ( oldRepoFailMsg )
 import Darcs.Repository.Paths
@@ -136,7 +136,7 @@ applyToTentativePristine :: (ApplyState q ~ Tree, Apply q, ShowPatch q)
                          -> q wT wY
                          -> IO ()
 applyToTentativePristine r dir verb p =
-  withRepoDir r $ do
+  withRepoLocation r $ do
     when (verb == Verbose) $
       putDocLn $ text "Applying to pristine..." <+> description p
     applyToTentativePristineCwd (repoCache r) dir p
@@ -164,7 +164,7 @@ readTentativePristine repo = do
       decodeDarcsHash $ BC.pack $ getValidHash hash
 
 readHashedPristineRoot :: Repository rt p wR wU wT -> IO PristineHash
-readHashedPristineRoot r = withRepoDir r $ do
+readHashedPristineRoot r = withRepoLocation r $ do
     peekPristineHash <$>
       gzReadFilePS hashedInventoryPath
         `catch` (\(_ :: IOException) -> fail oldRepoFailMsg)
