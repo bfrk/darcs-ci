@@ -1,0 +1,45 @@
+# Note: we are connecting via ssh to the local machine, so the REMOTE_DIR is
+# actually a local path. This requires that the user running the tests has ssh
+# installed (client and server) and that they have a valid key pair and an ssh
+# agent running, so they can do 'ssh localhost' w/o getting prompted for their
+# passphrase every time.
+
+REMOTE_DIR="$(pwd)/remote_dir"
+
+if [ x"${USE_PUTTY}" != x ]; then
+  DARCS_SSH=plink
+  export DARCS_SSH
+  DARCS_SCP=pscp
+  export DARCS_SCP
+  DARCS_SFTP=psftp
+  export DARCS_SFTP
+fi
+
+if [ x"${USE_CONTROL_MASTER}" != x ]; then
+  DARCS_SSH_FLAGS="--ssh-cm"
+  export DARCS_SSH_FLAGS
+fi
+
+if [ x"${DARCS_SSH}" = x ]; then
+  SSH=ssh
+else
+  SSH=${DARCS_SSH}
+fi
+
+if [ x${REMOTE} = x ]; then
+  REMOTE=$(whoami)@localhost
+fi
+
+init_remote_repo() {
+    repodir="${1:-R}"
+
+    ${SSH} ${REMOTE} \
+        "rm -rf '${REMOTE_DIR}' && mkdir '${REMOTE_DIR}' && \
+            cd '${REMOTE_DIR}' && darcs init --repo '$repodir' --$format" \
+        || exit 200
+}
+
+# test if we can connect via ssh, otherwise skip test
+${SSH} -x -o=NumberofPasswordPrompts=0 ${REMOTE} true || exit 200
+
+# vim: syntax=sh:
