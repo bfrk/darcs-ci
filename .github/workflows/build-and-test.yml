@@ -21,7 +21,7 @@ jobs:
             ghc: 8.4
     env:
       runtests: ${{ matrix.ghc == '8.2' || matrix.ghc == '9.0' }}
-      tests-to-run: -t utf8-display
+      tests-to-run: -t latin9
       testcmd: cabal run -- darcs-test -j=6 -f=123 -s=sn -c=yn
       ACTIONS_ALLOW_UNSECURE_COMMANDS: true
 

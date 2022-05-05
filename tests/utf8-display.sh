@@ -26,8 +26,6 @@
 
 . lib
 
-# abort_windows # TODO make this work
-
 switch_to_utf8_locale
 
 #is now the default, must use DARCS_ESCAPE_8BIT to disable
