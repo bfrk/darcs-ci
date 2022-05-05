@@ -1,0 +1,23 @@
+#!/bin/sh
+
+# If we have an argument named "init", re-initialize the git repo from
+# scratch. Otherwise, fetch from the github repo and update our HEAD to point
+# to the master branch. Then commit the current *pending* state of the repo
+# (what you see with 'darcs whatsnew -s') and (force-) push.
+
+set -e
+test -d _darcs || (echo need to be in a darcs repo >&2 && false)
+github=git@github.com:bfrk/darcs-ci.git
+rm -rf .git
+git init
+if ! test "$1" = "init"; then
+  git fetch $github master
+  # like checkout but does not touch working tree or staging area:
+  git update-ref HEAD $(cat .git/FETCH_HEAD|cut -f1)
+fi
+git add -A $(darcs show files --no-directories | tr -d '\r')
+git add release/distributed-context release/distributed-version
+branch=$(basename $(pwd))
+date=$(date -u --rfc-3339=seconds)
+git commit --allow-empty -m "$branch $date"
+git push -f --set-upstream $github master

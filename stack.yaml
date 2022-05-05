@@ -1,0 +1,22 @@
+packages:
+- .
+
+# resolver: lts-11.22
+# extra-deps:
+# - Cabal-3.2.0.0
+# - base16-bytestring-1.0.1.0
+# - constraints-0.12
+# - type-equality-1
+
+# resolver: lts-12.26
+# resolver: lts-13.30
+# resolver: lts-14.27
+# extra-deps:
+# - base16-bytestring-1.0.1.0
+# - constraints-0.12
+# - type-equality-1
+
+# resolver: lts-15.16
+resolver: lts-16.26
+extra-deps:
+- base16-bytestring-1.0.1.0

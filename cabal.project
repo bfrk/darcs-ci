@@ -1,0 +1,5 @@
+packages: .
+
+-- otherwise we get build errors on Windows with ghc >= 9.0
+-- note that version range syntax has no /= operator
+constraints: ansi-terminal < 0.11.1 || > 0.11.1
