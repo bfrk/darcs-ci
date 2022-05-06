@@ -28,6 +28,7 @@ import Darcs.Prelude
 #ifdef WIN32
 
 import qualified System.Directory ( getCurrentDirectory, canonicalizePath )
+import System.IO ( hPutStrLn, stderr )
 
 #else
 
@@ -97,6 +98,7 @@ setExecutable _ _ = return ()
 getCurrentDirectory :: IO FilePath
 getCurrentDirectory = do
     d <- System.Directory.getCurrentDirectory >>= System.Directory.canonicalizePath
+    hPutStrLn stderr $ "DEBUG getCurrentDirectory: "++d
     return $ map rb d
   where
     rb '\\' = '/'

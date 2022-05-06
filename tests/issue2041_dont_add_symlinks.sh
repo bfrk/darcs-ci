@@ -49,3 +49,4 @@ ln -s ./test-dir ./test-dir-link1
 ln -s "`pwd`"/test-dir ./test-dir-link2
 not darcs add test-dir-link1
 not darcs add test-dir-link2
+exit 1
