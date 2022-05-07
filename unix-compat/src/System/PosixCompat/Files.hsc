@@ -349,7 +349,7 @@ getSymbolicLinkStatus path = do
              }
   where
     openPath = createFile path
-                 gENERIC_READ
+                 fILE_READ_EA
                  (fILE_SHARE_READ .|. fILE_SHARE_WRITE .|. fILE_SHARE_DELETE)
                  Nothing
                  oPEN_EXISTING
