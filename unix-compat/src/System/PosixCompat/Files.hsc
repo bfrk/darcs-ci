@@ -323,17 +323,20 @@ getSymbolicLinkStatus path = do
         ctime = windowsToPosixTime (bhfiCreationTime info)
         attr = bhfiFileAttributes info
         test x y = x .&. y == x
-        -- contrary to Posix systems, directory sumlinks on Windows have both
-        -- fILE_ATTRIBUTE_REPARSE_POINT and fILE_ATTRIBUTE_DIRECTORY bits set,
-        -- which is why we do *not* use .|. to combine mode bits here
-        typ
+        -- Contrary to Posix systems, directory symlinks on Windows have both
+        -- fILE_ATTRIBUTE_REPARSE_POINT and fILE_ATTRIBUTE_DIRECTORY bits set.
+        -- Generally, the file type values in Posix should be understood as an
+        -- enumeration, not as a bitset.
+        fileType
           | test fILE_ATTRIBUTE_REPARSE_POINT attr = symbolicLinkMode
           | test fILE_ATTRIBUTE_NORMAL attr = regularFileMode
           | test fILE_ATTRIBUTE_DIRECTORY attr = directoryMode
+          | otherwise =
+              unsupported $ "getSymbolicLinkStatus: file attributes " ++ show attr
     return $ FileStatus
              { deviceID         = fromIntegral (bhfiVolumeSerialNumber info)
              , fileID           = fromIntegral (bhfiFileIndex info)
-             , fileMode         = typ .|. perm
+             , fileMode         = fileType .|. perm
              , linkCount        = fromIntegral (bhfiNumberOfLinks info)
              , fileOwner        = 0
              , fileGroup        = 0
@@ -408,7 +411,7 @@ getFileType path =
        if f then return regularFileMode
             else do d <- doesDirectoryExist path
                     if d then return directoryMode
-                         else unsupported "Unknown file type."
+                         else unsupported "getFilePath: unknown file type"
 
 getFdStatus :: Fd -> IO FileStatus
 getFdStatus _ = unsupported "getFdStatus"
