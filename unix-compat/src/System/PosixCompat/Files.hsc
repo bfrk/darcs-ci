@@ -304,7 +304,7 @@ isRegularFile stat =
 
 isDirectory :: FileStatus -> Bool
 isDirectory stat =
-    not isSymbolicLink &&
+    not (isSymbolicLink stat) &&
     (fileMode stat `intersectFileModes` fileTypeModes) == directoryMode
 
 isSymbolicLink :: FileStatus -> Bool
