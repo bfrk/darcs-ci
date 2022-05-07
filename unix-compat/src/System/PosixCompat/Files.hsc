@@ -328,15 +328,16 @@ getSymbolicLinkStatus path = do
         -- Generally, the file type values in Posix should be understood as an
         -- enumeration, not as a bitset.
         fileType
-          | test fILE_ATTRIBUTE_REPARSE_POINT attr = symbolicLinkMode
-          | test fILE_ATTRIBUTE_NORMAL attr = regularFileMode
-          | test fILE_ATTRIBUTE_DIRECTORY attr = directoryMode
-          | otherwise =
-              unsupported $ "getSymbolicLinkStatus: file attributes " ++ show attr
-    return $ FileStatus
+          | test fILE_ATTRIBUTE_REPARSE_POINT attr = Just symbolicLinkMode
+          | test fILE_ATTRIBUTE_NORMAL attr = Just regularFileMode
+          | test fILE_ATTRIBUTE_DIRECTORY attr = Just directoryMode
+          | otherwise = Nothing
+    case fileType of
+      Just typ ->
+        return $ FileStatus
              { deviceID         = fromIntegral (bhfiVolumeSerialNumber info)
              , fileID           = fromIntegral (bhfiFileIndex info)
-             , fileMode         = fileType .|. perm
+             , fileMode         = typ .|. perm
              , linkCount        = fromIntegral (bhfiNumberOfLinks info)
              , fileOwner        = 0
              , fileGroup        = 0
@@ -349,6 +350,8 @@ getSymbolicLinkStatus path = do
              , modificationTimeHiRes = mtime
              , statusChangeTimeHiRes = ctime
              }
+      Nothing ->
+        unsupported $ "getSymbolicLinkStatus: file attributes " ++ show attr
   where
     openPath = createFile path
                  gENERIC_READ
