@@ -334,7 +334,7 @@ getSymbolicLinkStatus path = do
     return $ FileStatus
              { deviceID         = fromIntegral (bhfiVolumeSerialNumber info)
              , fileID           = fromIntegral (bhfiFileIndex info)
-             , fileMode         = typ .|. perm
+             , fileMode         = fileType .|. perm
              , linkCount        = fromIntegral (bhfiNumberOfLinks info)
              , fileOwner        = 0
              , fileGroup        = 0
