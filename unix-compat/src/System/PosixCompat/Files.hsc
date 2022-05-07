@@ -356,6 +356,9 @@ getSymbolicLinkStatus path = do
                  (sECURITY_ANONYMOUS .|. fILE_FLAG_BACKUP_SEMANTICS .|.
                   fILE_FLAG_OPEN_REPARSE_POINT)
                  Nothing
+    -- not yet defined in Win32 package:
+    fILE_FLAG_OPEN_REPARSE_POINT :: FileAttributeOrFlag
+    fILE_FLAG_OPEN_REPARSE_POINT = 0x00200000
 
 getFileStatus :: FilePath -> IO FileStatus
 getFileStatus path = do
