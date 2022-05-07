@@ -353,7 +353,8 @@ getSymbolicLinkStatus path = do
                  (fILE_SHARE_READ .|. fILE_SHARE_WRITE .|. fILE_SHARE_DELETE)
                  Nothing
                  oPEN_EXISTING
-                 (sECURITY_ANONYMOUS .|. fILE_FLAG_BACKUP_SEMANTICS)
+                 (sECURITY_ANONYMOUS .|. fILE_FLAG_BACKUP_SEMANTICS .|.
+                  fILE_FLAG_OPEN_REPARSE_POINT)
                  Nothing
 
 getFileStatus :: FilePath -> IO FileStatus
