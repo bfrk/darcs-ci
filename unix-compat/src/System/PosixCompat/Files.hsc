@@ -304,7 +304,6 @@ isRegularFile stat =
 
 isDirectory :: FileStatus -> Bool
 isDirectory stat =
-    not (isSymbolicLink stat) &&
     (fileMode stat `intersectFileModes` fileTypeModes) == directoryMode
 
 isSymbolicLink :: FileStatus -> Bool
@@ -324,12 +323,13 @@ getSymbolicLinkStatus path = do
         ctime = windowsToPosixTime (bhfiCreationTime info)
         attr = bhfiFileAttributes info
         test x y = x .&. y == x
-        is_file = test fILE_ATTRIBUTE_NORMAL attr
-        is_dir = test fILE_ATTRIBUTE_DIRECTORY attr
-        is_link = test fILE_ATTRIBUTE_REPARSE_POINT attr
-        typ = (if is_file then regularFileMode else 0)
-          .|. (if is_dir then directoryMode else 0)
-          .|. (if is_link then symbolicLinkMode else 0)
+        -- contrary to Posix systems, directory sumlinks on Windows have both
+        -- fILE_ATTRIBUTE_REPARSE_POINT and fILE_ATTRIBUTE_DIRECTORY bits set,
+        -- which is why we do *not* use .|. to combine mode bits here
+        typ
+          | test fILE_ATTRIBUTE_REPARSE_POINT attr = symbolicLinkMode
+          | test fILE_ATTRIBUTE_NORMAL attr = regularFileMode
+          | test fILE_ATTRIBUTE_DIRECTORY attr = directoryMode
     return $ FileStatus
              { deviceID         = fromIntegral (bhfiVolumeSerialNumber info)
              , fileID           = fromIntegral (bhfiFileIndex info)
