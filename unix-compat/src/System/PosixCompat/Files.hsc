@@ -329,12 +329,9 @@ getSymbolicLinkStatus path = do
         -- enumeration, not as a bitset.
         fileType
           | test fILE_ATTRIBUTE_REPARSE_POINT attr = Just symbolicLinkMode
-          | test fILE_ATTRIBUTE_NORMAL attr = Just regularFileMode
           | test fILE_ATTRIBUTE_DIRECTORY attr = Just directoryMode
-          | otherwise = Nothing
-    case fileType of
-      Just typ ->
-        return $ FileStatus
+          | otherwise = regularFileMode -- it's a lie but what can we do?
+    return $ FileStatus
              { deviceID         = fromIntegral (bhfiVolumeSerialNumber info)
              , fileID           = fromIntegral (bhfiFileIndex info)
              , fileMode         = typ .|. perm
@@ -350,8 +347,6 @@ getSymbolicLinkStatus path = do
              , modificationTimeHiRes = mtime
              , statusChangeTimeHiRes = ctime
              }
-      Nothing ->
-        unsupported $ "getSymbolicLinkStatus: file attributes " ++ show attr
   where
     openPath = createFile path
                  gENERIC_READ
