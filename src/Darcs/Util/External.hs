@@ -15,7 +15,7 @@ module Darcs.Util.External
 import Control.Exception ( catch, IOException )
 
 import System.Posix.Files
-    ( getSymbolicLinkStatus
+    ( getFileStatus
     , isRegularFile
     , isDirectory
     , createLink
@@ -76,7 +76,7 @@ copyLocal fou out = createLink fou out `catchall` cloneFile fou out
 
 cloneTree :: FilePath -> FilePath -> IO ()
 cloneTree source dest =
- do fs <- getSymbolicLinkStatus source
+ do fs <- getFileStatus source
     if isDirectory fs then do
         fps <- listDirectory source
         zipWithM_ cloneSubTree (map (source </>) fps) (map (dest </>) fps)
@@ -85,7 +85,7 @@ cloneTree source dest =
 
 cloneSubTree :: FilePath -> FilePath -> IO ()
 cloneSubTree source dest =
- do fs <- getSymbolicLinkStatus source
+ do fs <- getFileStatus source
     if isDirectory fs then do
         createDirectory dest
         fps <- listDirectory source

@@ -52,7 +52,7 @@ import Darcs.Util.Path
     , parents
     , realPath
     )
-import System.Posix.Files ( isRegularFile, isDirectory, isSymbolicLink )
+import System.Posix.Files ( isRegularFile, isDirectory )
 import System.Directory ( getPermissions, readable )
 
 import qualified System.FilePath.Windows as WindowsFilePath
@@ -264,10 +264,11 @@ addp msgs opts cur0 files = do
         (_, _, Just s)
             | isDirectory s    -> trypatch $ freeGap (adddir f :>: NilFL)
             | isRegularFile s  -> trypatch $ freeGap (addfile f :>: NilFL)
-            | isSymbolicLink s -> do
+            | otherwise -> do
                 putWarning opts . text $
                     "Sorry, file " ++ displayPath f ++
-                    " is a symbolic link, which is unsupported by darcs."
+                    " is not a proper file or directory.\n" ++
+                    "(Darcs cannot track symbolic links or special files.)"
                 return add_failure
         _ -> do
             putWarning opts . text $ "File "++ displayPath f ++" does not exist!"

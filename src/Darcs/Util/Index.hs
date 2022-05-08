@@ -156,7 +156,7 @@ import Foreign.Ptr( Ptr, plusPtr )
 
 import System.IO ( hPutStrLn, stderr )
 import System.IO.MMap( mmapFileForeignPtr, mmapWithFilePtr, Mode(..) )
-import System.Directory( doesFileExist, getCurrentDirectory )
+import System.Directory( doesFileExist, getCurrentDirectory, getFileSize )
 import System.Directory( renameFile )
 import System.FilePath( (<.>) )
 
@@ -341,7 +341,7 @@ nullHash = B.replicate size_hash 0
 -- the index file. mmapIndex will grow the index if it is smaller than this.
 mmapIndex :: forall a. FilePath -> Int -> IO (ForeignPtr a, Int)
 mmapIndex indexpath req_size = do
-  act_size <- fromIntegral . fileSize <$> Darcs.Util.File.getFileStatus indexpath
+  act_size <- fromIntegral <$> getFileSize indexpath
   let size = case req_size > 0 of
         True -> req_size
         False | act_size >= size_header -> act_size - size_header
