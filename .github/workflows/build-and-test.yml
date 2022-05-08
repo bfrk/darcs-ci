@@ -12,7 +12,7 @@ jobs:
       matrix:
         # os: [ubuntu-18.04, ubuntu-20.04, macOS-10.15, macOS-11, windows-2016, windows-2019, windows-2022]
         # faster, less comprehensive:
-        os: [ubuntu-20.04, macOS-10.15, windows-2019]
+        os: [windows-2019]
         ghc: ['8.2', '9.0']
         cabal: ['latest']
         exclude:
