@@ -108,6 +108,7 @@ import Control.Monad ( unless )
 import System.Directory ( doesDirectoryExist, createDirectory )
 import System.FilePath.Posix ( (</>) )
 import System.Environment ( lookupEnv )
+import System.IO ( hPutStrLn, stderr )
 
 -- Use of RemoteRepo data constructor is harmless here, if not ideal.
 -- See haddocks for fixRemoteRepos below for details.
@@ -264,6 +265,7 @@ maybeFixSubPaths :: (AbsolutePath, AbsolutePath)
                  -> [String]
                  -> IO [Maybe AnchoredPath]
 maybeFixSubPaths (r, o) fs = do
+  hPutStrLn stderr $ "DEBUG maybeFixSubPaths " ++ show (r,o) ++ " " ++ show fs
   fixedFs <- mapM (fmap dropInDarcsdir . fixit) fs
   let bads = snd . unzip . filter (isNothing . fst) $ zip fixedFs fs
   unless (null bads) $

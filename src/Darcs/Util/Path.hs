@@ -99,6 +99,7 @@ import Data.Char ( isSpace, chr, ord, toLower )
 import Control.Exception ( tryJust, bracket_ )
 import Control.Monad ( when )
 import GHC.Stack ( HasCallStack )
+import System.IO ( hPutStrLn, stderr )
 import System.IO.Error ( isDoesNotExistError )
 
 import qualified Darcs.Util.Workaround as Workaround ( getCurrentDirectory )
@@ -232,21 +233,27 @@ doesPathExist p = do
 
 -- | Interpret a possibly relative path wrt the current working directory.
 ioAbsolute :: FilePath -> IO AbsolutePath
-ioAbsolute dir =
-    do isdir <- doesDirectoryReallyExist dir
-       here <- getCurrentDirectory
-       if isdir
-         then bracket_ (setCurrentDirectory dir)
-                       (setCurrentDirectory $ toFilePath here)
-                       getCurrentDirectory
-         else let super_dir = case NativeFilePath.takeDirectory dir of
-                                "" ->  "."
-                                d  -> d
-                  file = NativeFilePath.takeFileName dir
-              in do abs_dir <- if dir == super_dir
-                               then return $ AbsolutePath dir
-                               else ioAbsolute super_dir
-                    return $ makeAbsolute abs_dir file
+ioAbsolute path = do
+  isdir <- doesDirectoryReallyExist path
+  here <- getCurrentDirectory
+  if isdir
+    then bracket_
+           (setCurrentDirectory path)
+           (setCurrentDirectory $ toFilePath here)
+           getCurrentDirectory
+    else do
+      let super_dir =
+            case NativeFilePath.takeDirectory path of
+              "" -> "."
+              d -> d
+          file = NativeFilePath.takeFileName path
+      abs_dir <-
+        if path == super_dir
+          then return $ AbsolutePath path
+          else ioAbsolute super_dir
+      let result = makeAbsolute abs_dir file
+      hPutStrLn stderr $ "DEBUG ioAbsolute: " ++ show path ++ " -> " ++ show result
+      return result
 
 -- | Take an absolute path and a string representing a (possibly relative)
 -- path and combine them into an absolute path. If the second argument is
