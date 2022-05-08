@@ -1,0 +1,8 @@
+0000000000000000000000000000000000000000 7a5f77579b17ec2b2e1826f5481a9c0bf4da2a0a Ben Franksen <ben.franksen@online.de> 1651823426 +0200	clone: from https://github.com/jacobstanley/unix-compat
+7a5f77579b17ec2b2e1826f5481a9c0bf4da2a0a e6d2b151edc1ba8b9d81343c8ac71f360e6ae7ce Ben Franksen <ben.franksen@online.de> 1651823490 +0200	merge e6d2b151edc1ba8b9d81343c8ac71f360e6ae7ce: Fast-forward
+e6d2b151edc1ba8b9d81343c8ac71f360e6ae7ce c0a4afbcf3a2f2f7c7dd776e0b5fa0a5ae8726e1 Ben Franksen <ben.franksen@online.de> 1651918647 +0200	commit (amend): detect symbolic links in getSymbolicLinkStatus
+c0a4afbcf3a2f2f7c7dd776e0b5fa0a5ae8726e1 da392dbb37052cd17bd6ab3da7b9d03bfee742a4 Ben Franksen <ben.franksen@online.de> 1651998173 +0200	commit (amend): better support for symbolic links
+da392dbb37052cd17bd6ab3da7b9d03bfee742a4 74682aaf63b1f582230ee37545475923d5b6307e Ben Franksen <ben.franksen@online.de> 1651998723 +0200	commit (amend): better support for symbolic links
+74682aaf63b1f582230ee37545475923d5b6307e 7156ad3ba7bb58c1ca78cd774d9fe6b0e84b24a7 Ben Franksen <ben.franksen@online.de> 1651998878 +0200	commit (amend): better support for symbolic links
+7156ad3ba7bb58c1ca78cd774d9fe6b0e84b24a7 712d90f34545b3581d9d791e546b2cf81828a47f Ben Franksen <ben.franksen@online.de> 1651999018 +0200	commit (amend): better support for symbolic links
+712d90f34545b3581d9d791e546b2cf81828a47f e013e775a59ee12c75c9072ff9bfb5133023549a Ben Franksen <ben.franksen@online.de> 1651999829 +0200	commit (amend): better support for symbolic links
