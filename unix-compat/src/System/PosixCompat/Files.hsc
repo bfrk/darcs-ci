@@ -134,6 +134,7 @@ import System.Directory (writable, setOwnerWritable)
 import System.Directory (executable, setOwnerExecutable)
 import System.Directory (searchable, setOwnerSearchable)
 import System.Directory (doesFileExist, doesDirectoryExist)
+import System.Directory (getSymbolicLinkTarget)
 import System.FilePath (takeExtension)
 import System.IO (IOMode(..), openFile, hSetFileSize, hClose)
 import System.IO.Error
