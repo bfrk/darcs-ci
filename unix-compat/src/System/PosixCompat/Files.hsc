@@ -138,7 +138,7 @@ import System.FilePath (takeExtension)
 import System.IO (IOMode(..), openFile, hSetFileSize, hClose)
 import System.IO.Error
 import System.PosixCompat.Types
-import System.Win32.File hiding (getFileType)
+import System.Win32.File
 import System.Win32.HardLink (createHardLink)
 import System.Win32.Time (FILETIME(..), getFileTime, setFileTime)
 import System.Win32.Types (HANDLE)
@@ -409,14 +409,6 @@ posixToWindowsTime t = FILETIME $
   truncate (t * 10000000 + windowsPosixEpochDifference)
 -}
 
-getFileType :: FilePath -> IO FileMode
-getFileType path =
-    do f <- doesFileExist path
-       if f then return regularFileMode
-            else do d <- doesDirectoryExist path
-                    if d then return directoryMode
-                         else unsupported "getFilePath: unknown file type"
-
 getFdStatus :: Fd -> IO FileStatus
 getFdStatus _ = unsupported "getFdStatus"
 
@@ -442,7 +434,7 @@ createSymbolicLink :: FilePath -> FilePath -> IO ()
 createSymbolicLink _ _ = unsupported "createSymbolicLink"
 
 readSymbolicLink :: FilePath -> IO FilePath
-readSymbolicLink _ = unsupported "readSymbolicLink"
+readSymbolicLink = getSymbolicLinkTarget
 
 -- -----------------------------------------------------------------------------
 -- Renaming
