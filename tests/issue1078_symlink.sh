@@ -20,15 +20,8 @@ DIR2="$(pwd)/temp2"
 cd temp2
 darcs init
 touch a b c d e f g h i j
-# We have the perverse situation that these operations succeed
-# on Linux and MacOS if and only if they fail on Windows.
-if os_is_windows; then
-  works=not
-  fails=''
-else
-  works=''
-  fails=not
-fi
+works=''
+fails=not
 $works darcs add "$DIR1/../temp1/a"
 $fails darcs add "$DIR1/../temp2/b"
 $works darcs add "$DIR1/c"
