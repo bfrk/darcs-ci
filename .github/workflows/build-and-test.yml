@@ -24,6 +24,7 @@ jobs:
       tests-to-run: -t issue2041_dont_add_symlinks -t issue2275_follows-symlinks
       testcmd: cabal run -- darcs-test -j=6 -f=123 -s=sn -c=yn
       ACTIONS_ALLOW_UNSECURE_COMMANDS: true
+      MSYS: winsymlinks:nativestrict
 
     steps:
     - name: Configure git
