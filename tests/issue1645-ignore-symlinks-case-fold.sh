@@ -32,6 +32,9 @@
 ## SOFTWARE.
 
 . lib                           # Load some portability helpers.
+
+unset pwd
+
 rm -rf R S                      # Another script may have left a mess.
 darcs init      --repo R        # Create our test repos.
 darcs init      --repo S

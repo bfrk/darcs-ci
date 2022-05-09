@@ -22,7 +22,7 @@ jobs:
     env:
       runtests: ${{ matrix.ghc == '8.2' || matrix.ghc == '9.0' }}
       tests-to-run: -t symlink
-      testcmd: cabal run -- darcs-test -j=6 -f=123 -s=sn -c=yn
+      testcmd: cabal run -- darcs-test -j=6 -f=2 -i=yn
       ACTIONS_ALLOW_UNSECURE_COMMANDS: true
 
     steps:
