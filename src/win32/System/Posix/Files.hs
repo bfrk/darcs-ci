@@ -3,7 +3,7 @@ module System.Posix.Files
     , getFdStatus, getFileStatus, getSymbolicLinkStatus
     , modificationTimeHiRes, setFileMode, fileSize, fileMode, fileOwner
     , stdFileMode, FileStatus, fileID
-    , linkCount, createLink
+    , linkCount, createLink, ownerModes
     ) where
 
 import System.PosixCompat.Files
@@ -11,5 +11,5 @@ import System.PosixCompat.Files
     , getFdStatus, getFileStatus, getSymbolicLinkStatus
     , modificationTimeHiRes, setFileMode, fileSize, fileMode, fileOwner
     , stdFileMode, FileStatus, fileID
-    , linkCount, createLink
+    , linkCount, createLink, ownerModes
     )

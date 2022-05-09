@@ -74,7 +74,7 @@ import Control.Exception
     )
 import System.Directory
     ( removePathForcibly
-    , doesFileExist
+    -- , doesFileExist
     , doesDirectoryExist
     , createDirectory
     , getTemporaryDirectory
@@ -90,7 +90,7 @@ import System.IO.Temp ( createTempDirectory )
 import Control.Concurrent ( threadDelay )
 import Control.Monad ( unless, when, liftM )
 
-import System.Posix.Files ( fileMode, getFileStatus, setFileMode )
+import System.Posix.Files ( fileMode, isRegularFile, setFileMode )
 
 import GHC.IO.Encoding ( getFileSystemEncoding )
 
@@ -99,8 +99,7 @@ import Darcs.Util.Exception
     ( firstJustIO
     , catchall
     )
-import Darcs.Util.File ( withCurrentDirectory
-                       , removeFileMayNotExist )
+import Darcs.Util.File ( getFileStatus, removeFileMayNotExist, withCurrentDirectory )
 import Darcs.Util.Path ( AbsolutePath, FilePathLike, toFilePath,
                         getCurrentDirectory, setCurrentDirectory )
 
@@ -363,10 +362,16 @@ gzWriteAtomicFilePSs :: FilePathLike p => p -> [B.ByteString] -> IO ()
 gzWriteAtomicFilePSs f pss =
     withSignalsBlocked $ withNamedTemp (toFilePath f) $ \newf -> do
     gzWriteFilePSs newf pss
+    getFileStatus (toFilePath f) >>= \case
+      Just st | isRegularFile st ->
+        setFileMode newf (fileMode st) `catchall` return ()
+      _ -> return ()
+{-
     already_exists <- doesFileExist $ toFilePath f
     when already_exists $ do mode <- fileMode `fmap` getFileStatus (toFilePath f)
                              setFileMode newf mode
              `catchall` return ()
+-}
     renameFile newf (toFilePath f)
 
 gzWriteDocFile :: FilePathLike p => p -> Doc -> IO ()
@@ -378,10 +383,16 @@ writeToFile t f job =
     (case t of
       Text -> withFile
       Binary -> withBinaryFile) newf WriteMode job
+    getFileStatus (toFilePath f) >>= \case
+      Just st | isRegularFile st ->
+        setFileMode newf (fileMode st) `catchall` return ()
+      _ -> return ()
+{-
     already_exists <- doesFileExist (toFilePath f)
     when already_exists $ do mode <- fileMode `fmap` getFileStatus (toFilePath f)
                              setFileMode newf mode
              `catchall` return ()
+-}
     renameFile newf (toFilePath f)
 
 appendToFile :: FilePathLike p => FileType -> p -> (Handle -> IO ()) -> IO ()

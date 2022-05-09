@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 module Darcs.Util.File
     (
     -- * Files and directories
@@ -28,9 +27,7 @@ import System.Directory ( removeFile, getHomeDirectory,
                           createDirectory, listDirectory )
 import System.IO.Error ( catchIOError )
 import System.Posix.Files( getSymbolicLinkStatus, FileStatus, isDirectory )
-#ifndef WIN32
 import System.Posix.Files( setFileMode, ownerModes )
-#endif
 import System.FilePath.Posix ( (</>) )
 
 import Darcs.Util.Exception ( catchall, ifDoesNotExistError )
@@ -80,10 +77,7 @@ xdgCacheDir = do
     -- If directory does not exist, create it with permissions 0700
     -- as specified by the FreeDesktop standard.
     unless exists $ do createDirectory d
-#ifndef WIN32
-    -- see http://bugs.darcs.net/issue2334
                        setFileMode d ownerModes
-#endif
     return $ Just d
     `catchall` return Nothing
 
