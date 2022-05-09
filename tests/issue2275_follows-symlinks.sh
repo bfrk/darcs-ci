@@ -28,7 +28,6 @@
 ## SOFTWARE.
 
 . lib
-#abort_windows                   # Skip test on Windows
 
 rm -rf R
 darcs init R

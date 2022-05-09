@@ -20,18 +20,15 @@ DIR2="$(pwd)/temp2"
 cd temp2
 darcs init
 touch a b c d e f g h i j
-works=''
-fails=not
-$works darcs add "$DIR1/../temp1/a"
-$fails darcs add "$DIR1/../temp2/b"
-$works darcs add "$DIR1/c"
-$works darcs add "$DIR2/../temp1/d"
-$fails darcs add "$DIR2/../temp2/e"
-$fails darcs add "$DIR2/f"
-# Relative paths; these should both work but currently don't
-$works darcs add "../temp1/g"
-$fails darcs add "../temp2/h"
-# This should definitely work on all systems:
+darcs add "$DIR1/../temp1/a"
+not darcs add "$DIR1/../temp2/b"
+darcs add "$DIR1/c"
+darcs add "$DIR2/../temp1/d"
+not darcs add "$DIR2/../temp2/e"
+not darcs add "$DIR2/f"
+darcs add "../temp1/g"
+not darcs add "../temp2/h"
+# This should definitely work:
 darcs add "i"
 # ... as should this one:
 mkdir dir

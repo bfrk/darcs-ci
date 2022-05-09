@@ -45,8 +45,6 @@ cd R
 touch log
 add_to_boring '^log$'
 
-unset pwd # Since this test is pretty much linux-specific, hspwd.hs is not needed
-
 # Skip the case-folding tests on systems that don't support it
 touch cs-test
 ln -s cs-test cs-Test || exit 200

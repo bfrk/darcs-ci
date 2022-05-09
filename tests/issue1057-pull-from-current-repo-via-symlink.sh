@@ -45,4 +45,3 @@ grep 'Can.t pull from current repository' out
 cd ..
 
 cd ..
-rm -rf temp

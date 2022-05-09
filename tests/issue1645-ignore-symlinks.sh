@@ -36,8 +36,6 @@ rm -rf R S                      # Another script may have left a mess.
 darcs init      --repo R        # Create our test repos.
 darcs init      --repo S
 
-darcs --version
-
 add_to_boring() {
   echo "$1" >> _darcs/prefs/boring
 }
@@ -46,9 +44,6 @@ add_to_boring() {
 cd R
 touch log
 add_to_boring '^log$'
-
-unset pwd # Since this test is pretty much linux-specific, hspwd.hs is not needed
-abort_windows # and skip if we are on win32...
 
 # Case 1: looping symlink to non-recorded non-boring dir
 mkdir non-recorded-dir
