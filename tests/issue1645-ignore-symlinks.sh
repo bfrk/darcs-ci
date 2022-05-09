@@ -163,10 +163,12 @@ not grep -vE "(^ *$|^\+|No changes!)" log
 rm l
 
 # Case 14: link to fifo
-mkfifo f
-ln -s f l
-ln -s "`pwd`"/f ./l2
-not darcs w -l >log 2>&1                                         # expecting "No changes!"
-not darcs rec -alm "should not happen" >>log 2>&1                # expecting "No changes!" as well
-not grep -vE "(^ *$|^\+|No changes!)" log
-rm f l l2
+if ! os_is_windows; then
+  mkfifo f
+  ln -s f l
+  ln -s "`pwd`"/f ./l2
+  not darcs w -l >log 2>&1                                         # expecting "No changes!"
+  not darcs rec -alm "should not happen" >>log 2>&1                # expecting "No changes!" as well
+  not grep -vE "(^ *$|^\+|No changes!)" log
+  rm f l l2
+fi
