@@ -52,7 +52,7 @@ import Darcs.Util.Path
     , parents
     , realPath
     )
-import System.Posix.Files ( isRegularFile, isDirectory, isSymbolicLink )
+import System.Posix.Files ( fileMode, isRegularFile, isDirectory, isSymbolicLink )
 import System.Directory ( getPermissions, readable )
 
 import qualified System.FilePath.Windows as WindowsFilePath
@@ -254,6 +254,8 @@ addp msgs opts cur0 files = do
     addp' cur f = do
       already_has <- (if gotAllowCaseOnly then treeHas else treeHasAnycase) cur f
       mstatus <- getFileStatus (realPath f)
+      putWarning opts . text $
+        "DEBUG getFileStatus " ++ (realPath f) ++ ": fileMode=" ++ show (fileMode <$> mstatus)
       case (already_has, is_badfilename, mstatus) of
         (True, _, _) -> return (cur, Nothing, Just f)
         (_, True, _) -> do
