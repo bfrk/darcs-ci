@@ -27,11 +27,11 @@ if os_is_windows; then
   git config --global core.autocrlf input
 fi
 
-pwd() {
-    cp "$TESTBIN/hspwd.hs" .
-    ghc --make hspwd.hs > /dev/null
-    ./hspwd
-}
+# pwd() {
+#     cp "$TESTBIN/hspwd.hs" .
+#     ghc --make hspwd.hs > /dev/null
+#     ./hspwd
+# }
 
 which() {
     type -P "$@"
