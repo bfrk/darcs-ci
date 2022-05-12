@@ -46,6 +46,7 @@ module Darcs.Util.Path
     , makeSubPathOf
     , simpleSubPath
     , floatSubPath
+    , makeRelativeTo
     -- * Miscellaneous
     , FilePathOrURL(..)
     , FilePathLike(toFilePath)
@@ -88,35 +89,31 @@ module Darcs.Util.Path
 
 import Darcs.Prelude
 
-import Data.List
-    ( isPrefixOf
-    , isSuffixOf
-    , stripPrefix
-    , intersect
-    , inits
-    )
-import Data.Char ( isSpace, chr, ord, toLower )
-import Control.Exception ( tryJust, bracket_ )
-import Control.Monad ( when )
+import Control.Exception ( bracket_ )
+import Control.Monad ( void, when )
+import Darcs.Util.ByteString ( decodeLocale, encodeLocale )
+import Data.Binary
+import qualified Data.ByteString as B
+import qualified Data.ByteString.Char8 as BC
+import Data.Char ( chr, isSpace, ord, toLower )
+import Data.List ( inits, intersect, isPrefixOf, isSuffixOf, stripPrefix )
 import GHC.Stack ( HasCallStack )
-import System.IO.Error ( isDoesNotExistError )
-
-import qualified Darcs.Util.Workaround as Workaround ( getCurrentDirectory )
 import qualified System.Directory ( setCurrentDirectory )
 import System.Directory ( doesDirectoryExist, doesFileExist )
-import qualified System.FilePath.Posix as FilePath ( (</>), normalise, isRelative )
-import qualified System.FilePath as NativeFilePath ( takeFileName, takeDirectory )
-import System.FilePath( splitDirectories, normalise, dropTrailingPathSeparator )
-import System.Posix.Files ( isDirectory, getSymbolicLinkStatus )
+import qualified System.FilePath as NativeFilePath
+import qualified System.FilePath.Posix as FilePath
+import System.IO ( hPutStrLn, stderr )
+import System.Posix.Files
+    ( fileID
+    , getFileStatus
+    , getSymbolicLinkStatus
+    , isDirectory
+    )
 
-import Darcs.Util.ByteString ( encodeLocale, decodeLocale )
-import qualified Data.ByteString.Char8 as BC
-import qualified Data.ByteString       as B
-
-import Data.Binary
+import Darcs.Util.Exception ( ifDoesNotExistError )
 import Darcs.Util.Global ( darcsdir )
-import Darcs.Util.URL ( isAbsolute, isRelative, isSshNopath )
-import Darcs.Util.URL ( isHttpUrl, isSshUrl )
+import Darcs.Util.URL ( isAbsolute, isHttpUrl, isRelative, isSshNopath, isSshUrl )
+import qualified Darcs.Util.Workaround as Workaround ( getCurrentDirectory )
 
 
 -- Utilities for use by command implementations
@@ -215,6 +212,7 @@ simpleSubPath x | null x = error "simpleSubPath called with empty path"
                 | isRelative x = Just $ SubPath $ FilePath.normalise $ pathToPosix x
                 | otherwise = Nothing
 
+{-
 -- | Ensure directory exists and is not a symbolic link.
 doesDirectoryReallyExist :: FilePath -> IO Bool
 doesDirectoryReallyExist f = do
@@ -223,6 +221,7 @@ doesDirectoryReallyExist f = do
     return $ case x of
         Left () -> False
         Right y -> y
+-}
 
 doesPathExist :: FilePath -> IO Bool
 doesPathExist p = do
@@ -232,21 +231,62 @@ doesPathExist p = do
 
 -- | Interpret a possibly relative path wrt the current working directory.
 ioAbsolute :: FilePath -> IO AbsolutePath
-ioAbsolute dir =
-    do isdir <- doesDirectoryReallyExist dir
-       here <- getCurrentDirectory
-       if isdir
-         then bracket_ (setCurrentDirectory dir)
-                       (setCurrentDirectory $ toFilePath here)
-                       getCurrentDirectory
-         else let super_dir = case NativeFilePath.takeDirectory dir of
-                                "" ->  "."
-                                d  -> d
-                  file = NativeFilePath.takeFileName dir
-              in do abs_dir <- if dir == super_dir
-                               then return $ AbsolutePath dir
-                               else ioAbsolute super_dir
-                    return $ makeAbsolute abs_dir file
+ioAbsolute path = do
+  isdir <- doesDirectoryExist path
+  here <- getCurrentDirectory
+  if isdir
+    then bracket_
+           (setCurrentDirectory path)
+           (setCurrentDirectory $ toFilePath here)
+           getCurrentDirectory
+    else do
+      let super_dir =
+            case NativeFilePath.takeDirectory path of
+              "" -> "."
+              d -> d
+          file = NativeFilePath.takeFileName path
+      abs_dir <-
+        if path == super_dir
+          then return $ AbsolutePath path
+          else ioAbsolute super_dir
+      let result = makeAbsolute abs_dir file
+      hPutStrLn stderr $ "DEBUG ioAbsolute: " ++ show path ++ " -> " ++ show result
+      return result
+
+-- | The first argument must be the absolute path of a @directory@, the second
+-- is an arbitrary @path@. If the @path@ is relative, first make it absolute
+-- relative to the given @directory@; then find the longest prefix that points
+-- to the same @directory@; if successful, return the remainder, else return
+-- 'Nothing'.
+makeRelativeTo :: AbsolutePath -> FilePath -> IO (Maybe SubPath)
+makeRelativeTo adir@(AbsolutePath dir) path = do
+  -- raise an exception if the given path has a trailing pathSeparator
+  -- but refers to an existing non-directory
+  ifDoesNotExistError () $ void (getSymbolicLinkStatus path)
+  dir_stat <- getFileStatus dir
+  let dir_id = fileID dir_stat
+  when (not (isDirectory dir_stat)) $
+    error $ "makeRelativeTo called with non-dir " ++ dir
+  let AbsolutePath apath = makeAbsolute adir path
+  findParent dir_id apath []
+  where
+    findParent dir_id ap acc = do
+      map_stat <- ifDoesNotExistError Nothing (Just <$> getFileStatus ap)
+      case map_stat of
+        Just ap_stat | fileID ap_stat == dir_id -> do
+          -- found ancestor that matches dir
+          return $ Just $ SubPath $ FilePath.joinPath acc
+        _ -> do
+          -- recurse
+          let (parent_,child) =
+                -- splitFileName only does what one expects if there is no
+                -- trailing path separator
+                NativeFilePath.splitFileName $
+                  NativeFilePath.dropTrailingPathSeparator ap
+          if null child then
+            return Nothing
+          else
+            findParent dir_id parent_ (child:acc)
 
 -- | Take an absolute path and a string representing a (possibly relative)
 -- path and combine them into an absolute path. If the second argument is
@@ -392,7 +432,7 @@ isMaliciousSubPath fp =
 
 isGenerallyMalicious :: String -> Bool
 isGenerallyMalicious fp =
-    splitDirectories fp `contains_any` [ "..", darcsdir ]
+    NativeFilePath.splitDirectories fp `contains_any` [ "..", darcsdir ]
  where
     contains_any a b = not . null $ intersect a b
 
@@ -498,7 +538,8 @@ internalMakeName = either error id . rawMakeName . encodeLocale
 floatPath :: FilePath -> AnchoredPath
 floatPath =
     AnchoredPath . map internalMakeName . filter sensible .
-    splitDirectories . normalise . dropTrailingPathSeparator
+    NativeFilePath.splitDirectories . NativeFilePath.normalise .
+    NativeFilePath.dropTrailingPathSeparator
   where
     sensible s = s `notElem` ["", "."]
 

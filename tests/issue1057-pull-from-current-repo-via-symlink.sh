@@ -30,18 +30,15 @@ rm -rf temp
 mkdir temp
 cd temp
 
-mkdir repo
-cd repo
-darcs init
-cd ..
+darcs init repo
 
 ln -s repo srepo
-cd srepo
 DIR=`pwd`
-echo $DIR
-not darcs pull --debug -a "$DIR" 2> out
-cat out
-grep 'Can.t pull from current repository' out
+cd srepo
+# correctly fails
+not darcs pull -a "$DIR/repo" 1>&2
+# incorrectly succeeds:
+not darcs pull -a "$DIR/srepo" 1>&2
 cd ..
 
 cd ..

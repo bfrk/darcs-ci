@@ -108,6 +108,7 @@ import Control.Monad ( unless )
 import System.Directory ( doesDirectoryExist, createDirectory )
 import System.FilePath.Posix ( (</>) )
 import System.Environment ( lookupEnv )
+import System.IO ( hPutStrLn, stderr )
 
 -- Use of RemoteRepo data constructor is harmless here, if not ideal.
 -- See haddocks for fixRemoteRepos below for details.
@@ -135,12 +136,12 @@ import Darcs.Util.Path
     ( AbsolutePath
     , AbsolutePathOrStd
     , toFilePath
-    , makeSubPathOf
     , ioAbsolute
     , makeAbsoluteOrStd
     , AnchoredPath
     , floatSubPath
     , inDarcsdir
+    , makeRelativeTo
     )
 import Darcs.Util.Printer ( pathlist, putDocLn, text, ($$), (<+>) )
 import Darcs.Util.Printer.Color ( ePutDocLn )
@@ -211,8 +212,9 @@ fixRemoteRepos d = mapM fixRemoteRepo where
   fixRemoteRepo (F.RemoteRepo p) = F.RemoteRepo `fmap` fixUrl d p
   fixRemoteRepo f = return f
 
--- | 'fixUrl' takes a String that may be a file path or a URL.
--- It returns either the URL, or an absolute version of the path.
+-- | The first argument is an 'AbsolutePath', the second a 'String' that may be
+-- a file path or a URL. It returns either the URL, or an absolute version of
+-- the path, interpreted relative to the first argument.
 fixUrl :: AbsolutePath -> String -> IO String
 fixUrl d f = if isValidLocalPath f
                 then toFilePath `fmap` withCurrentDirectory d (ioAbsolute f)
@@ -268,6 +270,8 @@ maybeFixSubPaths (r, o) fs = do
   let bads = snd . unzip . filter (isNothing . fst) $ zip fixedFs fs
   unless (null bads) $
     ePutDocLn $ text "Ignoring invalid repository paths:" <+> pathlist bads
+  hPutStrLn stderr $ "DEBUG maybeFixSubPaths " ++ show (r,o) ++ " " ++ show fs
+    ++ " -> " ++ show fixedFs
   return fixedFs
  where
     dropInDarcsdir (Just p) | inDarcsdir p = Nothing
@@ -275,12 +279,11 @@ maybeFixSubPaths (r, o) fs = do
     -- special case here because fixit otherwise converts
     -- "" to (SubPath "."), which is a valid path
     fixit "" = return Nothing
-    fixit p = do ap <- withCurrentDirectory o $ ioAbsolute p
-                 case makeSubPathOf r ap of
-                   Just sp -> return $ Just $ floatSubPath sp
-                   Nothing -> do
-                     absolutePathByRepodir <- withCurrentDirectory r $ ioAbsolute p
-                     return $ floatSubPath <$> makeSubPathOf r absolutePathByRepodir
+    fixit p = do
+      msp <- makeRelativeTo o p
+      case msp of
+        Just sp -> return $ Just $ floatSubPath sp
+        Nothing -> fmap floatSubPath <$> makeRelativeTo r p
 
 -- | 'getRepourl' takes a list of flags and returns the url of the
 -- repository specified by @Repodir \"directory\"@ in that list of flags, if any.
