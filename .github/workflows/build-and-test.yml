@@ -21,8 +21,8 @@ jobs:
             ghc: 8.4
     env:
       runtests: ${{ matrix.ghc == '8.2' || matrix.ghc == '9.0' }}
-      tests-to-run: -t add
-      testcmd: cabal run -- darcs-test -j=6 -f=2 -i=yn
+      tests-to-run: # -t add -t symlink -t slash
+      testcmd: cabal run -- darcs-test -j=6 -f=2 -i=yn -c=yn --hide
       ACTIONS_ALLOW_UNSECURE_COMMANDS: true
 
     steps:
@@ -86,4 +86,4 @@ jobs:
     - name: Run tests on Windows
       if: runner.os == 'Windows' && env.runtests == 'true'
       # running the tests for all three patch formats takes over an hour
-      run: cabal run -- darcs-test -j=6 -f=2 -s=sn -i=yn ${{ env.tests-to-run }}
+      run: cabal run -- darcs-test -j=6 -f=2 -s=sn -i=yn ${{ env.tests-to-run }} --hide
