@@ -142,9 +142,8 @@ darcs wh foo bar/../foo > out
 cat out
 grep date out | wc -l | grep 1
 
-darcs wh foo foo/../foo/. > out
-cat out
-grep date out | wc -l | grep 1
+# this doesn't make any sense at all:
+not darcs wh foo foo/../foo/.
 
 cd ..
 rm -rf temp1

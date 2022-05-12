@@ -26,19 +26,13 @@
 
 . lib
 
-rm -rf temp
-mkdir temp
-cd temp
-
+rm -rf repo srepo
 darcs init repo
-
 ln -s repo srepo
 DIR=`pwd`
 cd srepo
-# correctly fails
-not darcs pull -a "$DIR/repo" 1>&2
-# incorrectly succeeds:
-not darcs pull -a "$DIR/srepo" 1>&2
-cd ..
-
+not darcs pull -a "$DIR/repo" 2>&1 | tee err >&2
+grep 'Can.t pull from current repository' err
+not darcs pull -a "$DIR/srepo" 2>&1 | tee err >&2
+grep 'Can.t pull from current repository' err
 cd ..
