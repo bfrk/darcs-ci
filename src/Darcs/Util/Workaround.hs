@@ -27,8 +27,7 @@ import Darcs.Prelude
 
 #ifdef WIN32
 
-import qualified System.Directory ( getCurrentDirectory )
-import qualified System.Win32.Info as Win32 ( getLongPathName )
+import qualified System.Directory ( getCurrentDirectory, canonicalizePath )
 
 #else
 
@@ -92,13 +91,12 @@ setExecutable :: FilePath
 setExecutable _ _ = return ()
 
 
--- | "System.Directory.getCurrentDirectory" returns a path with backslashes in it
+-- | System.Directory.getCurrentDirectory returns a path with backslashes in it
 -- under windows, and some of the code gets confused by that, so we override
--- "System.Directory.getCurrentDirectory" and translates '\\' to '/'.
--- Also translates short to long path names.
+-- getCurrentDirectory and translates '\\' to '/'
 getCurrentDirectory :: IO FilePath
 getCurrentDirectory = do
-    d <- System.Directory.getCurrentDirectory >>= Win32.getLongPathName
+    d <- System.Directory.getCurrentDirectory >>= System.Directory.canonicalizePath
     return $ map rb d
   where
     rb '\\' = '/'
