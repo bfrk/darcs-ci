@@ -77,10 +77,10 @@ touch a.d/aa.d/aaa.d/bar
 darcs add -v a.d/aa.d/aaa.d/bar a.d/aa.d/aaa.d/baz b.d/bb.d 2> log
 test ! -s log # no output
 
-# Make sure that darcs doesn\'t complains about duplicate adds when adding parent dirs.
+# Make sure that darcs doesn't complain about duplicate adds when adding parent dirs.
 mkdir c.d
 touch c.d/baz
-darcs add -v c.d/baz c.d 2> log
+darcs add -v c.d/baz c.d 2>&1 1>/dev/null | tee log >&2
 test ! -s log # no output
 
 # Make sure that add output looks good when adding files in subdir
