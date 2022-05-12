@@ -98,7 +98,7 @@ setExecutable _ _ = return ()
 -- Also translates short to long path names.
 getCurrentDirectory :: IO FilePath
 getCurrentDirectory = do
-    d <- System.Directory.getCurrentDirectory >>= Win32.getLongPathName
+    d <- System.Directory.getCurrentDirectory >>= getLongPathName
     return $ map rb d
   where
     rb '\\' = '/'

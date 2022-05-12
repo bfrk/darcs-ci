@@ -230,6 +230,7 @@ doesPathExist p = do
    return $ dir_exists || file_exists
 
 -- | Interpret a possibly relative path wrt the current working directory.
+-- This also canonicalizes the path, resolving symbolic links etc.
 ioAbsolute :: FilePath -> IO AbsolutePath
 ioAbsolute path = do
   isdir <- doesDirectoryExist path
