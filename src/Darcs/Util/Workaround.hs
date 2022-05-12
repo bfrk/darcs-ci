@@ -28,7 +28,7 @@ import Darcs.Prelude
 #ifdef WIN32
 
 import qualified System.Directory ( getCurrentDirectory )
-import qualified System.Win32.Info ( getLongPathName )
+import qualified System.Win32.Info as Win32 ( getLongPathName )
 
 #else
 
@@ -98,7 +98,7 @@ setExecutable _ _ = return ()
 -- Also translates short to long path names.
 getCurrentDirectory :: IO FilePath
 getCurrentDirectory = do
-    d <- System.Directory.getCurrentDirectory >>= getLongPathName
+    d <- System.Directory.getCurrentDirectory >>= Win32.getLongPathName
     return $ map rb d
   where
     rb '\\' = '/'
