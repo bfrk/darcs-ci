@@ -27,9 +27,10 @@ if os_is_windows; then
   git config --global core.autocrlf input
 fi
 
-pwd() {
-    runghc "$TESTBIN/hspwd.hs"
-}
+# tests now work on windows with this or with the bash pwd:
+# pwd() {
+#     runghc "$TESTBIN/hspwd.hs"
+# }
 
 which() {
     type -P "$@"
