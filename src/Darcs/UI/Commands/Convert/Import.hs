@@ -113,7 +113,7 @@ import Darcs.Util.Path
     ( AbsolutePath
     , AnchoredPath(..)
     , appendPath
-    , floatPath
+    , unsafeFloatPath
     , makeName
     , parent
     , darcsdirName
@@ -256,7 +256,7 @@ fastImport' repo compression diffalg marks = do
 
         -- sort marks into buckets, since there can be a *lot* of them
         markpath :: Int -> AnchoredPath
-        markpath n = floatPath (darcsdir </> "marks")
+        markpath n = unsafeFloatPath (darcsdir </> "marks")
                         `appendPath` (either error id $ makeName $ show (n `div` 1000))
                         `appendPath` (either error id $ makeName $ show (n `mod` 1000))
 
@@ -615,4 +615,4 @@ parseObject = next' mbObject
                fail $ "Error parsing stream. " ++ err ++ "\nContext: " ++ show ctx
 
 decodePath :: BC.ByteString -> AnchoredPath
-decodePath = floatPath . decodeLocale
+decodePath = unsafeFloatPath . decodeLocale

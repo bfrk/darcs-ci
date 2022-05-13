@@ -80,7 +80,7 @@ test ! -s log # no output
 # Make sure that darcs doesn't complain about duplicate adds when adding parent dirs.
 mkdir c.d
 touch c.d/baz
-darcs add -v c.d/baz c.d 2>&1 1>/dev/null | tee log >&2
+darcs add -v c.d/baz c.d 2> log
 test ! -s log # no output
 
 # Make sure that add output looks good when adding files in subdir

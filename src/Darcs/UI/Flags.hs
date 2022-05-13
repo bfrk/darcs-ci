@@ -284,8 +284,13 @@ maybeFixSubPaths (r, o) fs = do
       ifDoesNotExistError () $ void (getSymbolicLinkStatus p)
       msp <- makeRelativeTo r (makeAbsolute o p)
       case msp of
-        Just sp -> return $ Just $ floatSubPath sp
-        Nothing -> fmap floatSubPath <$> makeRelativeTo r (makeAbsolute r p)
+        Just sp -> return $ floatIt sp
+        Nothing -> do
+          msp' <- makeRelativeTo r (makeAbsolute r p)
+          case msp' of
+            Nothing -> return Nothing
+            Just sp' -> return $ floatIt sp'
+    floatIt = either (const Nothing) Just . floatSubPath
 
 -- | 'getRepourl' takes a list of flags and returns the url of the
 -- repository specified by @Repodir \"directory\"@ in that list of flags, if any.

@@ -141,7 +141,7 @@ repoTrees dopts@O.DiffOpts {..} = do
 -- this is for completion which should give us everything under the original wd
 subtreeHere :: Tree IO -> (AbsolutePath, AbsolutePath) -> IO (Maybe (Tree IO))
 subtreeHere tree fps =
-  case floatSubPath <$> uncurry makeSubPathOf fps of
+  case either error id . floatSubPath <$> uncurry makeSubPathOf fps of
     Nothing -> do
       return Nothing -- here is no subtree of the repo
     Just here -> do

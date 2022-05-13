@@ -42,7 +42,7 @@ import Darcs.Patch.Invert ( Invert(..) )
 import Darcs.Patch.Commute ( Commute(..) )
 
 import Darcs.Util.Global ( darcsdir )
-import Darcs.Util.Path ( AnchoredPath, floatPath )
+import Darcs.Util.Path ( AnchoredPath, unsafeFloatPath )
 
 -- | Conversion between @('Any', a)@ and @'Maybe' a@.
 withAnyToMaybe :: (Any, a) -> Maybe a
@@ -79,7 +79,7 @@ mapPrimFL f ps =
     getKey (DP fp AddDir) = Just fp
     getKey (DP _ RmDir) = Nothing -- ordering is trickier with rmdir present
     getKey (Move {}) = Nothing
-    getKey (ChangePref {}) = Just (floatPath (darcsdir </> "prefs" </> "prefs"))
+    getKey (ChangePref {}) = Just (unsafeFloatPath (darcsdir </> "prefs" </> "prefs"))
 
 -- | Try to coalesce a patch with any element of an adjacent sequence,
 -- regardless of ordering. If successful, the result may not be
