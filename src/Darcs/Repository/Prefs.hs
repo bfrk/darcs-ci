@@ -64,18 +64,28 @@ import Data.Maybe
 import qualified Control.Exception as C
 import qualified Data.ByteString       as B  ( empty, null, hPut, ByteString )
 import qualified Data.ByteString.Char8 as BC ( unpack )
-import System.Directory ( getAppUserDataDirectory, doesDirectoryExist,
-                          createDirectory, doesFileExist )
+import System.Directory
+    ( createDirectory
+    , doesDirectoryExist
+    , doesFileExist
+    , getAppUserDataDirectory
+    , getHomeDirectory
+    )
 import System.Environment ( getEnvironment )
 import System.FilePath.Posix ( normalise, dropTrailingPathSeparator, (</>) )
 import System.IO.Error ( isDoesNotExistError, catchIOError )
 import System.IO ( stdout, stderr )
 import System.Info ( os )
-import System.Posix.Files ( getFileStatus, fileOwner )
+import System.Posix.Files ( fileOwner, getFileStatus, ownerModes, setFileMode )
 
-import Darcs.Util.Cache ( Cache, mkCache, CacheType(..), CacheLoc(..),
-                                WritableOrNot(..) )
-import Darcs.Util.External ( gzFetchFilePS , fetchFilePS, Cachable(..))
+import Darcs.Util.Cache
+    ( Cache
+    , CacheLoc(..)
+    , CacheType(..)
+    , WritableOrNot(..)
+    , mkCache
+    )
+import Darcs.Util.File ( Cachable(..), fetchFilePS, gzFetchFilePS )
 import Darcs.Repository.Flags
     ( UseCache (..)
     , DryRun (..)
@@ -97,7 +107,7 @@ import Darcs.Util.Path
 import Darcs.Util.Printer( hPutDocLn, text )
 import Darcs.Util.Regex ( Regex, mkRegex, matchRegex )
 import Darcs.Util.URL ( isValidLocalPath )
-import Darcs.Util.File ( osxCacheDir, xdgCacheDir, removeFileMayNotExist )
+import Darcs.Util.File ( removeFileMayNotExist )
 
 windows,osx :: Bool
 windows = "mingw" `isPrefixOf` os -- GHC under Windows is compiled with mingw
@@ -252,6 +262,31 @@ getGlobal f = do
     case dir of
         (Just d) -> getPreffile $ d </> f
         Nothing -> return []
+
+-- |osxCacheDir assumes @~/Library/Caches/@ exists.
+osxCacheDir :: IO (Maybe FilePath)
+osxCacheDir = do
+    home <- getHomeDirectory
+    return $ Just $ home </> "Library" </> "Caches"
+    `catchall` return Nothing
+
+-- |xdgCacheDir returns the $XDG_CACHE_HOME environment variable,
+-- or @~/.cache@ if undefined. See the FreeDesktop specification:
+-- http://standards.freedesktop.org/basedir-spec/basedir-spec-latest.html
+xdgCacheDir :: IO (Maybe FilePath)
+xdgCacheDir = do
+    env <- getEnvironment
+    d <- case lookup "XDG_CACHE_HOME" env of
+           Just d  -> return d
+           Nothing -> getAppUserDataDirectory "cache"
+    exists <- doesDirectoryExist d
+
+    -- If directory does not exist, create it with permissions 0700
+    -- as specified by the FreeDesktop standard.
+    unless exists $ do createDirectory d
+                       setFileMode d ownerModes
+    return $ Just d
+    `catchall` return Nothing
 
 globalCacheDir :: IO (Maybe FilePath)
 globalCacheDir | windows   = ((</> "cache2") `fmap`) `fmap` globalPrefsDir

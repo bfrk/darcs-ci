@@ -350,7 +350,6 @@ Library
                       Darcs.Util.English
                       Darcs.Util.Exception
                       Darcs.Util.Exec
-                      Darcs.Util.External
                       Darcs.Util.File
                       Darcs.Util.Global
                       Darcs.Util.Graph
@@ -573,7 +572,6 @@ test-suite darcs-test
                     zip-archive,
                     -- additional dependencies needed by the shelly modules
                     async,
-                    directory,
                     exceptions,
                     monad-control              >= 0.3.2 && < 1.1,
                     process,
@@ -633,6 +631,7 @@ test-suite darcs-test
                     Darcs.Test.Misc.Graph
                     Darcs.Test.Misc.URL
                     Darcs.Test.Repository.Inventory
+                    Darcs.Test.Shell
                     Darcs.Test.TestOnly.Instance
                     Darcs.Test.UI
                     Darcs.Test.UI.Commands.Test

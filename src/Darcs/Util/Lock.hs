@@ -21,8 +21,6 @@ module Darcs.Util.Lock
     , getLock
     , releaseLock
     , environmentHelpLocks
-    , withTemp
-    , withOpenTemp
     , withTempDir
     , withPermDir
     , withDelayedDir
@@ -55,8 +53,8 @@ import Data.List ( inits )
 import Data.Maybe ( fromJust, isJust, listToMaybe )
 import System.Exit ( exitWith, ExitCode(..) )
 import System.IO
-    ( withFile, withBinaryFile, openBinaryTempFile
-    , hClose, Handle, hPutStr, hSetEncoding
+    ( withFile, withBinaryFile
+    , Handle, hPutStr, hSetEncoding
     , IOMode(WriteMode, AppendMode), hFlush, stdout
     )
 import System.IO.Error
@@ -69,12 +67,10 @@ import Control.Exception
     , bracket
     , throwIO
     , catch
-    , try
     , SomeException
     )
 import System.Directory
-    ( removePathForcibly
-    -- , doesFileExist
+    ( doesFileExist
     , doesDirectoryExist
     , createDirectory
     , getTemporaryDirectory
@@ -88,9 +84,9 @@ import System.Environment ( lookupEnv )
 import System.IO.Temp ( createTempDirectory )
 
 import Control.Concurrent ( threadDelay )
-import Control.Monad ( unless, when, liftM )
+import Control.Monad ( unless, when )
 
-import System.Posix.Files ( fileMode, isRegularFile, setFileMode )
+import System.Posix.Files ( fileMode, getFileStatus, setFileMode )
 
 import GHC.IO.Encoding ( getFileSystemEncoding )
 
@@ -99,7 +95,8 @@ import Darcs.Util.Exception
     ( firstJustIO
     , catchall
     )
-import Darcs.Util.File ( getFileStatus, removeFileMayNotExist, withCurrentDirectory )
+import Darcs.Util.File ( withCurrentDirectory
+                       , removeFileMayNotExist )
 import Darcs.Util.Path ( AbsolutePath, FilePathLike, toFilePath,
                         getCurrentDirectory, setCurrentDirectory )
 
@@ -119,7 +116,7 @@ import Darcs.Util.Progress ( debugMessage )
 import Darcs.Util.Prompt ( askUser )
 
 withLock :: String -> IO a -> IO a
-withLock s job = bracket (getLock s 30) releaseLock (\_ -> job)
+withLock s job = bracket (getLock s 30) releaseLock (const job)
 
 releaseLock :: String -> IO ()
 releaseLock = removeFileMayNotExist
@@ -130,7 +127,7 @@ withLockCanFail :: String -> IO a -> IO (Either () a)
 withLockCanFail s job =
   bracket (takeLock s `catchall` return False)
           (\l -> when l $ releaseLock s)
-          (\l -> if l then liftM Right job
+          (\l -> if l then Right <$> job
                       else return $ Left ())
 
 getLock :: String -> Int -> IO String
@@ -175,39 +172,16 @@ environmentHelpLocks = (["DARCS_SLOPPY_LOCKS"],[
  "",
  "you may want to try to export DARCS_SLOPPY_LOCKS=True."])
 
--- |'withTemp' safely creates an empty file (not open for writing) and
--- returns its name.
---
--- The temp file operations are rather similar to the locking operations, in
--- that they both should always try to clean up, so exitWith causes trouble.
-withTemp :: (FilePath -> IO a) -> IO a
-withTemp = bracket get_empty_file removeFileMayNotExist
-    where get_empty_file = do (f,h) <- openBinaryTempFile "." "darcs"
-                              hClose h
-                              return f
-
--- |'withOpenTemp' creates a temporary file, and opens it.
--- Both of them run their argument and then delete the file.  Also,
--- both of them (to my knowledge) are not susceptible to race conditions on
--- the temporary file (as long as you never delete the temporary file; that
--- would reintroduce a race condition).
-withOpenTemp :: ((Handle, FilePath) -> IO a) -> IO a
-withOpenTemp = bracket get_empty_file cleanup
-    where cleanup (h,f) = do _ <- try (hClose h) :: IO (Either SomeException ())
-                             removeFileMayNotExist f
-          get_empty_file = invert `fmap` openBinaryTempFile "." "darcs"
-          invert (a,b) = (b,a)
-
 tempdirLoc :: IO FilePath
-tempdirLoc = liftM fromJust $
-    firstJustIO [ liftM (Just . head . words) (readFile (darcsdir++"/prefs/tmpdir")) >>= chkdir,
+tempdirLoc = fromJust <$>
+    firstJustIO [ fmap (Just . head . words) (readFile (darcsdir++"/prefs/tmpdir")) >>= chkdir,
                   lookupEnv "DARCS_TMPDIR" >>= chkdir,
                   getTemporaryDirectory >>= chkdir . Just,
                   getCurrentDirectorySansDarcs,
                   return $ Just "."  -- always returns a Just
                 ]
     where chkdir Nothing = return Nothing
-          chkdir (Just d) = liftM (\e -> if e then Just (d++"/") else Nothing) $ doesDirectoryExist d
+          chkdir (Just d) = (\e -> if e then Just (d++"/") else Nothing) <$> doesDirectoryExist d
 
 environmentHelpTmpdir :: ([String], [String])
 environmentHelpTmpdir = (["DARCS_TMPDIR", "TMPDIR"], [
@@ -262,7 +236,7 @@ withDir kind absoluteOrRelativeName job = do
               debugMessage $ unwords ["atexit: renaming",path,"to",toDelete path]
               renameDirectory path (toDelete path)
               debugMessage $ unwords ["atexit: deleting",toDelete path]
-              removePathForcibly (toDelete path)
+              removePathForcibly (toDelete path) `catchIOError` const (return ())
 
 environmentHelpKeepTmpdir :: ([String], [String])
 environmentHelpKeepTmpdir = (["DARCS_KEEP_TMPDIR"],[
@@ -309,7 +283,7 @@ worldReadableTemp f = wrt 0
 
 withNamedTemp :: FilePath -> (FilePath -> IO a) -> IO a
 withNamedTemp n f = do
-    -- debugMessage $ "withNamedTemp: " ++ show n
+    when False $ debugMessage $ "withNamedTemp: " ++ show n
     bracket (worldReadableTemp n) removeFileMayNotExist f
 
 readBinFile :: FilePathLike p => p -> IO B.ByteString
@@ -362,16 +336,10 @@ gzWriteAtomicFilePSs :: FilePathLike p => p -> [B.ByteString] -> IO ()
 gzWriteAtomicFilePSs f pss =
     withSignalsBlocked $ withNamedTemp (toFilePath f) $ \newf -> do
     gzWriteFilePSs newf pss
-    getFileStatus (toFilePath f) >>= \case
-      Just st | isRegularFile st ->
-        setFileMode newf (fileMode st) `catchall` return ()
-      _ -> return ()
-{-
     already_exists <- doesFileExist $ toFilePath f
     when already_exists $ do mode <- fileMode `fmap` getFileStatus (toFilePath f)
                              setFileMode newf mode
              `catchall` return ()
--}
     renameFile newf (toFilePath f)
 
 gzWriteDocFile :: FilePathLike p => p -> Doc -> IO ()
@@ -383,16 +351,10 @@ writeToFile t f job =
     (case t of
       Text -> withFile
       Binary -> withBinaryFile) newf WriteMode job
-    getFileStatus (toFilePath f) >>= \case
-      Just st | isRegularFile st ->
-        setFileMode newf (fileMode st) `catchall` return ()
-      _ -> return ()
-{-
     already_exists <- doesFileExist (toFilePath f)
     when already_exists $ do mode <- fileMode `fmap` getFileStatus (toFilePath f)
                              setFileMode newf mode
              `catchall` return ()
--}
     renameFile newf (toFilePath f)
 
 appendToFile :: FilePathLike p => FileType -> p -> (Handle -> IO ()) -> IO ()
@@ -414,5 +376,5 @@ withNewDirectory :: FilePath -> IO () -> IO ()
 withNewDirectory name action = do
   createDirectory name
   withCurrentDirectory name action `catch` \e -> do
-    removePathForcibly name `catchIOError` (const $ return ())
+    removePathForcibly name `catchIOError` const (return ())
     throwIO (e :: SomeException)

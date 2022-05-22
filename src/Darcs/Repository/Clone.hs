@@ -70,7 +70,7 @@ import Darcs.Repository.Format
     )
 import Darcs.Repository.Prefs ( addRepoSource, deleteSources )
 import Darcs.Repository.Match ( getOnePatchset )
-import Darcs.Util.External
+import Darcs.Util.File
     ( copyFileOrUrl
     , Cachable(..)
     , gzFetchFilePS

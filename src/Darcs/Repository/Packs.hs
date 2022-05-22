@@ -61,8 +61,7 @@ import Darcs.Util.Cache
     , closestWritableDirectory
     , fetchFileUsingCache
     )
-import Darcs.Util.Lock ( withTemp )
-import Darcs.Util.External ( Cachable(..), fetchFileLazyPS )
+import Darcs.Util.File ( Cachable(..), fetchFileLazyPS, withTemp )
 import Darcs.Util.Global ( darcsdir )
 import Darcs.Util.Progress ( debugMessage, progressList )
 import Darcs.Util.ValidHash ( InventoryHash, PatchHash, encodeValidHash )

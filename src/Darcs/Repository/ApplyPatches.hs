@@ -51,7 +51,7 @@ import Darcs.Prelude
 import Darcs.Patch.ApplyMonad ( ApplyMonad(..), ApplyMonadTree(..) )
 import Darcs.Repository.Prefs ( changePrefval )
 import Darcs.Util.Exception ( prettyException )
-import Darcs.Util.External ( backupByCopying, backupByRenaming )
+import Darcs.Util.File ( backupByCopying, backupByRenaming )
 import Darcs.Util.Lock ( writeAtomicFilePS )
 import Darcs.Util.Path ( AnchoredPath, anchorPath )
 import Darcs.Util.Tree ( Tree )

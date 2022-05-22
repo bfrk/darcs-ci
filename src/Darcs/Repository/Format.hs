@@ -85,7 +85,7 @@ import Data.Maybe ( mapMaybe )
 import Data.String ( IsString )
 import System.FilePath.Posix( (</>) )
 
-import Darcs.Util.External
+import Darcs.Util.File
     ( fetchFilePS
     , Cachable( Cachable )
     )

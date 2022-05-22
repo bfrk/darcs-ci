@@ -64,7 +64,7 @@ import qualified Data.ByteString as B (ByteString, null, init)
 import qualified Data.ByteString.Char8 as BC (last)
 
 import Darcs.Util.HTTP ( Cachable(Uncachable) )
-import Darcs.Util.External ( gzFetchFilePS )
+import Darcs.Util.File ( gzFetchFilePS )
 import Darcs.UI.External
     ( verifyPS
     )

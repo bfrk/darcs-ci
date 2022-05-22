@@ -2,8 +2,13 @@
 
 . ./env
 
-## I would use the builtin !, but that has the wrong semantics.
-not () { "$@" && exit 1 || :; }
+# I would use the builtin !, but that has the wrong semantics
+not () {
+  if "$@" || test $? = "4"; then
+    # fail the test if command succeeds or returns 4
+    exit 1
+  fi
+}
 
 # trick: OS-detection (if needed)
 os_is_windows() {

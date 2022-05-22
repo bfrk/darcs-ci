@@ -71,7 +71,7 @@ import Darcs.Patch.Set ( PatchSet(..), Origin, patchSet2RL )
 import Darcs.Repository.Prefs ( filetypeFunction )
 import Darcs.Util.Exec ( exec, Redirect(..) )
 import Darcs.Util.Lock ( withTempDir )
-import Darcs.Util.External ( cloneTree )
+import Darcs.Util.File ( copyTree )
 import Darcs.Repository.Flags
     ( AllowConflicts (..)
     , WantGuiPause (..)
@@ -204,7 +204,7 @@ externalResolution diffa s1 c wantGuiPause p1 p2 pmerged = do
          setCurrentDirectory former_dir
          withTempDir "cleanmerged" $ \absdc -> do
            let dc = toFilePath absdc
-           cloneTree dm "."
+           copyTree dm "."
            setCurrentDirectory former_dir
            withTempDir "version2" $ \absd2 -> do
              let d2 = toFilePath absd2

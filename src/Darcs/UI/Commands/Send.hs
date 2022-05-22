@@ -91,7 +91,7 @@ import Darcs.Patch.Bundle
     )
 import Darcs.Repository.Prefs ( addRepoSource, getPreflist )
 import Darcs.Repository.Flags ( DryRun(..) )
-import Darcs.Util.External ( fetchFilePS, Cachable(..) )
+import Darcs.Util.File ( fetchFilePS, Cachable(..) )
 import Darcs.UI.External
     ( signString
     , sendEmailDoc
@@ -101,9 +101,9 @@ import Darcs.UI.External
     )
 import Darcs.Util.ByteString ( mmapFilePS, isAscii )
 import qualified Data.ByteString.Char8 as BC (unpack)
+import Darcs.Util.File ( withOpenTemp )
 import Darcs.Util.Lock
-    ( withOpenTemp
-    , writeDocBinFile
+    ( writeDocBinFile
     , readDocBinFile
     , removeFileMayNotExist
     )

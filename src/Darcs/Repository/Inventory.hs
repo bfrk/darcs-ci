@@ -45,7 +45,7 @@ import Darcs.Util.Cache
     , speculateFilesUsingCache
     , writeFileUsingCache
     )
-import Darcs.Util.External ( Cachable(Uncachable), gzFetchFilePS )
+import Darcs.Util.File ( Cachable(Uncachable), gzFetchFilePS )
 import Darcs.Util.Printer ( Doc, renderPS, renderString, text, ($$) )
 import Darcs.Util.Progress ( debugMessage, finishedOneIO )
 

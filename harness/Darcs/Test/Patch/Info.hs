@@ -115,7 +115,7 @@ arbitraryUTF8PatchInfo = do
     d <- arbitrary `suchThat` validDate
     n <- (asString `fmap` arbitrary) `suchThat` validLog
     a <- (asString `fmap` arbitrary) `suchThat` validAuthor
-    l <- lines `fmap` scale (* 2) arbitrary
+    l <- lines `fmap` scale (* 2) (asString <$> arbitrary)
     junk <- generateJunk
     i <- arbitrary
     return $ rawPatchInfo d n a (l ++ [junk]) i

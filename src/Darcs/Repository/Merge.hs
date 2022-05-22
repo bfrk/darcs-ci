@@ -34,7 +34,7 @@ import System.IO.Error
     )
 
 import Darcs.Util.Tree( Tree )
-import Darcs.Util.External ( backupByCopying )
+import Darcs.Util.File ( backupByCopying )
 
 import Darcs.Patch
     ( RepoPatch, PrimOf, merge

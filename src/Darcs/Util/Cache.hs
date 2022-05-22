@@ -53,16 +53,17 @@ import Darcs.Prelude
 import Darcs.Util.ByteString ( gzWriteFilePS )
 import Darcs.Util.English ( Noun(..), Pronoun(..), englishNum )
 import Darcs.Util.Exception ( catchall, handleOnly )
-import Darcs.Util.External
+import Darcs.Util.File
     ( Cachable(Cachable)
     , copyFileOrUrl
     , fetchFilePS
     , gzFetchFilePS
     , speculateFileOrUrl
+    , withCurrentDirectory
+    , withTemp
     )
-import Darcs.Util.File ( withCurrentDirectory )
 import Darcs.Util.Global ( darcsdir, defaultRemoteDarcsCmd )
-import Darcs.Util.Lock ( gzWriteAtomicFilePS, withTemp, writeAtomicFilePS )
+import Darcs.Util.Lock ( gzWriteAtomicFilePS, writeAtomicFilePS )
 import Darcs.Util.Progress ( debugMessage, progressList )
 import Darcs.Util.SignalHandler ( catchNonSignal )
 import Darcs.Util.URL ( isHttpUrl, isSshUrl, isValidLocalPath )
@@ -280,7 +281,7 @@ copyFileUsingCache oos (Ca cache) subdir f = do
             let attemptPath = hashedFilePath c subdir f
             ex <- doesFileExist attemptPath
             if ex
-                then fail $ "File already present in writable location."
+                then fail "File already present in writable location."
                 else do
                     othercache <- cacheLoc cs
                     return $ othercache `mplus` Just attemptPath
@@ -390,7 +391,7 @@ fetchFileUsingCachePrivate fromWhere (Ca cache) hash = do
         | writable c = let cacheFile = hashedFilePath c subdir filename in do
             debugMessage $ "About to gzFetchFilePS from " ++ show cacheFile
             x1 <- gzFetchFilePS cacheFile Cachable
-            debugMessage $ "gzFetchFilePS done."
+            debugMessage "gzFetchFilePS done."
             x <- if not $ checkHash hash x1
                      then do
                         x2 <- fetchFilePS cacheFile Cachable
@@ -408,7 +409,7 @@ fetchFileUsingCachePrivate fromWhere (Ca cache) hash = do
                 checkCacheReachability (show e) c
                 (fname, x) <- filterBadSources cs >>= ffuc  -- fetch file from remaining locations
                 debugMessage $ "Attempt creating link from: " ++ show fname ++ " to " ++ show cacheFile
-                (createLink fname cacheFile >> (debugMessage "successfully created link")
+                (createLink fname cacheFile >> debugMessage "successfully created link"
                                             >> return (cacheFile, x))
                   `catchall` do
                     debugMessage $ "Attempt writing file: " ++ show cacheFile
@@ -416,7 +417,7 @@ fetchFileUsingCachePrivate fromWhere (Ca cache) hash = do
                     -- inside of _darcs or global cache.
                     do createDirectoryIfMissing True (dropFileName cacheFile)
                        gzWriteFilePS cacheFile x
-                       debugMessage $ "successfully wrote file"
+                       debugMessage "successfully wrote file"
                        `catchall` return ()
                     -- above block can fail if cache is not writeable
                     return (fname, x)
@@ -430,16 +431,12 @@ fetchFileUsingCachePrivate fromWhere (Ca cache) hash = do
                              else "")
 
 tryLinking :: FilePath -> FilePath -> HashedDir -> CacheLoc -> IO ()
-tryLinking source filename subdir c@(Cache Directory Writable _) =
-  do createCache c subdir filename
-     let target = hashedFilePath c subdir filename
-     debugMessage $ "Linking " ++ source ++ " to " ++ target
-     handleOnly isAlreadyExistsError (return ()) $ createLink source target
-tryLinking source filename subdir c@(Cache Repo Writable _) =
-  do let target = hashedFilePath c subdir filename
-     debugMessage $ "Linking " ++ source ++ " to " ++ target
-     handleOnly isAlreadyExistsError (return ()) $ createLink source target
-tryLinking _ _ _ _ = return ()
+tryLinking source filename subdir c =
+  when (writable c) $ do
+    createCache c subdir filename
+    let target = hashedFilePath c subdir filename
+    debugMessage $ "Linking " ++ source ++ " to " ++ target
+    handleOnly isAlreadyExistsError (return ()) $ createLink source target
 
 createCache :: CacheLoc -> HashedDir -> FilePath -> IO ()
 createCache (Cache Directory _ d) subdir filename =

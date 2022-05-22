@@ -84,7 +84,7 @@ import Darcs.UI.Flags
 import Darcs.UI.Options ( parseFlags, (?), (^) )
 import qualified Darcs.UI.Options.All as O
 
-import Darcs.Util.External ( fetchFilePS, Cachable(Uncachable) )
+import Darcs.Util.File ( fetchFilePS, Cachable(Uncachable) )
 import Darcs.Util.Exception ( catchall )
 import Darcs.Util.Lock ( withNewDirectory )
 import Darcs.Util.Path( ioAbsoluteOrRemote, toPath, AbsolutePath )

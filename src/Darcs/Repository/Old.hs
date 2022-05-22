@@ -39,7 +39,7 @@ import Darcs.Patch.Witnesses.Ordered ( RL(..) )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(Sealed), seal, unseal, mapSeal )
 import Darcs.Patch.Info ( PatchInfo(..), makePatchname, readPatchInfo, displayPatchInfo )
 import Darcs.Patch.Set ( PatchSet(..), Tagged(..), SealedPatchSet, Origin )
-import Darcs.Util.External
+import Darcs.Util.File
     ( gzFetchFilePS
     , Cachable(..)
     )

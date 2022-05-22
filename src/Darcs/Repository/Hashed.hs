@@ -41,7 +41,8 @@ import Darcs.Prelude
 import Control.Monad ( unless, when )
 import Data.List ( foldl' )
 import System.Directory
-    ( createDirectoryIfMissing
+    ( copyFile
+    , createDirectoryIfMissing
     , doesFileExist
     , removeFile
     , renameFile
@@ -166,7 +167,7 @@ import Darcs.Repository.Unrevert
 import Darcs.Util.AtExit ( atexit )
 import Darcs.Util.ByteString ( gzReadFilePS )
 import Darcs.Util.Cache ( Cache, fetchFileUsingCache )
-import Darcs.Util.External ( Cachable(Uncachable), cloneFile, copyFileOrUrl )
+import Darcs.Util.File ( Cachable(Uncachable), copyFileOrUrl )
 import Darcs.Util.Hash ( SHA1, sha1Xor, sha1zero )
 import Darcs.Util.Lock
     ( appendDocBinFile
@@ -186,7 +187,7 @@ import Darcs.Util.Tree ( Tree )
 -- hash.
 revertTentativeChanges :: Repository 'RO p wU wR -> IO ()
 revertTentativeChanges repo = do
-    cloneFile hashedInventoryPath tentativeHashedInventoryPath
+    copyFile hashedInventoryPath tentativeHashedInventoryPath
     inv <- gzReadFilePS tentativeHashedInventoryPath
     pristineHash <- convertSizePrefixedPristine (repoCache repo) (peekPristineHash inv)
     writeDocBinFile tentativePristinePath $ pokePristineHash pristineHash mempty

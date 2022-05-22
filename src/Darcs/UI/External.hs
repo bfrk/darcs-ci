@@ -79,11 +79,8 @@ import Darcs.Util.ByteString (linesPS, unlinesPS)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC
 
-import Darcs.Util.Lock
-    ( withTemp
-    , withNamedTemp
-    , withOpenTemp
-    )
+import Darcs.Util.File ( withOpenTemp, withTemp )
+import Darcs.Util.Lock ( withNamedTemp )
 import Darcs.Util.Ssh ( getSSH, SSHCmd(..) )
 import Darcs.Util.CommandLine ( parseCmd, addUrlencoded )
 #ifndef WIN32
