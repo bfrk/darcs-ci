@@ -13,11 +13,11 @@ import qualified Darcs.Test.UI
 import Darcs.Util.Exception ( die )
 
 import Control.Monad ( filterM, unless, when )
-import Data.List ( isSuffixOf )
+import Data.List ( isPrefixOf, isSuffixOf, sort )
 import GHC.IO.Encoding ( textEncodingName )
 import System.Console.CmdArgs hiding ( args )
 import System.Console.CmdArgs.Explicit ( process )
-import System.Directory ( doesFileExist, doesPathExist, exeExtension )
+import System.Directory ( doesFileExist, doesPathExist, exeExtension, listDirectory )
 import System.Environment.FindBin ( getProgPath )
 import System.FilePath ( isAbsolute, takeBaseName, takeDirectory, (</>) )
 import System.IO ( BufferMode(NoBuffering), hSetBuffering, localeEncoding, stdout )
@@ -71,40 +71,48 @@ defaultConfigAnn
 defaultConfig :: Config
 Right defaultConfig = fmap cmdArgsValue $ process (cmdArgsMode_ defaultConfigAnn) []
 
+-- | Find the darcs executable to test
+findDarcs :: IO FilePath
+findDarcs = do
+  path <- getProgPath
+  let darcsExe = "darcs" ++ exeExtension
+      candidates =
+        -- if darcs-test lives in foo/something, look for foo/darcs[.exe] for
+        -- example if we've done cabal install -ftest, there'll be a darcs-test
+        -- and darcs in the cabal installation folder
+        [path </> darcsExe] ++
+        -- if darcs-test lives in foo/darcs-test/something, look for
+        -- foo/darcs/darcs[.exe] for example after cabal build we can run
+        -- .../build/darcs-test/darcs-test and it'll find the darcs in
+        -- .../build/darcs/darcs
+        [ takeDirectory path </> "darcs" </> darcsExe
+        | takeBaseName path == "darcs-test"
+        ] ++
+        -- some versions of cabal produce more complicated structures:
+        -- t/darcs-test/build/darcs-test/darcs-test and x/darcs/build/darcs/darcs
+        [ takeDirectory path </> ".." </> ".." </> ".." </> "x" </> "darcs" </>
+            "build" </> "darcs" </> darcsExe
+        | takeBaseName path == "darcs-test"
+        ] ++
+        [ takeDirectory path </> ".." </> ".." </> ".." </> ".." </> "x" </>
+            "darcs" </> "noopt" </> "build" </> "darcs" </> darcsExe
+        | takeBaseName path == "darcs-test"
+        ]
+  availableCandidates <- filterM doesFileExist candidates
+  case availableCandidates of
+    (result:_) -> do
+      putStrLn $ "Using darcs executable in " ++ takeDirectory result
+      return result
+    [] ->
+      die ("No darcs specified or found nearby. Tried:\n" ++ unlines candidates)
+
 run :: Config -> IO ()
 run conf = do
     case testDir conf of
        Nothing -> return ()
-       Just d  -> do e <- doesPathExist d -- shelly (test_e (fromText $ T.pack d))
-                     when e $ die ("Directory " ++ d ++ " already exists. Cowardly exiting")
-    darcsBin <-
-        case darcs conf of
-            "" -> do
-                path <- getProgPath
-                let candidates =
-                      -- if darcs-test lives in foo/something, look for foo/darcs[.exe]
-                      -- for example if we've done cabal install -ftest, there'll be a darcs-test and darcs in the cabal
-                      -- installation folder
-                      [path </> ("darcs" ++ exeExtension)] ++
-                      -- if darcs-test lives in foo/darcs-test/something, look for foo/darcs/darcs[.exe]
-                      -- for example after cabal build we can run dist/build/darcs-test/darcs-test and it'll find
-                      -- the darcs in dist/build/darcs/darcs
-                      [takeDirectory path </> "darcs" </> ("darcs" ++ exeExtension) | takeBaseName path == "darcs-test" ] ++
-                      -- nowadays cabal v2-build produces more complicated structures:
-                      -- t/darcs-test/build/darcs-test/darcs-test and x/darcs/build/darcs/darcs
-                      [takeDirectory path </> ".." </> ".." </> ".." </> "x"
-                                          </> "darcs" </> "build" </> "darcs" </> ("darcs" ++ exeExtension)
-                            | takeBaseName path == "darcs-test" ] ++
-                      [takeDirectory path </> ".." </> ".." </> ".." </> ".." </> "x"
-                                          </> "darcs" </> "noopt" </> "build" </> "darcs" </> ("darcs" ++ exeExtension)
-                            | takeBaseName path == "darcs-test" ]
-                availableCandidates <- filterM doesFileExist candidates
-                case availableCandidates of
-                     (darcsBin:_) -> do
-                         putStrLn $ "Using darcs executable in " ++ takeDirectory darcsBin
-                         return darcsBin
-                     [] -> die ("No darcs specified or found nearby. Tried:\n" ++ unlines candidates)
-            v -> return v
+       Just d  -> do
+          e <- doesPathExist d
+          when e $ die ("Directory " ++ d ++ " already exists. Cowardly exiting")
 
     let hashed   = 'h' `elem` suites conf
         failing  = 'f' `elem` suites conf
@@ -125,11 +133,17 @@ run conf = do
         nocache   = 'n' `elem` cache conf
         withcache = 'y' `elem` cache conf
 
+    darcsBin <-
+      case darcs conf of
+        "" -> findDarcs
+        v -> return v
     when (shell || network || failing) $ do
       unless (isAbsolute $ darcsBin) $
         die ("Argument to --darcs should be an absolute path")
       unless (exeExtension `isSuffixOf` darcsBin) $
-        putStrLn $ "Warning: --darcs flag does not end with " ++ exeExtension ++ " - some tests may fail (case does matter)"
+        putStrLn $
+          "Warning: --darcs flag does not end with " ++ exeExtension ++
+          " - some tests may fail (case does matter)"
 
     putStrLn $ "Locale encoding is " ++ textEncodingName localeEncoding
 
@@ -147,13 +161,27 @@ run conf = do
                       . (if withcache then (WithCache:) else id)
                       $ []
 
+    let findTestFiles dir = select . map (dir </>) <$> listDirectory dir
+          where
+            filter_failing =
+              if failing
+                then id
+                else filter $ not . ("failing-" `isPrefixOf`) . takeBaseName
+            select = sort . filter_failing . filter (".sh" `isSuffixOf`)
+
     stests <-
       if shell
-        then findShell darcsBin "tests" (testDir conf) failing diffAlgorithm repoFormat useIndex useCache
+        then do
+          files <- findTestFiles "tests"
+          findShell darcsBin files (testDir conf) diffAlgorithm
+            repoFormat useIndex useCache
         else return []
     ntests <-
       if network
-        then findShell darcsBin "tests/network" (testDir conf) failing diffAlgorithm repoFormat useIndex useCache
+        then do
+          files <- findTestFiles "tests/network"
+          findShell darcsBin files (testDir conf) diffAlgorithm
+            repoFormat useIndex useCache
         else return []
     let utests =
           if unit then
@@ -176,7 +204,8 @@ run conf = do
               , topt_maximum_test_depth = Nothing
               , topt_timeout = Nothing
               }
-          , ropt_test_patterns = if null (tests conf) then Nothing else Just (map read (tests conf))
+          , ropt_test_patterns =
+              if null (tests conf) then Nothing else Just (map read (tests conf))
           , ropt_xml_output = Nothing
           , ropt_xml_nested = Nothing
           , ropt_color_mode = if plain conf then Just ColorNever else Nothing

@@ -12,7 +12,6 @@ import Darcs.Prelude
 
 import Control.Exception ( SomeException )
 import Data.Data ( Data, Typeable )
-import Data.List ( isPrefixOf, sort )
 import Data.Text ( Text, pack, unpack )
 import qualified Data.Text as T
 import qualified Shelly ( FilePath, run )
@@ -23,11 +22,9 @@ import Shelly
     , cp
     , fromText
     , get_env_text
-    , hasExt
     , initOutputHandles
     , lastExitCode
     , lastStderr
-    , ls
     , mkdir
     , mkdir_p
     , onCommandHandles
@@ -76,7 +73,7 @@ data ShellTest = ShellTest
   { format :: Format
   , testfile :: FilePath
   , testdir :: Maybe FilePath -- ^ only if you want to set it explicitly
-  , _darcspath :: FilePath
+  , darcspath :: FilePath
   , diffalgorithm :: DiffAlgorithm
   , useindex :: UseIndex
   , usecache :: UseCache
@@ -238,54 +235,48 @@ runtest t =
 
 findShell
   :: FilePath
-  -> String
+  -> [FilePath]
   -> Maybe FilePath
-  -> Bool
   -> [DiffAlgorithm]
   -> [Format]
   -> [UseIndex]
   -> [UseCache]
   -> IO [Test]
-findShell dp sdir tdir isFailing diffAlgorithms repoFormats useidx usecaches =
-  shelly $ do
-    files <- ls (fromText $ pack sdir)
-    let test_files = sort $ filter relevant $ filter (hasExt "sh") files
+findShell dp files tdir diffAlgorithms repoFormats useidx usecaches =
+  do
     return
-      [ shellTest dp fmt tdir file da ui uc
-      | file <- map toString test_files
+      [ shellTest
+          ShellTest
+            { format = fmt
+            , testfile = file
+            , testdir = tdir
+            , darcspath = dp
+            , diffalgorithm = da
+            , useindex = ui
+            , usecache = uc
+            }
+      | file <- files
       , fmt <- repoFormats
       , da <- diffAlgorithms
       , ui <- useidx
       , uc <- usecaches
       ]
-  where
-    relevant =
-      (if isFailing then id else not) .
-      ("failing-" `isPrefixOf`) . takeBaseName . toString
 
-shellTest
-  :: FilePath
-  -> Format
-  -> Maybe FilePath
-  -> String
-  -> DiffAlgorithm
-  -> UseIndex
-  -> UseCache
-  -> Test
-shellTest dp fmt tdir file da ui uc =
-    Test name (ShellTest fmt file tdir dp da ui uc)
+shellTest :: ShellTest -> Test
+shellTest test =
+    Test name test
   where
     name =
       concat
-        [ toString (takeTestName file)
+        [ toString (takeTestName (testfile test))
         , " ("
-        , show fmt
+        , show (format test)
         , ","
-        , show da
+        , show (diffalgorithm test)
         , ","
-        , show ui
+        , show (useindex test)
         , ","
-        , show uc
+        , show (usecache test)
         , ")"
         ]
 

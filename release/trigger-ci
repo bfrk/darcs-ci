@@ -9,8 +9,6 @@ set -e
 test -d _darcs || (echo need to be in a darcs repo >&2 && false)
 github=git@github.com:bfrk/darcs-ci.git
 rm -rf .git
-# HACK otherwise git ignores the "embedded" git repo
-darcs move unix-compat/.git unix-compat/.git.renamed
 git init
 if ! test "$1" = "init"; then
   git fetch $github master
@@ -23,5 +21,3 @@ branch=$(basename $(pwd))
 date=$(date -u --rfc-3339=seconds)
 git commit --allow-empty -m "$branch $date"
 git push -f --set-upstream $github master
-# HACK
-darcs move unix-compat/.git.renamed unix-compat/.git
