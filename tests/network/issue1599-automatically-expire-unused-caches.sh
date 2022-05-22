@@ -72,8 +72,8 @@ c1=`grep -c "$baseurl/dummyRepo" log`
 test "$c1" -eq 1
 c2=`grep -c "/does/not/exist" log`
 test "$c2" -eq 1
-# the darcs command should take slightly more than 2 seconds to complete
+# the darcs command should take not much more than 2 seconds to complete
 if test -n "$have_time"; then
   e=`grep "time\." log | cut -d. -f2`
-  test "$e" -eq 2
+  test "$e" -le 2
 fi

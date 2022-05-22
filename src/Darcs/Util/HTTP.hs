@@ -62,7 +62,7 @@ darcsResponseTimeout :: IO ResponseTimeout
 darcsResponseTimeout =
   lookupEnv "DARCS_CONNECTION_TIMEOUT" >>= \case
     Just s | Just n <- readMaybe s ->
-      return (responseTimeoutMicro (1000000 * n))
+      return $ responseTimeoutMicro $ 1000000 * n
     _ -> return responseTimeoutDefault
 
 copyRemote :: String -> FilePath -> Cachable -> IO ()
