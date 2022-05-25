@@ -44,7 +44,7 @@ import System.Directory
 import qualified System.Directory as SD ( writable )
 import System.FilePath.Posix ( dropFileName, joinPath, (</>) )
 import System.IO ( hPutStrLn, stderr )
-import System.IO.Error ( catchIOError, isAlreadyExistsError )
+import System.IO.Error ( isAlreadyExistsError )
 import System.IO.Unsafe ( unsafePerformIO )
 import System.Posix.Files ( createLink, getSymbolicLinkStatus, linkCount )
 
@@ -52,7 +52,7 @@ import Darcs.Prelude
 
 import Darcs.Util.ByteString ( gzWriteFilePS )
 import Darcs.Util.English ( Noun(..), Pronoun(..), englishNum )
-import Darcs.Util.Exception ( catchall )
+import Darcs.Util.Exception ( catchall, handleOnly )
 import Darcs.Util.File
     ( Cachable(Cachable)
     , copyFileOrUrl
@@ -436,11 +436,7 @@ tryLinking source filename subdir c =
     createCache c subdir filename
     let target = hashedFilePath c subdir filename
     debugMessage $ "Linking " ++ source ++ " to " ++ target
-    createLink source target `catchIOError`
-      \e -> unless (isAlreadyExistsError e) $
-        putCannotLinkWarning $
-          "Warning: cannot hard-link files between cache and repository, \
-          \performance may be sub-optimal: " ++ show e
+    handleOnly isAlreadyExistsError (return ()) $ createLink source target
 
 createCache :: CacheLoc -> HashedDir -> FilePath -> IO ()
 createCache (Cache Directory _ d) subdir filename =
@@ -484,7 +480,7 @@ writeFileUsingCache (Ca cache) compr content = do
             write compr cacheFile content
             -- create links in all other writable locations
             debugMessage $ "writeFileUsingCache remaining sources:\n"++show (Ca cs)
-            mapM_ (tryLinking cacheFile filename subdir) cs
+            mapM_ (tryLinking cacheFile filename subdir) cs `catchall` return ()
             return hash
     wfuc [] = fail $ "No location to write file " ++ (hashedDir subdir </> filename)
 
@@ -527,26 +523,8 @@ reportBadSources = do
                , "the corresponding "
                , englishNum size (Noun "entry") " from _darcs/prefs/sources."
                ]
-    linkWarning <- getCannotLinkWarning
-    case linkWarning of
-      Nothing -> return ()
-      Just msg -> hPutStrLn stderr msg
 
 -- * Global Variables
-
-cannotLinkWarning :: MVar (Maybe String)
-cannotLinkWarning = unsafePerformIO $ newMVar Nothing
-{-# NOINLINE cannotLinkWarning #-}
-
-putCannotLinkWarning :: String -> IO ()
-putCannotLinkWarning msg =
-  modifyMVarPure cannotLinkWarning $
-    \case
-      Nothing -> Just msg
-      x -> x
-
-getCannotLinkWarning :: IO (Maybe String)
-getCannotLinkWarning = readMVar cannotLinkWarning
 
 badSourcesList :: MVar [String]
 badSourcesList = unsafePerformIO $ newMVar []
