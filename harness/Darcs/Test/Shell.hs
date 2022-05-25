@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, OverloadedStrings, ExtendedDefaultRules #-}
+{-# LANGUAGE CPP, OverloadedStrings, ExtendedDefaultRules, RecordWildCards #-}
 {-# OPTIONS_GHC -fno-warn-type-defaults #-}
 module Darcs.Test.Shell
     ( Format(..)
@@ -56,6 +56,16 @@ data DiffAlgorithm = Myers | Patience deriving (Show, Eq, Typeable, Data)
 data UseIndex = NoIndex | WithIndex deriving (Show, Eq, Typeable, Data)
 data UseCache = NoCache | WithCache deriving (Show, Eq, Typeable, Data)
 
+data ShellTest = ShellTest
+  { format :: Format
+  , testfile :: FilePath
+  , testdir :: Maybe FilePath -- ^ only if you want to set it explicitly
+  , darcspath :: FilePath
+  , diffalgorithm :: DiffAlgorithm
+  , useindex :: UseIndex
+  , usecache :: UseCache
+  } deriving (Typeable)
+
 data Running = Running deriving Show
 data Result = Success | Skipped | Failed String
 
@@ -68,16 +78,6 @@ instance TestResultlike Running Result where
   testSucceeded Success = True
   testSucceeded Skipped = True
   testSucceeded _ = False
-
-data ShellTest = ShellTest
-  { format :: Format
-  , testfile :: FilePath
-  , testdir :: Maybe FilePath -- ^ only if you want to set it explicitly
-  , darcspath :: FilePath
-  , diffalgorithm :: DiffAlgorithm
-  , useindex :: UseIndex
-  , usecache :: UseCache
-  } deriving (Typeable)
 
 instance Testlike Running Result ShellTest where
   testTypeName _ = "Shell"
@@ -99,15 +99,15 @@ data EnvItem
     -- ^ A list of paths on disk, for the PATH variable
 
 runtest' :: ShellTest -> Text -> Sh Result
-runtest' (ShellTest fmt _ _ dp da ui uc) srcdir =
+runtest' ShellTest{..} srcdir =
   do
     wd <- pwd
     p  <- unpack <$> get_env_text "PATH"
     let pathToUse =
-          map (fromText . pack) $ takeDirectory dp : Native.splitSearchPath p
+          map (fromText . pack) $ takeDirectory darcspath : Native.splitSearchPath p
     let env =
           [ ("HOME"                      , EnvFilePath wd)
-         -- in case someone has XDG_CACHE_HOME set:
+          -- in case someone has XDG_CACHE_HOME set:
           , ("XDG_CACHE_HOME"            , EnvFilePath (wd </> ".cache"))
           , ("TESTDATA", EnvFilePath (srcdir </> "tests" </> "data"))
           , ("TESTBIN", EnvFilePath (srcdir </> "tests" </> "bin"))
@@ -120,12 +120,12 @@ runtest' (ShellTest fmt _ _ dp da ui uc) srcdir =
           , ("DARCS_DONT_COLOR"          , EnvString "1")
           , ("DARCS_DONT_ESCAPE_ANYTHING", EnvString "1")
           , ("PATH"                      , EnvSearchPath pathToUse)
-         -- the DARCS variable is passed to the tests purely so they can
-         -- double-check that the darcs on the path is the expected one,
-         -- so is passed as a string directly without any translation
-          , ("DARCS"                     , EnvString dp)
+          -- the DARCS variable is passed to the tests purely so they can
+          -- double-check that the darcs on the path is the expected one,
+          -- so is passed as a string directly without any translation
+          , ("DARCS"                     , EnvString darcspath)
           , ("GHC_VERSION", EnvString $ show (__GLASGOW_HASKELL__ :: Int))
-         -- https://www.joshkel.com/2018/01/18/symlinks-in-windows/
+          -- https://www.joshkel.com/2018/01/18/symlinks-in-windows/
           , ("MSYS"                      , EnvString "winsymlinks:nativestrict")
           ]
     -- we write the variables to a shell script and source them from there in
@@ -158,17 +158,17 @@ runtest' (ShellTest fmt _ _ dp da ui uc) srcdir =
            , "ALL " ++ daf
            ]
         ++ ucf
-    fmtstr = case fmt of
+    fmtstr = case format of
       Darcs3 -> "darcs-3"
       Darcs2 -> "darcs-2"
       Darcs1 -> "darcs-1"
-    daf = case da of
+    daf = case diffalgorithm of
       Patience -> "patience"
       Myers    -> "myers"
-    uif = case ui of
+    uif = case useindex of
       WithIndex -> "no-ignore-times"
       NoIndex   -> "ignore-times"
-    ucf = case uc of
+    ucf = case usecache of
       WithCache -> []
       NoCache   -> ["ALL no-cache"]
 
@@ -211,24 +211,24 @@ runtest' (ShellTest fmt _ _ dp da ui uc) srcdir =
 #endif
 
 runtest :: ShellTest -> Sh Result
-runtest t =
+runtest test@ShellTest{..} =
   withTmp $ \dir -> do
     cp "tests/lib" dir
     cp "tests/network/sshlib" dir
     cp "tests/network/httplib" dir
-    cp (fromText $ pack $ testfile t) (dir </> "test")
+    cp (fromText $ pack $ testfile) (dir </> "test")
     srcdir <- pwd
-    silently $ sub $ cd dir >> runtest' t (toTextIgnore srcdir)
+    silently $ sub $ cd dir >> runtest' test (toTextIgnore srcdir)
   where
     withTmp =
-      case testdir t of
+      case testdir of
         Just dir ->
           \job -> do
             let d =
-                  dir </> show (format t) </> show (diffalgorithm t) </>
-                  show (useindex t) </>
-                  show (usecache t) </>
-                  takeTestName (testfile t)
+                  dir </> show format </> show diffalgorithm </>
+                  show useindex </>
+                  show usecache </>
+                  takeTestName testfile
             mkdir_p d
             job d
         Nothing -> withTmpDir
@@ -242,7 +242,7 @@ findShell
   -> [UseIndex]
   -> [UseCache]
   -> IO [Test]
-findShell dp files tdir diffAlgorithms repoFormats useidx usecaches =
+findShell dp files tdir diffAlgorithms repoFormats useindexs usecaches =
   do
     return
       [ shellTest
@@ -258,25 +258,24 @@ findShell dp files tdir diffAlgorithms repoFormats useidx usecaches =
       | file <- files
       , fmt <- repoFormats
       , da <- diffAlgorithms
-      , ui <- useidx
+      , ui <- useindexs
       , uc <- usecaches
       ]
 
 shellTest :: ShellTest -> Test
-shellTest test =
-    Test name test
+shellTest test@ShellTest{..} = Test name test
   where
     name =
       concat
-        [ toString (takeTestName (testfile test))
+        [ unpack (toTextIgnore (takeTestName testfile))
         , " ("
-        , show (format test)
+        , show format
         , ","
-        , show (diffalgorithm test)
+        , show diffalgorithm
         , ","
-        , show (useindex test)
+        , show useindex
         , ","
-        , show (usecache test)
+        , show usecache
         , ")"
         ]
 
@@ -284,6 +283,3 @@ takeTestName :: FilePath -> Shelly.FilePath
 takeTestName n =
   let n' = makeRelative "tests" n
    in takeBaseName (takeDirectory n') </> takeBaseName n'
-
-toString :: Shelly.FilePath -> String
-toString = unpack . toTextIgnore

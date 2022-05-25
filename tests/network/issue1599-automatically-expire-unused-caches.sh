@@ -26,21 +26,6 @@
 . lib
 . httplib
 
-# skip timing test if time executable is not found
-if /usr/bin/env time --help 2> /dev/null; then
-  have_time=yes
-fi
-
-tm() {
-  # unset -x so this doesn't end up in the log below
-  set +x
-  if test -n "$have_time"; then
-    /usr/bin/env time -f "time.%e" "$@"
-  else
-    "$@"
-  fi
-}
-
 rm -rf R S log && mkdir R
 cd R
 darcs init
@@ -62,18 +47,11 @@ fi
 echo "repo:$baseurl/dummyRepo" >> S/_darcs/prefs/sources
 echo "repo:/does/not/exist" >> S/_darcs/prefs/sources
 echo "repo:$baseurl/R" >> S/_darcs/prefs/sources
-DARCS_CONNECTION_TIMEOUT=1 tm darcs log --repo S --verbose --no-cache 2>&1 | tee log
+DARCS_CONNECTION_TIMEOUT=1 darcs log --repo S --debug --no-cache 2>&1 | tee log
 grep "could not reach the following locations" log
+# the count is two, once for the file we want, and once to test
+# for reachability using _darcs/hashed_inventory
 if test -z "$http_proxy"; then
-  c=`grep -c "http://10.1.2.3/S" log`
-  test "$c" -eq 1
+  test `grep -c "copyRemote: http://10.1.2.3/S" log` = 2
 fi
-c1=`grep -c "$baseurl/dummyRepo" log`
-test "$c1" -eq 1
-c2=`grep -c "/does/not/exist" log`
-test "$c2" -eq 1
-# the darcs command should take not much more than 2 seconds to complete
-if test -n "$have_time"; then
-  e=`grep "time\." log | cut -d. -f2`
-  test "$e" -le 2
-fi
+test `grep -c "copyRemote: $baseurl/dummyRepo" log` = 2

@@ -126,4 +126,10 @@ grep -q darcs-3 .darcs/defaults && format=darcs-3
 grep -q darcs-2 .darcs/defaults && format=darcs-2
 grep -q darcs-1 .darcs/defaults && format=darcs-1
 
+# To test if darcs works correctly in case hard-linking fails because the
+# cache is in a different file system. This assumes that /run/darcs-test is
+# writable and on a separate filesystem (e.g. tmpfs).
+#
+# export XDG_CACHE_HOME=`mktemp -d -p /run/darcs-test`
+
 set -vex -o pipefail
