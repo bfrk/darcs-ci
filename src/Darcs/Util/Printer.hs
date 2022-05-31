@@ -445,7 +445,7 @@ instance Semigroup Doc where
 -- | 'mappend' ('<>') is concatenation, 'mempty' is the 'empty' 'Doc'
 instance Monoid Doc where
   mempty = empty
-  mappend = append
+  mappend = (<>)
 
 -- | Concatenation of two 'Doc's
 append :: Doc -> Doc -> Doc

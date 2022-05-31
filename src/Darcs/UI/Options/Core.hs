@@ -284,7 +284,7 @@ instance Semigroup (PrimOptSpec d f a [v]) where
 
 -- | See 'oappend' and 'oempty'.
 instance Monoid (PrimOptSpec d f a [v]) where
-  mappend = oappend
+  mappend = (<>)
   mempty = oempty
 
 -- | Parse a list of flags against a primitive option spec, returning the

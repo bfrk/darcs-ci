@@ -101,7 +101,7 @@ instance  Monad Perhaps where
     (Succeeded x) >>= k =  k x
     Failed   >>= _      =  Failed
     Unknown  >>= _      =  Unknown
-    return              =  Succeeded
+    return              =  pure
 
 instance Alternative Perhaps where
     empty = Unknown
