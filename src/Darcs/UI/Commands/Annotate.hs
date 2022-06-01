@@ -105,10 +105,11 @@ annotateCmd' opts fixed_path = withRepository (useCache ? opts) $ RepoJob $ \rep
     case patchSetMatch matchFlags of
       Just psm -> do
         Sealed x <- getOnePatchset repository psm
-        let (_, [path'], _) =
-              withFileNames Nothing [fixed_path] (rollbackToPatchSetMatch psm r)
-        initial <- snd `fmap` virtualTreeIO (rollbackToPatchSetMatch psm r) recorded
-        return (seal $ patchSet2RL x, initial, path')
+        case withFileNames Nothing [fixed_path] (rollbackToPatchSetMatch psm r) of
+          (_, [path'], _) -> do
+            initial <- snd `fmap` virtualTreeIO (rollbackToPatchSetMatch psm r) recorded
+            return (seal $ patchSet2RL x, initial, path')
+          _ -> error "impossible"
       Nothing ->
         return (seal $ patchSet2RL r, recorded, fixed_path)
 

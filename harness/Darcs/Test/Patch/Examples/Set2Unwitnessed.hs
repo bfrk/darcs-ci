@@ -16,6 +16,8 @@
 -- Boston, MA 02110-1301, USA.
 
 {-# LANGUAGE OverloadedStrings #-}
+{-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
+
 module Darcs.Test.Patch.Examples.Set2Unwitnessed
        ( primPermutables, primPatches
        , commutables, commutablesFL

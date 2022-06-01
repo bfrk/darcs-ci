@@ -16,6 +16,7 @@
 --  Boston, MA 02110-1301, USA.
 
 {-# LANGUAGE OverloadedStrings #-}
+{-# OPTIONS_GHC -Wno-incomplete-record-updates #-}
 
 module Darcs.UI.Commands.Unrecord
     ( unrecord
@@ -279,7 +280,7 @@ savetoBundle opts removed@(x :>: _) orig = do
                            Sealed (kept' :> removed') -> makeBundle Nothing kept' (mapFL_FL hopefully removed') )
                       `catchInterrupt` genFullBundle
     filename <- getUniqueDPatchName (patchDesc x)
-    let Just outname = getOutput opts filename
+    let outname = fromJust (getOutput opts filename)
     exists <- useAbsoluteOrStd (doesPathExist . toFilePath) (return False) outname
     when exists $ fail $ "Directory or file named '" ++ (show outname) ++ "' already exists."
     useAbsoluteOrStd writeDocBinFile putDoc outname bundle
