@@ -32,7 +32,6 @@
 ## SOFTWARE.
 
 . lib                           # Load some portability helpers.
-
 rm -rf R S                      # Another script may have left a mess.
 darcs init      --repo R        # Create our test repos.
 darcs init      --repo S
@@ -45,6 +44,9 @@ add_to_boring() {
 cd R
 touch log
 add_to_boring '^log$'
+
+unset pwd # Since this test is pretty much linux-specific, hspwd.hs is not needed
+abort_windows # and skip if we are on win32...
 
 # Case 1: looping symlink to non-recorded non-boring dir
 mkdir non-recorded-dir
@@ -161,12 +163,10 @@ not grep -vE "(^ *$|^\+|No changes!)" log
 rm l
 
 # Case 14: link to fifo
-if ! os_is_windows; then
-  mkfifo f
-  ln -s f l
-  ln -s "`pwd`"/f ./l2
-  not darcs w -l >log 2>&1                                         # expecting "No changes!"
-  not darcs rec -alm "should not happen" >>log 2>&1                # expecting "No changes!" as well
-  not grep -vE "(^ *$|^\+|No changes!)" log
-  rm f l l2
-fi
+mkfifo f
+ln -s f l
+ln -s "`pwd`"/f ./l2
+not darcs w -l >log 2>&1                                         # expecting "No changes!"
+not darcs rec -alm "should not happen" >>log 2>&1                # expecting "No changes!" as well
+not grep -vE "(^ *$|^\+|No changes!)" log
+rm f l l2

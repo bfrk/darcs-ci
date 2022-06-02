@@ -39,6 +39,7 @@ module Darcs.Util.Lock
     , gzWriteAtomicFilePSs
     , gzWriteDocFile
     , removeFileMayNotExist
+    , canonFilename
     , maybeRelink
     , tempdirLoc
     , environmentHelpTmpdir
@@ -74,7 +75,6 @@ import System.Directory
     , doesDirectoryExist
     , createDirectory
     , getTemporaryDirectory
-    , makeAbsolute
     , removePathForcibly
     , renameFile
     , renameDirectory
@@ -108,7 +108,8 @@ import Darcs.Util.Printer ( Doc, hPutDoc, packedString, empty, renderPSs )
 import Darcs.Util.AtExit ( atexit )
 import Darcs.Util.Global ( darcsdir )
 import Darcs.Util.Compat
-    ( maybeRelink
+    ( canonFilename
+    , maybeRelink
     , atomicCreate
     , sloppyAtomicCreate
     )
@@ -135,7 +136,7 @@ getLock l 0 = do yorn <- askUser $ "Couldn't get lock "++l++". Abort (yes or any
                  case yorn of
                     ('y':_) -> exitWith $ ExitFailure 1
                     _ -> getLock l 30
-getLock lbad tl = do l <- makeAbsolute lbad
+getLock lbad tl = do l <- canonFilename lbad
                      gotit <- takeLock l
                      if gotit then return l
                               else do putStrLn $ "Waiting for lock "++l

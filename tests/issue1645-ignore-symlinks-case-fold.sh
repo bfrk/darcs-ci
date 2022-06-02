@@ -32,7 +32,6 @@
 ## SOFTWARE.
 
 . lib                           # Load some portability helpers.
-
 rm -rf R S                      # Another script may have left a mess.
 darcs init      --repo R        # Create our test repos.
 darcs init      --repo S
@@ -45,6 +44,8 @@ add_to_boring() {
 cd R
 touch log
 add_to_boring '^log$'
+
+unset pwd # Since this test is pretty much linux-specific, hspwd.hs is not needed
 
 # Skip the case-folding tests on systems that don't support it
 touch cs-test

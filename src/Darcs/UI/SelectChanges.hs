@@ -105,7 +105,6 @@ import Darcs.Patch.Match
 import Darcs.Patch.Named ( adddeps, anonymous )
 import Darcs.Patch.PatchInfoAnd ( n2pia )
 import Darcs.Patch.Permutations ( commuteWhatWeCanRL )
-import Darcs.Patch.Set ( PatchSet, Origin )
 import Darcs.Patch.Show ( ShowPatch, ShowContextPatch )
 import Darcs.Patch.Split ( Splitter(..) )
 import Darcs.Patch.TouchesFiles ( selectNotTouching, deselectNotTouching )
@@ -118,12 +117,13 @@ import Darcs.Patch.Witnesses.Ordered
     )
 import Darcs.Patch.Witnesses.Sealed
     ( FlippedSeal (..), Sealed2 (..)
-    , seal2, unseal2
+    , flipSeal, seal2, unseal2
     )
 import Darcs.Patch.Witnesses.WZipper
     ( FZipper (..), focus, jokers, left, right
     , rightmost, toEnd, toStart
     )
+import Darcs.Repository ( AccessType(RW), Repository, readPatches )
 import Darcs.UI.External ( editText )
 import Darcs.UI.Options.All
     ( Verbosity(..), WithSummary(..)
@@ -432,14 +432,14 @@ keysFor = concatMap (map kp)
 withSelectedPatchFromList
     :: (Commute p, Matchable p, ShowPatch p, ShowContextPatch p, ApplyState p ~ Tree)
     => String   -- name of calling command (always "amend" as of now)
-    -> RL p wX wY
+    -> RL p wO wR
     -> PatchSelectionOptions
-    -> ((RL p :> p) wX wY -> IO ())
+    -> (forall wA . (FL p :> p) wA wR -> IO ())
     -> IO ()
 withSelectedPatchFromList jn patches o job = do
     sp <- wspfr jn (matchAPatch $ matchFlags o) patches NilFL
     case sp of
-        Just (skipped :> selected') -> job (skipped :> selected')
+        Just (FlippedSeal (skipped :> selected')) -> job (skipped :> selected')
         Nothing ->
             putStrLn $ "Cancelling " ++ jn ++ " since no patch was selected."
 
@@ -453,13 +453,13 @@ data WithSkipped p wX wY = WithSkipped
 -- | This ensures that the selected patch commutes freely with the skipped
 -- patches, including pending and also that the skipped sequences has an
 -- ending context that matches the recorded state, z, of the repository.
-wspfr :: forall p wX wY wZ.
+wspfr :: forall p wX wY wU.
          (Commute p, Matchable p, ShowPatch p, ShowContextPatch p, ApplyState p ~ Tree)
       => String
       -> (forall wA wB . p wA wB -> Bool)
       -> RL p wX wY
-      -> FL (WithSkipped p) wY wZ
-      -> IO (Maybe ((RL p :> p) wX wZ))
+      -> FL (WithSkipped p) wY wU
+      -> IO (Maybe (FlippedSeal (FL p :> p) wU))
 wspfr _ _ NilRL _ = return Nothing
 wspfr jn matches remaining@(pps:<:p) skipped
     | not $ matches p = wspfr jn matches pps
@@ -480,7 +480,7 @@ wspfr jn matches remaining@(pps:<:p) skipped
                                  , pDefault = Just 'n'
                                  , pHelp = "?h" }
               case yorn of
-                'y' -> return $ Just $ (pps +<<+ skipped') :> p'
+                'y' -> return $ Just $ flipSeal $ skipped' :> p'
                 'n' -> nextPatch
                 'j' -> nextPatch
                 'k' -> previousPatch remaining skipped
@@ -496,9 +496,10 @@ wspfr jn matches remaining@(pps:<:p) skipped
         repeatThis
   where prompt' = "Shall I " ++ jn ++ " this patch?"
         nextPatch = wspfr jn matches pps (WithSkipped SkippedManually p:>:skipped)
-        previousPatch :: RL p wA wB
-                      -> FL (WithSkipped p) wB wC
-                      -> IO (Maybe ((RL p :> p) wA wC))
+        previousPatch :: RL p wX wQ
+                      -> FL (WithSkipped p) wQ wU
+                      -> IO (Maybe (FlippedSeal
+                              (FL p :> p) wU))
         previousPatch remaining' NilFL = wspfr jn matches remaining' NilFL
         previousPatch remaining' (WithSkipped sk prev :>: skipped'') =
             case sk of
@@ -1022,13 +1023,14 @@ getDefault False InFirst = 'y'
 getDefault False InLast  = 'n'
 
 askAboutDepends :: (RepoPatch p, ApplyState p ~ Tree)
-                => PatchSet p Origin wR -> FL (PrimOf p) wR wT
+                => Repository 'RW p wU wR -> FL (PrimOf p) wR wY
                 -> PatchSelectionOptions
                 -> [PatchInfo] -> IO [PatchInfo]
-askAboutDepends pset pa' ps_opts olddeps = do
+askAboutDepends repository pa' ps_opts olddeps = do
   -- Ideally we'd just default the olddeps to yes but still ask about them.
   -- SelectChanges doesn't currently (17/12/09) offer a way to do this so would
   -- have to have this support added first.
+  pset <- readPatches repository
   -- Let the user select only from patches after the last clean tag.
   -- We do this for efficiency, otherwise independentPatchIds can
   -- take a /very/ long time to finish. The limitation this imposes

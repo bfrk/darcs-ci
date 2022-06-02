@@ -104,11 +104,10 @@ import Data.Maybe
     , isNothing
     , catMaybes
     )
-import Control.Monad ( void, unless )
+import Control.Monad ( unless )
 import System.Directory ( doesDirectoryExist, createDirectory )
 import System.FilePath.Posix ( (</>) )
 import System.Environment ( lookupEnv )
-import System.Posix.Files ( getSymbolicLinkStatus )
 
 -- Use of RemoteRepo data constructor is harmless here, if not ideal.
 -- See haddocks for fixRemoteRepos below for details.
@@ -116,7 +115,7 @@ import qualified Darcs.UI.Options.Flags as F ( DarcsFlag(RemoteRepo) )
 import Darcs.UI.Options ( Config, (?), (^), oparse, parseFlags, unparseOpt )
 import qualified Darcs.UI.Options.All as O
 
-import Darcs.Util.Exception ( catchall, ifDoesNotExistError )
+import Darcs.Util.Exception ( catchall )
 import Darcs.Util.File ( withCurrentDirectory )
 import Darcs.Util.Prompt
     ( askUser
@@ -135,14 +134,13 @@ import Darcs.Util.IsoDate ( getIsoDateTime, cleanLocalDate )
 import Darcs.Util.Path
     ( AbsolutePath
     , AbsolutePathOrStd
+    , toFilePath
+    , makeSubPathOf
+    , ioAbsolute
+    , makeAbsoluteOrStd
     , AnchoredPath
     , floatSubPath
     , inDarcsdir
-    , ioAbsolute
-    , makeAbsolute
-    , makeAbsoluteOrStd
-    , makeRelativeTo
-    , toFilePath
     )
 import Darcs.Util.Printer ( pathlist, putDocLn, text, ($$), (<+>) )
 import Darcs.Util.Printer.Color ( ePutDocLn )
@@ -213,9 +211,8 @@ fixRemoteRepos d = mapM fixRemoteRepo where
   fixRemoteRepo (F.RemoteRepo p) = F.RemoteRepo `fmap` fixUrl d p
   fixRemoteRepo f = return f
 
--- | The first argument is an 'AbsolutePath', the second a 'String' that may be
--- a file path or a URL. It returns either the URL, or an absolute version of
--- the path, interpreted relative to the first argument.
+-- | 'fixUrl' takes a String that may be a file path or a URL.
+-- It returns either the URL, or an absolute version of the path.
 fixUrl :: AbsolutePath -> String -> IO String
 fixUrl d f = if isValidLocalPath f
                 then toFilePath `fmap` withCurrentDirectory d (ioAbsolute f)
@@ -278,19 +275,12 @@ maybeFixSubPaths (r, o) fs = do
     -- special case here because fixit otherwise converts
     -- "" to (SubPath "."), which is a valid path
     fixit "" = return Nothing
-    fixit p = do
-      -- raise an exception if the given path has a trailing pathSeparator
-      -- but refers to an existing non-directory
-      ifDoesNotExistError () $ void (getSymbolicLinkStatus p)
-      msp <- makeRelativeTo r (makeAbsolute o p)
-      case msp of
-        Just sp -> return $ floatIt sp
-        Nothing -> do
-          msp' <- makeRelativeTo r (makeAbsolute r p)
-          case msp' of
-            Nothing -> return Nothing
-            Just sp' -> return $ floatIt sp'
-    floatIt = either (const Nothing) Just . floatSubPath
+    fixit p = do ap <- withCurrentDirectory o $ ioAbsolute p
+                 case makeSubPathOf r ap of
+                   Just sp -> return $ Just $ floatSubPath sp
+                   Nothing -> do
+                     absolutePathByRepodir <- withCurrentDirectory r $ ioAbsolute p
+                     return $ floatSubPath <$> makeSubPathOf r absolutePathByRepodir
 
 -- | 'getRepourl' takes a list of flags and returns the url of the
 -- repository specified by @Repodir \"directory\"@ in that list of flags, if any.

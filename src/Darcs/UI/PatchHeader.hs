@@ -21,11 +21,14 @@ import Darcs.Patch.Named
    )
 import Darcs.Patch.PatchInfoAnd ( PatchInfoAnd, n2pia )
 import Darcs.Patch.Prim ( canonizeFL )
-import Darcs.Patch.Set ( Origin, PatchSet )
 
 import Darcs.Patch.Witnesses.Ordered ( FL(..), (+>+) )
 
-import Darcs.Util.Lock ( readTextFile, writeTextFile )
+import Darcs.Repository ( AccessType(RW), Repository )
+import Darcs.Util.Lock
+    ( readTextFile
+    , writeTextFile
+    )
 
 import Darcs.UI.External ( editFile )
 import Darcs.UI.Flags ( getEasyAuthor, promptAuthor, getDate )
@@ -215,9 +218,8 @@ getLog m_name has_pipe log_file ask_long m_old chs =
         , prefixLines (text "#") chs
         ]
 
--- | Specify whether to ask about dependencies with respect to a particular
--- 'PatchSet', or not
-data AskAboutDeps p wX = AskAboutDeps (PatchSet p Origin wX) | NoAskAboutDeps
+-- |specify whether to ask about dependencies with respect to a particular repository, or not
+data AskAboutDeps p wU wR = AskAboutDeps (Repository 'RW p wU wR) | NoAskAboutDeps
 
 -- | Run a job that involves a hijack confirmation prompt.
 --
@@ -247,19 +249,17 @@ patchHeaderConfig cfg = PatchHeaderConfig
 -- | Update the metadata for a patch.
 --   This potentially involves a bit of interactivity, so we may return @Nothing@
 --   if there is cause to abort what we're doing along the way
-updatePatchHeader :: forall p wX wY wZ . (RepoPatch p, ApplyState p ~ Tree)
+updatePatchHeader :: forall p wX wY wU wR . (RepoPatch p, ApplyState p ~ Tree)
                   => String -- ^ verb: command name
-                  -> AskAboutDeps p wX
+                  -> AskAboutDeps p wU wR
                   -> S.PatchSelectionOptions
                   -> PatchHeaderConfig
-                  -> Named (PrimOf p) wX wY
-                  -- ^ patch to edit, must be conflict-free as conflicts can't
-                  -- be preserved when changing the identity of a patch. If
-                  -- necessary this can be achieved by calling @fmapFL_Named
-                  -- effect@ on an @Named p@ first, but some callers might
-                  -- already have @Named (PrimOf p)@ available.
-                  -> FL (PrimOf p) wY wZ -- ^new primitives to add
-                  -> HijackT IO (Maybe String, PatchInfoAnd p wX wZ)
+                  -> Named (PrimOf p) wR wX
+                  -- ^ patch to edit, must be conflict-free as conflicts can't be preserved when changing
+                  -- the identity of a patch. If necessary this can be achieved by calling @fmapFL_Named effect@
+                  -- on an @Named p@ first, but some callers might already have @Named (PrimOf p)@ available.
+                  -> FL (PrimOf p) wX wY -- ^new primitives to add
+                  -> HijackT IO (Maybe String, PatchInfoAnd p wR wY)
 updatePatchHeader verb ask_deps pSelOpts PatchHeaderConfig{..} oldp chs = do
 
     let newchs = canonizeFL diffAlgorithm (patchcontents oldp +>+ chs)
@@ -267,7 +267,7 @@ updatePatchHeader verb ask_deps pSelOpts PatchHeaderConfig{..} oldp chs = do
     let old_pdeps = getdeps oldp
     newdeps <-
         case ask_deps of
-           AskAboutDeps patches -> liftIO $ askAboutDepends patches newchs pSelOpts old_pdeps
+           AskAboutDeps repository -> liftIO $ askAboutDepends repository newchs pSelOpts old_pdeps
            NoAskAboutDeps -> return old_pdeps
 
     let old_pinf = patch2patchinfo oldp

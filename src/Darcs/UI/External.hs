@@ -63,8 +63,7 @@ import GHC.IO.Exception ( IOErrorType(ResourceVanished) )
 import Foreign.C ( withCString )
 import Foreign.C.String ( CString )
 import Foreign.Ptr ( nullPtr )
-import Darcs.Util.Lock ( writeDocBinFile )
-import System.Directory ( canonicalizePath )
+import Darcs.Util.Lock ( canonFilename, writeDocBinFile )
 #endif
 
 import Darcs.UI.Options.All ( Sign(..), Verify(..), Compression(..) )
@@ -219,7 +218,7 @@ sendEmailDoc f t s cc Nothing _mbundle body = do
                hPutDoc h body
                hClose h
                writeDocBinFile "mailed_patch" body
-               cfn <- canonicalizePath fn
+               cfn <- canonFilename fn
                withCString cfn $ \pcfn ->
                 c_send_email fp tp ccp sp nullPtr pcfn
   when (r /= 0) $ do

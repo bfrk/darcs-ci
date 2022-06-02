@@ -401,7 +401,7 @@ fetchFileUsingCachePrivate fromWhere (Ca cache) hash = do
                             fail $ "Hash failure in " ++ cacheFile
                         return x2
                      else return x1
-            mapM_ (tryLinking cacheFile filename subdir) cs
+            mapM_ (tryLinking cacheFile filename subdir) cs `catchall` return ()
             return (cacheFile, x)
             `catchNonSignal` \e -> do
                 debugMessage "Caught exception, now attempt creating cache."

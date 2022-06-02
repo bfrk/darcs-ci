@@ -64,11 +64,11 @@ import Darcs.Patch ( RepoPatch, description, PrimOf
                    , effect, invert, invertFL, sortCoalesceFL
                    )
 import Darcs.Patch.Apply ( ApplyState )
-import Darcs.Patch.Depends ( contextPatches, patchSetUnion, findCommonWithThem )
+import Darcs.Patch.Depends ( patchSetUnion, findCommonWithThem )
 import Darcs.Patch.Info ( isTag )
 import Darcs.Patch.Named ( fmapFL_Named )
 import Darcs.Patch.PatchInfoAnd ( hopefully )
-import Darcs.Patch.Set ( Origin, PatchSet, appendPSFL )
+import Darcs.Patch.Set ( Origin, PatchSet, patchSet2RL )
 import Darcs.Patch.Split ( primSplitter )
 import Darcs.Patch.PatchInfoAnd ( PatchInfoAnd, info, patchDesc )
 import Darcs.Patch.Rebase.Fixup ( RebaseFixup(..) )
@@ -105,7 +105,7 @@ import Darcs.Patch.Witnesses.Ordered
     ( FL(..), RL, (:>)(..), (+>+)
     , nullFL, reverseRL, reverseFL, mapFL_FL
     )
-import Darcs.Patch.Witnesses.Sealed ( Sealed(..) )
+import Darcs.Patch.Witnesses.Sealed ( Sealed(..), FlippedSeal(..) )
 
 import Darcs.Util.English ( anyOfClause, itemizeVertical )
 import Darcs.Util.Printer ( Doc, formatWords, putDocLn, text, (<+>), ($$), ($+$) )
@@ -197,11 +197,8 @@ doAmend cfg files =
   withRepoLock (O.useCache ? cfg) (O.umask ? cfg) $
       RebaseAwareJob $ \(repository :: Repository 'RW p wU wR) -> do
     patchSet <- readPatches repository
-    common :> candidates <- filterNotInRemote cfg repository patchSet
-    withSelectedPatchFromList "amend" candidates (patchSelOpts cfg) $
-     \(kept :> oldp) -> do
-      -- reconstruct context patchset
-      context <- return $ appendPSFL common (reverseRL kept)
+    FlippedSeal patches <- filterNotInRemote cfg repository patchSet
+    withSelectedPatchFromList "amend" patches (patchSelOpts cfg) $ \ (_ :> oldp) -> do
       announceFiles (O.verbosity ? cfg) files "Amending changes in"
       pristine <- readPristine repository
       pending :> working <-
@@ -218,7 +215,7 @@ doAmend cfg files =
                        files
                        (Just pristine)
             (chosenPatches :> _) <- runInvertibleSelection ch selection_config
-            addChangesToPatch cfg repository context oldp chosenPatches pending working
+            addChangesToPatch cfg repository oldp chosenPatches pending working
       if not (isTag (info oldp))
         -- amending a normal patch
         then
@@ -231,7 +228,7 @@ doAmend cfg files =
               (_ :> chosenPrims) <-
                 runInvertibleSelection (effect oldp) selection_config
               let invPrims = reverseRL (invertFL chosenPrims)
-              addChangesToPatch cfg repository context oldp invPrims pending working
+              addChangesToPatch cfg repository oldp invPrims pending working
             else
               go (sortCoalesceFL (pending +>+ working))
         -- amending a tag
@@ -256,13 +253,12 @@ doAmend cfg files =
 addChangesToPatch :: (RepoPatch p, ApplyState p ~ Tree)
                   => Config
                   -> Repository 'RW p wU wR
-                  -> PatchSet p Origin wX -- ^ the context
-                  -> PatchInfoAnd p wX wR -- ^ original patch
-                  -> FL (PrimOf p) wR wY  -- ^ changes to add
-                  -> FL (PrimOf p) wR wP  -- ^ pending
-                  -> FL (PrimOf p) wP wU  -- ^ working
+                  -> PatchInfoAnd p wX wR
+                  -> FL (PrimOf p) wR wY
+                  -> FL (PrimOf p) wR wP
+                  -> FL (PrimOf p) wP wU
                   -> IO ()
-addChangesToPatch cfg _repository context oldp chs pending working =
+addChangesToPatch cfg _repository oldp chs pending working =
   if nullFL chs && not (hasEditMetadata cfg)
     then putInfo cfg "You don't want to record anything!"
     else do
@@ -292,7 +288,7 @@ addChangesToPatch cfg _repository context oldp chs pending working =
             updatePatchHeader
               "amend"
               (if O.askDeps ? cfg
-                 then AskAboutDeps context
+                 then AskAboutDeps _repository
                  else NoAskAboutDeps)
               (patchSelOpts cfg)
               (patchHeaderConfig cfg)
@@ -331,23 +327,18 @@ filterNotInRemote :: RepoPatch p
                   => Config
                   -> Repository 'RW p wU wR
                   -> PatchSet p Origin wR
-                  -> IO ((PatchSet p :> RL (PatchInfoAnd p)) Origin wR)
+                  -> IO (FlippedSeal (RL (PatchInfoAnd p)) wR)
 filterNotInRemote cfg repository patchSet = do
     nirs <- mapM getNotInRemotePath (O.notInRemote ? cfg)
     if null nirs
       then
-        -- We call contextPatches here because
-        -- (a) selecting patches beyond the latest clean tag is impossible anyway
-        -- (b) makes it easier to reconstruct a PatchSet w/o the selected patch
-        -- (c) avoids listing the complete list of patches in the repo when user
-        --     rejects the last selectable patch
-        return (contextPatches patchSet)
+        return (FlippedSeal (patchSet2RL patchSet))
       else do
         putInfo cfg $
           "Determining patches not in" <+> anyOfClause nirs $$ itemizeVertical 2 nirs
         Sealed thems <- patchSetUnion `fmap` mapM readNir nirs
-        in_remote :> only_ours <- return $ findCommonWithThem patchSet thems
-        return (in_remote :> reverseFL only_ours)
+        _ :> only_ours <- return $ findCommonWithThem patchSet thems
+        return (FlippedSeal (reverseFL only_ours))
   where
     readNir loc = do
       repo <- identifyRepositoryFor Reading repository (O.useCache ? cfg) loc

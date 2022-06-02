@@ -56,7 +56,7 @@ import qualified Data.ByteString as B ( ByteString )
 import Darcs.Test.Patch.V1Model ( V1Model, Content
                                 , makeRepo, makeFile)
 import Darcs.Test.Patch.WithState ( WithStartState(..) )
-import Darcs.Util.Path ( AnchoredPath, unsafeFloatPath, makeName )
+import Darcs.Util.Path ( AnchoredPath, floatPath, makeName )
 import Darcs.Patch.FromPrim ( PrimPatchBase(..), FromPrim )
 import Darcs.Patch.Merge ( Merge )
 import Darcs.Test.Patch.Arbitrary.PatchTree
@@ -68,7 +68,7 @@ import Darcs.Test.Patch.Arbitrary.PatchTree
     )
 
 instance IsString AnchoredPath where
-  fromString = unsafeFloatPath
+  fromString = floatPath
 
 
 -- import Debug.Trace

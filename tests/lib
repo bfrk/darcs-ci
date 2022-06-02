@@ -2,13 +2,8 @@
 
 . ./env
 
-# I would use the builtin !, but that has the wrong semantics
-not () {
-  if "$@" || test $? = "4"; then
-    # fail the test if command succeeds or returns 4
-    exit 1
-  fi
-}
+## I would use the builtin !, but that has the wrong semantics.
+not () { "$@" && exit 1 || :; }
 
 # trick: OS-detection (if needed)
 os_is_windows() {
@@ -32,10 +27,10 @@ if os_is_windows; then
   git config --global core.autocrlf input
 fi
 
-# tests now work on windows with this or with the bash pwd:
-# pwd() {
-#     runghc "$TESTBIN/hspwd.hs"
-# }
+pwd() {
+    ghc --make -o hspwd "$TESTBIN/hspwd.hs" > /dev/null
+    "./hspwd"
+}
 
 which() {
     type -P "$@"

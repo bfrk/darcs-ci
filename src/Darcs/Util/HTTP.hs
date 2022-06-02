@@ -27,14 +27,8 @@ import Network.HTTP.Simple
     , getResponseBody
     , setRequestHeaders
     , setRequestMethod
-    , setRequestResponseTimeout
     )
-import Network.HTTP.Conduit
-    ( ResponseTimeout
-    , parseUrlThrow
-    , responseTimeoutDefault
-    , responseTimeoutMicro
-    )
+import Network.HTTP.Conduit ( parseUrlThrow )
 import Network.HTTP.Types.Header
     ( hCacheControl
     , hPragma
@@ -44,8 +38,6 @@ import Network.HTTP.Types.Header
     )
 import Numeric ( showHex )
 import System.Directory ( renameFile )
-import System.Environment ( lookupEnv )
-import Text.Read ( readMaybe )
 
 import Darcs.Prelude
 
@@ -58,29 +50,18 @@ data Cachable
   | MaxAge !CInt
   deriving (Show, Eq)
 
-darcsResponseTimeout :: IO ResponseTimeout
-darcsResponseTimeout =
-  lookupEnv "DARCS_CONNECTION_TIMEOUT" >>= \case
-    Just s | Just n <- readMaybe s ->
-      return $ responseTimeoutMicro $ 1000000 * n
-    _ -> return responseTimeoutDefault -- 30 s, seems a bit long
-
 copyRemote :: String -> FilePath -> Cachable -> IO ()
 copyRemote url path cachable = do
-  debugMessage $ "copyRemote: " ++ url
   junk <- flip showHex "" <$> seedToInteger <$> seedNew
   let tmppath = path ++ ".new_" ++ junk
-  tmo <- darcsResponseTimeout
   handleHttpAndUrlExn url
-    (httpBS . setRequestResponseTimeout tmo . addCacheControl cachable >=>
-     B.writeFile tmppath . getResponseBody)
+    (httpBS . addCacheControl cachable >=> B.writeFile tmppath . getResponseBody)
   renameFile tmppath path
 
 -- TODO instead of producing a lazy ByteString we should re-write the
 -- consumer (Darcs.Repository.Packs) to use proper streaming (e.g. conduit)
 copyRemoteLazy :: String -> Cachable -> IO (BL.ByteString)
-copyRemoteLazy url cachable = do
-  debugMessage $ "copyRemoteLazy: " ++ url
+copyRemoteLazy url cachable =
   handleHttpAndUrlExn url
     (flip httpSink (const sinkLazy) . addCacheControl cachable)
 

@@ -46,7 +46,6 @@ module Darcs.Util.Path
     , makeSubPathOf
     , simpleSubPath
     , floatSubPath
-    , makeRelativeTo
     -- * Miscellaneous
     , FilePathOrURL(..)
     , FilePathLike(toFilePath)
@@ -82,32 +81,41 @@ module Darcs.Util.Path
     , realPath
     , isRoot
     , darcsdirName
-    , floatPath
     -- * Unsafe AnchoredPath functions.
-    , unsafeFloatPath
+    , floatPath
     ) where
 
 import Darcs.Prelude
 
-import Control.Exception ( bracket_ )
-import Control.Monad ( when, (<=<) )
-import Darcs.Util.ByteString ( decodeLocale, encodeLocale )
-import Data.Binary
-import qualified Data.ByteString as B
-import qualified Data.ByteString.Char8 as BC
-import Data.Char ( chr, isSpace, ord, toLower )
-import Data.List ( inits, intersect, isPrefixOf, isSuffixOf, stripPrefix )
+import Data.List
+    ( isPrefixOf
+    , isSuffixOf
+    , stripPrefix
+    , intersect
+    , inits
+    )
+import Data.Char ( isSpace, chr, ord, toLower )
+import Control.Exception ( tryJust, bracket_ )
+import Control.Monad ( when )
 import GHC.Stack ( HasCallStack )
+import System.IO.Error ( isDoesNotExistError )
+
+import qualified Darcs.Util.Workaround as Workaround ( getCurrentDirectory )
 import qualified System.Directory ( setCurrentDirectory )
 import System.Directory ( doesDirectoryExist, doesFileExist )
-import qualified System.FilePath as NativeFilePath
-import qualified System.FilePath.Posix as FilePath
-import System.Posix.Files ( fileID, getFileStatus, isDirectory )
+import qualified System.FilePath.Posix as FilePath ( (</>), normalise, isRelative )
+import qualified System.FilePath as NativeFilePath ( takeFileName, takeDirectory )
+import System.FilePath( splitDirectories, normalise, dropTrailingPathSeparator )
+import System.Posix.Files ( isDirectory, getSymbolicLinkStatus )
 
-import Darcs.Util.Exception ( ifDoesNotExistError )
+import Darcs.Util.ByteString ( encodeLocale, decodeLocale )
+import qualified Data.ByteString.Char8 as BC
+import qualified Data.ByteString       as B
+
+import Data.Binary
 import Darcs.Util.Global ( darcsdir )
-import Darcs.Util.URL ( isAbsolute, isHttpUrl, isRelative, isSshNopath, isSshUrl )
-import qualified Darcs.Util.Workaround as Workaround ( getCurrentDirectory )
+import Darcs.Util.URL ( isAbsolute, isRelative, isSshNopath )
+import Darcs.Util.URL ( isHttpUrl, isSshUrl )
 
 
 -- Utilities for use by command implementations
@@ -143,18 +151,18 @@ encodeWhite [] = []
 -- | 'decodeWhite' interprets the Darcs-specific \"encoded\" filenames
 --   produced by 'encodeWhite'
 --
---   > decodeWhite "hello\32\there"  == Right "hello there"
---   > decodeWhite "hello\92\there"  == Right "hello\there"
---   > decodeWhite "hello\there"   == Left "malformed filename"
-decodeWhite :: String -> Either String FilePath
+--   > decodeWhite "hello\32\there"  == "hello there"
+--   > decodeWhite "hello\92\there"  == "hello\there"
+--   > decodeWhite "hello\there"   == error "malformed filename"
+decodeWhite :: String -> FilePath
 decodeWhite cs_ = go cs_ [] False
- where go "" acc True  = Right (reverse acc) -- if there was a replace, use new string
-       go "" _   False = Right cs_         -- if not, use input string
+ where go "" acc True  = reverse acc -- if there was a replace, use new string
+       go "" _   False = cs_         -- if not, use input string
        go ('\\':cs) acc _ =
          case break (=='\\') cs of
            (theord, '\\':rest) ->
              go rest (chr (read theord) :acc) True
-           _ -> Left $ "malformed filename: " ++ cs_
+           _ -> error "malformed filename"
        go (c:cs) acc modified = go cs (c:acc) modified
 
 class FilePathOrURL a where
@@ -192,8 +200,7 @@ instance FilePathLike SubPath where
 instance FilePathLike FilePath where
   toFilePath = id
 
--- | Make the second path relative to the first, if possible.
--- Note that this returns an empty 'SubPath' if the inputs are equal.
+-- | Make the second path relative to the first, if possible
 makeSubPathOf :: AbsolutePath -> AbsolutePath -> Maybe SubPath
 makeSubPathOf (AbsolutePath p1) (AbsolutePath p2) =
  -- The slash prevents "foobar" from being treated as relative to "foo"
@@ -201,10 +208,19 @@ makeSubPathOf (AbsolutePath p1) (AbsolutePath p2) =
     then Just $ SubPath $ drop (length p1 + 1) p2
     else Nothing
 
-simpleSubPath :: HasCallStack => FilePath -> Maybe SubPath
+simpleSubPath :: FilePath -> Maybe SubPath
 simpleSubPath x | null x = error "simpleSubPath called with empty path"
                 | isRelative x = Just $ SubPath $ FilePath.normalise $ pathToPosix x
                 | otherwise = Nothing
+
+-- | Ensure directory exists and is not a symbolic link.
+doesDirectoryReallyExist :: FilePath -> IO Bool
+doesDirectoryReallyExist f = do
+    x <- tryJust (\x -> if isDoesNotExistError x then Just () else Nothing) $
+        isDirectory <$> getSymbolicLinkStatus f
+    return $ case x of
+        Left () -> False
+        Right y -> y
 
 doesPathExist :: FilePath -> IO Bool
 doesPathExist p = do
@@ -213,10 +229,9 @@ doesPathExist p = do
    return $ dir_exists || file_exists
 
 -- | Interpret a possibly relative path wrt the current working directory.
--- This also canonicalizes the path, resolving symbolic links etc.
 ioAbsolute :: FilePath -> IO AbsolutePath
 ioAbsolute dir =
-    do isdir <- doesDirectoryExist dir
+    do isdir <- doesDirectoryReallyExist dir
        here <- getCurrentDirectory
        if isdir
          then bracket_ (setCurrentDirectory dir)
@@ -230,38 +245,6 @@ ioAbsolute dir =
                                then return $ AbsolutePath dir
                                else ioAbsolute super_dir
                     return $ makeAbsolute abs_dir file
-
--- | The first argument must be the absolute path of a @directory@, the second
--- is an arbitrary absolute @path@. If the @path@ is relative, first make it
--- absolute relative to the given @directory@; then find the longest prefix
--- that points to the same @directory@; if successful, return the remainder,
--- else return 'Nothing'.
-{-# NOINLINE makeRelativeTo #-}
-makeRelativeTo :: HasCallStack => AbsolutePath -> AbsolutePath -> IO (Maybe SubPath)
-makeRelativeTo (AbsolutePath dir) (AbsolutePath path) = do
-  dir_stat <- getFileStatus dir
-  let dir_id = fileID dir_stat
-  when (not (isDirectory dir_stat)) $
-    error $ "makeRelativeTo called with non-dir " ++ dir
-  findParent dir_id path []
-  where
-    findParent dir_id ap acc = do
-      map_stat <- ifDoesNotExistError Nothing (Just <$> getFileStatus ap)
-      case map_stat of
-        Just ap_stat | fileID ap_stat == dir_id -> do
-          -- found ancestor that matches dir
-          return $ Just $ SubPath $ FilePath.joinPath acc
-        _ -> do
-          -- recurse
-          let (parent_,child) =
-                -- splitFileName only does what one expects if there is no
-                -- trailing path separator
-                NativeFilePath.splitFileName $
-                  NativeFilePath.dropTrailingPathSeparator ap
-          if null child then
-            return Nothing
-          else
-            findParent dir_id parent_ (child:acc)
 
 -- | Take an absolute path and a string representing a (possibly relative)
 -- path and combine them into an absolute path. If the second argument is
@@ -409,7 +392,7 @@ isMaliciousSubPath fp =
 
 isGenerallyMalicious :: String -> Bool
 isGenerallyMalicious fp =
-    NativeFilePath.splitDirectories fp `contains_any` [ "..", darcsdir ]
+    splitDirectories fp `contains_any` [ "..", darcsdir ]
  where
     contains_any a b = not . null $ intersect a b
 
@@ -442,7 +425,7 @@ newtype Name = Name { unName :: B.ByteString } deriving (Binary, Eq, Show, Ord)
 -- usually used to refer to a location within a Tree, but a relative filesystem
 -- path works just as well. These are either constructed from individual name
 -- components (using "appendPath", "catPaths" and "makeName"), or converted
--- from a FilePath ("unsafeFloatPath" -- but take care when doing that).
+-- from a FilePath ("floatPath" -- but take care when doing that).
 newtype AnchoredPath = AnchoredPath [Name] deriving (Binary, Eq, Show, Ord)
 
 -- | Check whether a path is a prefix of another path.
@@ -484,31 +467,31 @@ flatten :: AnchoredPath -> BC.ByteString
 flatten (AnchoredPath []) = BC.singleton '.'
 flatten (AnchoredPath p) = BC.intercalate (BC.singleton '/') [n | (Name n) <- p]
 
--- | Make a 'Name' from a 'String'. May fail if the input 'String'
--- is invalid, that is, "", ".", "..", or contains a '/'.
+-- | Make a 'Name' from a 'String'. If the input 'String'
+-- is invalid, that is, "", ".", "..", or contains a '/', return 'Left'
+-- with an error message.
 makeName :: String -> Either String Name
 makeName = rawMakeName . encodeLocale
 
+-- | Make a 'Name' from a 'String'. If the input 'String'
+-- is invalid, that is, "", ".", "..", or contains a '/', call error.
+internalMakeName :: String -> Name
+internalMakeName = either error id . rawMakeName . encodeLocale
+
 -- | Take a relative FilePath and turn it into an AnchoredPath. This is a
--- partial function. Basically, by using unsafeFloatPath, you are testifying that the
+-- partial function. Basically, by using floatPath, you are testifying that the
 -- argument is a path relative to some common root -- i.e. the root of the
 -- associated "Tree" object. In particular, the input path may not contain any
 -- ocurrences of "." or ".." after normalising. You should sanitize any
 -- FilePaths before you declare them "good" by converting into AnchoredPath
 -- (using this function), especially if the FilePath come from any external
 -- source (command line, file, environment, network, etc)
-unsafeFloatPath :: HasCallStack => FilePath -> AnchoredPath
-unsafeFloatPath = either error id . floatPath
-
-floatPath :: FilePath -> Either String AnchoredPath
-floatPath path = do
-    r <- mapM makeName (prepare path)
-    return (AnchoredPath r)
+floatPath :: FilePath -> AnchoredPath
+floatPath =
+    AnchoredPath . map internalMakeName . filter sensible .
+    splitDirectories . normalise . dropTrailingPathSeparator
   where
     sensible s = s `notElem` ["", "."]
-    prepare = filter sensible .
-      NativeFilePath.splitDirectories . NativeFilePath.normalise .
-      NativeFilePath.dropTrailingPathSeparator
 
 anchoredRoot :: AnchoredPath
 anchoredRoot = AnchoredPath []
@@ -552,7 +535,7 @@ encodeWhiteName = encodeLocale . encodeWhite . decodeLocale . unName
 
 decodeWhiteName :: B.ByteString -> Either String Name
 decodeWhiteName =
-  rawMakeName . encodeLocale <=< decodeWhite . decodeLocale
+  rawMakeName . encodeLocale . decodeWhite . decodeLocale
 
 -- | The effect of renaming on paths.
 -- The first argument is the old path, the second is the new path,
@@ -570,8 +553,9 @@ movedirfilename (AnchoredPath old) newp@(AnchoredPath new) orig@(AnchoredPath pa
 filterPaths :: [AnchoredPath] -> AnchoredPath -> t -> Bool
 filterPaths files p _ = any (\x -> x `isPrefix` p || p `isPrefix` x) files
 
+
 -- | Transform a SubPath into an AnchoredPath.
-floatSubPath :: SubPath -> Either String AnchoredPath
+floatSubPath :: SubPath -> AnchoredPath
 floatSubPath = floatPath . toFilePath
 
 -- | Is the given path in (or equal to) the _darcs metadata directory?
@@ -580,7 +564,7 @@ inDarcsdir (AnchoredPath (x:_)) | x == darcsdirName = True
 inDarcsdir _ = False
 
 darcsdirName :: Name
-darcsdirName = either error id (makeName darcsdir)
+darcsdirName = internalMakeName darcsdir
 
 isRoot :: AnchoredPath -> Bool
 isRoot (AnchoredPath xs) = null xs
