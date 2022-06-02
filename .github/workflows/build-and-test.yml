@@ -13,14 +13,14 @@ jobs:
         # os: [ubuntu-18.04, ubuntu-20.04, macOS-10.15, macOS-11, windows-2016, windows-2019, windows-2022]
         # faster, less comprehensive:
         os: [ubuntu-20.04, macOS-10.15, windows-2019]
-        ghc: ['8.2', '8.4', '8.6', '8.8', '8.10', '9.0', '9.2']
+        ghc: ['9.2.3']
         cabal: ['latest']
         exclude:
           # can't build basement (indirect dependency)
           - os: ubuntu-18.04
             ghc: 8.4
     env:
-      runtests: ${{ matrix.ghc == '8.2' || matrix.ghc == '9.2' }}
+      runtests: ${{ matrix.ghc == '8.2' || matrix.ghc == '9.2.3' }}
       tests-to-run: # e.g. -t=EXAMPLE
       testcmd: cabal run -- darcs-test -j=6 -f=123 -i=yn -c=yn --hide
       ACTIONS_ALLOW_UNSECURE_COMMANDS: true
