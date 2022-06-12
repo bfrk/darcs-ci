@@ -631,7 +631,6 @@ test-suite darcs-test
                     Darcs.Test.Misc.Graph
                     Darcs.Test.Misc.URL
                     Darcs.Test.Repository.Inventory
-                    Darcs.Test.Shell
                     Darcs.Test.TestOnly.Instance
                     Darcs.Test.UI
                     Darcs.Test.UI.Commands.Test
