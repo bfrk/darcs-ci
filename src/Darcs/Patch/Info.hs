@@ -83,7 +83,6 @@ import System.Time ( CalendarTime, calendarTimeToString, toClockTime,
 import System.IO.Unsafe ( unsafePerformIO )
 import Darcs.Util.Hash ( sha1PS, SHA1 )
 import Darcs.Util.Prompt ( promptYorn )
-import Darcs.Util.Show ( appPrec )
 
 import Darcs.Test.TestOnly ( TestOnly )
 
@@ -144,16 +143,7 @@ data PatchInfo =
               -- docs above.
             , _piLegacyIsInverted :: !Bool
             }
-  deriving (Eq,Ord)
-
-instance Show PatchInfo where
-    showsPrec d (PatchInfo date name author log inverted) =
-        showParen (d > appPrec) $
-            showString "rawPatchInfo " . showsPrec (appPrec + 1) date .
-            showString " " . showsPrec (appPrec + 1) name .
-            showString " " . showsPrec (appPrec + 1) author .
-            showString " " . showsPrec (appPrec + 1) log .
-            showString " " . showsPrec (appPrec + 1) inverted
+  deriving (Eq,Ord,Show)
 
 -- Validation
 

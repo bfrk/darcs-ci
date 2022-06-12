@@ -35,6 +35,7 @@ echo b > b
 darcs rec -lam b
 echo c > c
 darcs rec -lam c
+darcs tag bla # so that the clone really is lazy
 cd ..
 
 serve_http # sets baseurl
@@ -44,14 +45,13 @@ if [ -z "$http_proxy" ]; then
   echo "repo:http://10.1.2.3/S" >> S/_darcs/prefs/sources
 fi
 echo "repo:$baseurl/dummyRepo" >> S/_darcs/prefs/sources
-echo "repo:~/test1599/S" >> S/_darcs/prefs/sources
+echo "repo:/does/not/exist" >> S/_darcs/prefs/sources
 echo "repo:$baseurl/R" >> S/_darcs/prefs/sources
-export DARCS_CONNECTION_TIMEOUT=1 && darcs log --repo S --debug --verbose --no-cache 2>&1 | tee log
-if [ -z "$http_proxy" ]; then
-  c=`grep -c "URL.waitUrl http://10.1.2.3/S" log`
-  [ $c  -eq 1 ]
+DARCS_CONNECTION_TIMEOUT=1 darcs log --repo S --debug --no-cache 2>&1 | tee log
+grep "could not reach the following locations" log
+# the count is two, once for the file we want, and once to test
+# for reachability using _darcs/hashed_inventory
+if test -z "$http_proxy"; then
+  test `grep -c "copyRemote: http://10.1.2.3/S" log` = 2
 fi
-c1=`grep -c "URL.waitUrl $baseurl/dummyRepo" log`
-[ $c1 -eq 2 ]
-c2=`grep -c "~/test1599/S" log`
-[ $c2 -eq 1 ]
+test `grep -c "copyRemote: $baseurl/dummyRepo" log` = 2

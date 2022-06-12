@@ -27,9 +27,10 @@ module Darcs.Patch.Read
 import Darcs.Prelude
 
 import Control.Applicative ( (<|>) )
-import Control.Monad ( mzero )
+import Control.Monad ( mzero, (<=<) )
 import qualified Data.ByteString as B ( ByteString )
 import qualified Data.ByteString.Char8 as BC ( ByteString, pack, stripPrefix )
+import GHC.Stack ( HasCallStack )
 
 import Darcs.Patch.Bracketed ( Bracketed(..), unBracketedFL )
 import Darcs.Patch.Format
@@ -119,15 +120,18 @@ peekfor ps ifstr ifnot = choice [ do lexString ps
 {-# INLINE peekfor #-}
 
 -- See also Darcs.Patch.Show.formatFileName.
-readFileName :: FileNameFormat -> Parser AnchoredPath
+readFileName :: HasCallStack => FileNameFormat -> Parser AnchoredPath
 readFileName fmt = do
   raw <- lexWord
   case BC.stripPrefix (BC.pack "./") raw of
     Nothing -> fail $ "invalid file path"
-    Just raw' -> return $ convert fmt raw'
+    Just raw' ->
+      case convert fmt raw' of
+        Left e -> fail e
+        Right r -> return r
   where
     convert FileNameFormatV1 =
-      floatPath . decodeWhite . decodeLocale . BC.pack . unpackPSFromUTF8
+      floatPath <=< decodeWhite . decodeLocale . BC.pack . unpackPSFromUTF8
     convert FileNameFormatV2 =
-      floatPath . decodeWhite . decodeLocale
+      floatPath <=< decodeWhite . decodeLocale
     convert FileNameFormatDisplay = error "readFileName called with FileNameFormatDisplay"

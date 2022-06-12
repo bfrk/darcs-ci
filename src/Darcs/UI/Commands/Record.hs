@@ -46,6 +46,7 @@ import Darcs.Repository
     , finalizeRepositoryChanges
     , readPendingAndWorking
     , readPristine
+    , readPatches
     , tentativelyAddPatch
     , tentativelyRemoveFromPW
     , withRepoLock
@@ -276,7 +277,9 @@ doRecord repository cfg files pw@(pending :> working) = do
                  exitSuccess
     handleJust onlySuccessfulExits (\_ -> return ()) $
              do deps <- if O.askDeps ? cfg
-                        then askAboutDepends repository chs (patchSelOpts cfg) []
+                        then do
+                          patches <- readPatches repository
+                          askAboutDepends patches chs (patchSelOpts cfg) []
                         else return []
                 when (O.askDeps ? cfg) $ debugMessage "I've asked about dependencies."
                 if nullFL chs && null deps

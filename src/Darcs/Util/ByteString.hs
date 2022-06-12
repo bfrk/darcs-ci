@@ -63,6 +63,7 @@ import qualified Data.ByteString.Lazy       as BL
 import Data.ByteString (intercalate)
 import qualified Data.ByteString.Base16     as B16
 
+import System.Directory ( getFileSize )
 import System.IO ( withFile, IOMode(ReadMode)
                  , hSeek, SeekMode(SeekFromEnd,AbsoluteSeek)
                  , openBinaryFile, hClose, Handle, hGetChar
@@ -88,7 +89,6 @@ import Darcs.Util.Global ( addCRCWarning )
 import System.IO.MMap( mmapFileByteString )
 #endif
 import System.Mem( performGC )
-import System.Posix.Files( fileSize, getSymbolicLinkStatus )
 
 ------------------------------------------------------------------------
 -- A locale-independent isspace(3) so patches are interpreted the same everywhere.
@@ -283,7 +283,7 @@ readSegment :: FileSegment -> IO BL.ByteString
 readSegment (f,range) = do
     bs <- tryToRead
        `catchIOError` (\_ -> do
-                     size <- fileSize `fmap` getSymbolicLinkStatus f
+                     size <- getFileSize f
                      if size == 0
                         then return B.empty
                         else performGC >> tryToRead)
@@ -317,7 +317,7 @@ mmapFilePS = B.readFile
 mmapFilePS f =
   mmapFileByteString f Nothing
    `catchIOError` (\_ -> do
-                     size <- fileSize `fmap` getSymbolicLinkStatus f
+                     size <- getFileSize f
                      if size == 0
                         then return B.empty
                         else performGC >> mmapFileByteString f Nothing)

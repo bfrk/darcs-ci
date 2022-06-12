@@ -552,6 +552,8 @@ addRepoSource r isDryRun (RemoteRepos rrepos) setDefault inheritDefault isIntera
                 [] -> return r
             False -> return r
       | otherwise = return r
+    -- In case r is a symbolic link we do want the target directory's
+    -- status, not that of the symlink.
     sameOwner p q =
       (==) <$> (fileOwner <$> getFileStatus p) <*> (fileOwner <$> getFileStatus q)
 
