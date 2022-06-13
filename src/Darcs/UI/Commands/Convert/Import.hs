@@ -88,6 +88,7 @@ import Darcs.UI.Commands.Convert.Util
     , patchHash
     , updatePending
     )
+import Darcs.UI.Commands.Util ( commonHelpWithPrefsTemplates )
 import Darcs.UI.Completion (noArgs)
 import Darcs.UI.Flags
     ( DarcsFlag
@@ -118,7 +119,7 @@ import Darcs.Util.Path
     , parent
     , darcsdirName
     )
-import Darcs.Util.Printer ( Doc, text )
+import Darcs.Util.Printer ( Doc, text, ($+$) )
 import qualified Darcs.Util.Tree as T
 import Darcs.Util.Tree
     ( Tree
@@ -136,7 +137,7 @@ import Darcs.Util.Tree.Monad hiding (createDirectory, exists, rename)
 
 
 convertImportHelp :: Doc
-convertImportHelp = text $ unlines
+convertImportHelp = text (unlines
  [ "This command imports git repositories into new darcs repositories."
  , "Further options are accepted (see `darcs help init`)."
  , ""
@@ -148,7 +149,8 @@ convertImportHelp = text $ unlines
  , "         use at your own risks."
  , ""
  , "Incremental import with marksfiles is currently not supported."
- ]
+ ])
+ $+$ commonHelpWithPrefsTemplates
 
 convertImport :: DarcsCommand
 convertImport = DarcsCommand
@@ -170,7 +172,12 @@ convertImport = DarcsCommand
       ^ O.setScriptsExecutable
       ^ O.patchFormat
       ^ O.withWorkingDir
-    advancedOpts = O.diffAlgorithm ^ O.patchIndexNo ^ O.compress ^ O.umask
+    advancedOpts
+      = O.diffAlgorithm
+      ^ O.patchIndexNo
+      ^ O.compress
+      ^ O.umask
+      ^ O.withPrefsTemplates
     opts = basicOpts `withStdOpts` advancedOpts
 
 type Marked = Maybe Int
@@ -224,6 +231,7 @@ fastImport _ opts [outrepo] =
       (withWorkingDir ? opts)
       (patchIndexNo ? opts)
       (useCache ? opts)
+      (O.withPrefsTemplates ? opts)
     -- TODO implement --dry-run, which would be read-only?
     _repo <- revertRepositoryChanges _repo (updatePending opts)
     marks <-

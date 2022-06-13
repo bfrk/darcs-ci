@@ -88,6 +88,8 @@ module Darcs.UI.Options.All
     , setDefault
     , InheritDefault (..) -- re-export
     , inheritDefault
+    , WithPrefsTemplates (..) -- re-export
+    , withPrefsTemplates
 
     -- patch meta-data
     , patchname
@@ -267,6 +269,7 @@ import Darcs.Repository.Flags
     , WithPatchIndex (..)
     , WithWorkingDir (..)
     , PatchFormat (..)
+    , WithPrefsTemplates(..)
     )
 
 import qualified Darcs.UI.Options.Flags as F ( DarcsFlag(..) )
@@ -356,6 +359,10 @@ instance YesNo EnumPatches where
 instance YesNo InheritDefault where
   yes NoInheritDefault = False
   yes YesInheritDefault = True
+
+instance YesNo WithPrefsTemplates where
+  yes NoPrefsTemplates = False
+  yes WithPrefsTemplates = True
 
 -- * Root command
 
@@ -633,6 +640,12 @@ inheritDefault :: PrimDarcsOption InheritDefault
 inheritDefault = withDefault NoInheritDefault
   [ RawNoArg [] ["inherit-default"] F.InheritDefault YesInheritDefault "inherit default repository"
   , RawNoArg [] ["no-inherit-default"] F.NoInheritDefault NoInheritDefault "don't inherit default repository" ]
+
+withPrefsTemplates :: PrimDarcsOption WithPrefsTemplates
+withPrefsTemplates = withDefault WithPrefsTemplates
+  [ RawNoArg [] ["with-prefs-templates"] F.WithPrefsTemplates WithPrefsTemplates "create template-filled preferences"
+  , RawNoArg [] ["no-prefs-templates"] F.NoPrefsTemplates NoPrefsTemplates "create empty preferences"
+  ]
 
 -- * Specifying patch meta-data
 

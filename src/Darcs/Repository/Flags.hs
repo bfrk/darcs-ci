@@ -29,6 +29,7 @@ module Darcs.Repository.Flags
     , WithWorkingDir (..)
     , ForgetParent (..)
     , PatchFormat (..)
+    , WithPrefsTemplates (..)
     ) where
 
 import Darcs.Prelude
@@ -129,4 +130,7 @@ data ForgetParent = YesForgetParent | NoForgetParent
     deriving ( Eq, Show )
 
 data PatchFormat = PatchFormat1 | PatchFormat2 | PatchFormat3
+    deriving ( Eq, Show )
+
+data WithPrefsTemplates =  WithPrefsTemplates | NoPrefsTemplates
     deriving ( Eq, Show )

@@ -175,7 +175,7 @@ revertCmd fps opts args =
               case genCommuteWhatWeCanRL commuteFL (reverseFL norevert :> torevert) of
                 deps :> torevert' :> _ -> do
                   recorded <- readPatches _repository
-                  writeUnrevert recorded pristine (deps +>>+ torevert')
+                  writeUnrevert recorded (deps +>>+ torevert')
               _repository <-
                 finalizeRepositoryChanges _repository YesUpdatePending
                   (O.compress ? opts) (O.dryRun ? opts)

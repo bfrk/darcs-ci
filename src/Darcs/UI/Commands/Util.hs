@@ -29,6 +29,7 @@ module Darcs.UI.Commands.Util
     , getLastPatches
     , matchRange
     , historyEditHelp
+    , commonHelpWithPrefsTemplates
     ) where
 
 import Control.Monad ( when, unless )
@@ -326,4 +327,15 @@ historyEditHelp = formatWords
   , "by using an appropriate `--match` option with the `author` keyword."
   , "For instance, you could add something like `<cmd> match Your Name`"
   , "to your `" ++ globalPrefsDirDoc ++ "defaults`."
+  ]
+
+commonHelpWithPrefsTemplates :: Doc
+commonHelpWithPrefsTemplates = formatWords
+  [ "Initialize and clone commands create the preferences files in"
+  , "_darcs/prefs/ directory of the newly created repository. With option"
+  , "--with-prefs-templates `boring` and `binaries` preferences files will be"
+  , "filled with default templates. If you want to leave these files empty"
+  , "use --no-prefs-templates option. If you prefer to keep the relevant"
+  , "settings globally, it will be convenient to add 'ALL no-prefs-templates'"
+  , "to your ~/darcs/defaults file."
   ]

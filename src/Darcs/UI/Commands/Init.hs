@@ -31,6 +31,7 @@ import Darcs.UI.Commands
     , withStdOpts
     , putWarning
     )
+import Darcs.UI.Commands.Util ( commonHelpWithPrefsTemplates )
 import Darcs.UI.Completion ( noArgs )
 import Darcs.UI.Flags ( DarcsFlag, withNewRepo )
 import Darcs.UI.Options ( (?), (^) )
@@ -71,7 +72,7 @@ initializeHelp = vsep $ map formatWords
     , "the flag `--darcs-1`, althought this is not recommended except for sharing"
     , "patches with a project that uses patches in the darcs-1 semantics."
     ]
-  ] ++ [darcs3Warning]
+  ] ++ [darcs3Warning, commonHelpWithPrefsTemplates]
 
 darcs3Warning :: Doc
 darcs3Warning = formatWords
@@ -98,7 +99,7 @@ initialize = DarcsCommand
     }
   where
     initBasicOpts = O.patchFormat ^ O.withWorkingDir ^ O.newRepo
-    initAdvancedOpts = O.patchIndexNo ^ O.hashed ^ O.umask
+    initAdvancedOpts = O.patchIndexNo ^ O.hashed ^ O.umask ^ O.withPrefsTemplates
     initOpts = initBasicOpts `withStdOpts` initAdvancedOpts
 
 initializeCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
@@ -127,4 +128,5 @@ doInit opts =
           (O.withWorkingDir ? opts)
           (O.patchIndexNo ? opts)
           (O.useCache ? opts)
+          (O.withPrefsTemplates ? opts)
         putFinished opts $ "initializing repository"

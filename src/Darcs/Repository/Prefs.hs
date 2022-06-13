@@ -92,6 +92,7 @@ import Darcs.Repository.Flags
     , SetDefault (..)
     , InheritDefault (..)
     , RemoteRepos (..)
+    , WithPrefsTemplates(..)
     )
 import Darcs.Util.Lock( readTextFile, writeTextFile )
 import Darcs.Util.Exception ( catchall )
@@ -113,14 +114,21 @@ windows,osx :: Bool
 windows = "mingw" `isPrefixOf` os -- GHC under Windows is compiled with mingw
 osx     = os == "darwin"
 
-writeDefaultPrefs :: IO ()
-writeDefaultPrefs = do
-    setPreflist "boring" defaultBoring
-    setPreflist "binaries" defaultBinaries
+writeDefaultPrefs :: WithPrefsTemplates -> IO ()
+writeDefaultPrefs withPrefsTemplates = do
+    setPreflist "boring" $ defaultBoring withPrefsTemplates
+    setPreflist "binaries" $ defaultBinaries withPrefsTemplates
     setPreflist "motd" []
 
-defaultBoring :: [String]
-defaultBoring = map ("# " ++) boringFileInternalHelp ++
+defaultBoring :: WithPrefsTemplates -> [String]
+defaultBoring withPrefsTemplates =
+  map ("# " ++) boringFileInternalHelp ++
+    case withPrefsTemplates of
+      NoPrefsTemplates -> []
+      WithPrefsTemplates -> defaultBoringTemplate
+
+defaultBoringTemplate :: [String]
+defaultBoringTemplate =
     [ ""
     , "### compiler and interpreter intermediate files"
     , "# haskell (ghc) interfaces"
@@ -311,10 +319,12 @@ tryMakeBoringRegexp input = regex `C.catch` handleBadRegex
 -- exception in (potentially) pure code, when the regexps are used.
 boringRegexps :: IO [Regex]
 boringRegexps = do
-    borefile <- defPrefval "boringfile" (darcsdir ++ "/prefs/boring")
-    localBores <- getPrefLines borefile `catchall` return []
+    borefile <- maybeToList <$> getPrefval "boringfile"
+    localBores <- concat <$> safeGetPrefLines `mapM` (borefile ++ [darcsdir ++ "/prefs/boring"])
     globalBores <- getGlobal "boring"
     liftM catMaybes $ mapM tryMakeBoringRegexp $ localBores ++ globalBores
+  where
+    safeGetPrefLines fileName = getPrefLines fileName `catchall` return []
 
 isBoring :: IO (FilePath -> Bool)
 isBoring = do
@@ -358,8 +368,15 @@ data FileType = BinaryFile
 --
 -- Note that while this matches .gz and .GZ, it will not match .gZ,
 -- i.e. it is not truly case insensitive.
-defaultBinaries :: [String]
-defaultBinaries = map ("# "++) binariesFileInternalHelp ++
+defaultBinaries :: WithPrefsTemplates -> [String]
+defaultBinaries withPrefsTemplates =
+  map ("# "++) binariesFileInternalHelp ++
+    case withPrefsTemplates of
+      NoPrefsTemplates -> []
+      WithPrefsTemplates -> defaultBinariesTemplate
+
+defaultBinariesTemplate :: [String]
+defaultBinariesTemplate =
     [ "\\." ++ regexToMatchOrigOrUpper e ++ "$" | e <- extensions ]
   where
     regexToMatchOrigOrUpper e = "(" ++ e ++ "|" ++ map toUpper e ++ ")"
@@ -403,15 +420,18 @@ binariesFileInternalHelp =
 
 filetypeFunction :: IO (FilePath -> FileType)
 filetypeFunction = do
-    binsfile <- defPrefval "binariesfile" (darcsdir ++ "/prefs/binaries")
-    bins <- getPrefLines binsfile
-            `catch`
-            (\e -> if isDoesNotExistError e then return [] else ioError e)
+    binsfile <- maybeToList <$> getPrefval "binariesfile"
+    bins <- concat <$> safeGetPrefLines `mapM` (binsfile ++ [darcsdir ++ "/prefs/binaries"])
     gbs <- getGlobal "binaries"
     let binaryRegexes = map mkRegex (bins ++ gbs)
         isBinary f = any (\r -> isJust $ matchRegex r f) binaryRegexes
         ftf f = if isBinary $ doNormalise f then BinaryFile else TextFile
     return ftf
+  where
+    safeGetPrefLines fileName =
+        getPrefLines fileName
+        `catch`
+        (\e -> if isDoesNotExistError e then return [] else ioError e)
 
 findPrefsDirectory :: IO (Maybe String)
 findPrefsDirectory = do

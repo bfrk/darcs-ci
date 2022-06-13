@@ -22,8 +22,8 @@ import Darcs.Prelude
 import Control.Monad ( when, void )
 
 import Darcs.Patch ( commute )
-import Darcs.Patch.Depends ( mergeThem )
-import Darcs.Patch.Witnesses.Ordered ( (:>)(..), FL(..), Fork(..), (+>+) )
+import Darcs.Patch.Depends ( findCommonAndUncommon )
+import Darcs.Patch.Witnesses.Ordered ( (:>)(..), FL(..), (+>+) )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(Sealed) )
 import Darcs.Repository
     ( RepoJob(..)
@@ -43,7 +43,7 @@ import Darcs.Repository.Flags
     , UpdatePending(..)
     , WantGuiPause(..)
     )
-import Darcs.Repository.Unrevert ( unrevertPatchBundle, writeUnrevert )
+import Darcs.Repository.Unrevert ( readUnrevert, writeUnrevert )
 import Darcs.UI.Commands
     ( DarcsCommand(..)
     , amInHashedRepository
@@ -127,16 +127,15 @@ unrevertCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 unrevertCmd _ opts [] =
  withRepoLock (useCache ? opts) (umask ? opts) $ RepoJob $ \_repository -> do
   us <- readPatches _repository
-  Sealed them <- unrevertPatchBundle us
+  Sealed them <- readUnrevert us
   pristine <- readPristine _repository
   unrecorded <- unrecordedChanges (diffingOpts opts) _repository Nothing
-  Sealed h_them <- return $ mergeThem us them
   Sealed pw <- considerMergeToWorking _repository "unrevert"
                       YesAllowConflictsAndMark
                       NoExternalMerge NoWantGuiPause
                       (compress ? opts) (verbosity ? opts) NoReorder
                       (diffingOpts opts)
-                      (Fork us NilFL h_them)
+                      (findCommonAndUncommon us them)
   let selection_config =
         selectionConfigPrim
             First "unrevert" (patchSelOpts opts)
@@ -148,8 +147,8 @@ unrevertCmd _ opts [] =
   case commute ((unrecorded +>+ to_unrevert) :> to_keep) of
     Nothing -> do
       yes <- promptYorn "You will not be able to undo this operation! Proceed?"
-      when yes $ writeUnrevert recorded pristine NilFL -- i.e. remove unrevert
-    Just (to_keep' :> _) -> writeUnrevert recorded pristine to_keep'
+      when yes $ writeUnrevert recorded NilFL -- i.e. remove unrevert
+    Just (to_keep' :> _) -> writeUnrevert recorded to_keep'
   withSignalsBlocked $ do
     _repository <-
       finalizeRepositoryChanges _repository YesUpdatePending

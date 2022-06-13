@@ -111,6 +111,7 @@ import Darcs.Repository.Flags
     , WithPatchIndex (..)
     , PatchFormat (..)
     , AllowConflicts(..)
+    , WithPrefsTemplates(..)
     )
 
 import Darcs.Patch ( RepoPatch, description )
@@ -173,10 +174,11 @@ cloneRepository ::
     -> WithPatchIndex   -- use patch index
     -> Bool   -- use packs
     -> ForgetParent
+    -> WithPrefsTemplates
     -> IO ()
 cloneRepository repourl mysimplename v useCache cloneKind um rdarcs sse remoteRepos
                 setDefault inheritDefault matchFlags rfsource withWorkingDir
-                usePatchIndex usePacks forget =
+                usePatchIndex usePacks forget withPrefsTemplates =
   withUMaskFlag um $ withNewDirectory mysimplename $ do
       let patchfmt
             | formatHas Darcs3 rfsource = PatchFormat3
@@ -184,7 +186,8 @@ cloneRepository repourl mysimplename v useCache cloneKind um rdarcs sse remoteRe
             | otherwise                 = PatchFormat1
       EmptyRepository _toRepo <-
         createRepository patchfmt withWorkingDir
-          (if cloneKind == LazyClone then NoPatchIndex else usePatchIndex) useCache
+          (if cloneKind == LazyClone then NoPatchIndex else usePatchIndex)
+          useCache withPrefsTemplates
       debugMessage "Finished initializing new repository."
       addRepoSource repourl NoDryRun remoteRepos setDefault inheritDefault False
 
