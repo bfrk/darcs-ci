@@ -220,7 +220,8 @@ markconflictsCmd fps opts args = do
       _repository <-
         finalizeRepositoryChanges _repository YesUpdatePending
           (O.compress ? opts) (O.dryRun ? opts)
-      void $ applyToWorking _repository (verbosity ? opts) to_add
+      unless (O.yes (O.dryRun ? opts)) $
+        void $ applyToWorking _repository (verbosity ? opts) to_add
     putFinished opts "marking conflicts"
 
 -- * Generic 'PathSet' support

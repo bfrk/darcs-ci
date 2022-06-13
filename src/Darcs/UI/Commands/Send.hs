@@ -284,76 +284,86 @@ prepareBundle opts common e = do
                                       (mapFL_FL hopefully to_be_sent)
   signString (parseFlags O.sign opts) unsig_bundle
 
-sendBundle :: forall p wX wY . (RepoPatch p, ApplyState p ~ Tree)
-           => [DarcsFlag] -> FL (PatchInfoAnd p) wX wY
-             -> Doc -> String -> [WhatToDo] -> String -> IO ()
-sendBundle opts to_be_sent bundle fname wtds their_name=
-         let
-           auto_subject :: forall pp wA wB . FL (PatchInfoAnd pp) wA wB -> String
-           auto_subject (p:>:NilFL)  = "darcs patch: " ++ trim (patchDesc p) 57
-           auto_subject (p:>:ps) = "darcs patch: " ++ trim (patchDesc p) 43 ++
-                            " (and " ++ show (lengthFL ps) ++ " more)"
-           auto_subject _ = error "Tried to get a name from empty patch list."
-           trim st n = if length st <= n then st
-                       else take (n-3) st ++ "..."
-           in do
-           thetargets <- getTargets wtds
-           from <- getAuthor (author ? opts) False
-           let thesubject = fromMaybe (auto_subject to_be_sent) $ getSubject opts
-           (mailcontents, mailfile, mailcharset) <- getDescription opts their_name to_be_sent
-
-           let warnMailBody = case mailfile of
-                                  Just mf -> putDocLn $ emailBackedUp mf
-                                  Nothing -> return ()
-
-               warnCharset msg = do
-                 confirmed <- promptYorn $ promptCharSetWarning msg
-                 unless confirmed $ do
-                    putDocLn charsetAborted
-                    warnMailBody
-                    exitSuccess
-
-           thecharset <- case charset ? opts of
-                              -- Always trust provided charset
-                              providedCset@(Just _) -> return providedCset
-                              Nothing ->
-                                case mailcharset of
-                                Nothing -> do
-                                  warnCharset charsetCouldNotGuess
-                                  return mailcharset
-                                Just "utf-8" -> return mailcharset
-                                -- Trust other cases (us-ascii)
-                                Just _ -> return mailcharset
-
-           let body = makeEmail their_name
-                        (maybe [] (\x -> [("In-Reply-To", x), ("References", x)]) . getInReplyTo $ opts)
-                        (Just mailcontents)
-                        thecharset
-                        bundle
-                        (Just fname)
-               contentAndBundle = Just (mailcontents, bundle)
-
-               sendmail =
-                (do
-                 let to = generateEmailToString thetargets
-                 sm_cmd <- getSendmailCmd opts
-                 sendEmailDoc from to thesubject (getCc opts)
-                               sm_cmd contentAndBundle body
-                 putInfo opts (success to (getCc opts)))
-                 `onException` warnMailBody
-
-           when (null [ p | Post p <- thetargets]) sendmail
-           nbody <- withOpenTemp $ \ (fh,fn) -> do
-               let to = generateEmailToString thetargets
-               generateEmail fh from to thesubject (getCc opts) body
-               hClose fh
-               mmapFilePS fn
-           forM_ [ p | Post p <- thetargets]
-             (\url -> do
-                putInfo opts $ postingPatch url
-                postUrl url nbody "message/rfc822")
-             `catch` (\(_ :: IOException) -> sendmail)
-           cleanup opts mailfile
+sendBundle
+  :: forall p wX wY
+   . (RepoPatch p, ApplyState p ~ Tree)
+  => [DarcsFlag]
+  -> FL (PatchInfoAnd p) wX wY
+  -> Doc
+  -> String
+  -> [WhatToDo]
+  -> String
+  -> IO ()
+sendBundle opts to_be_sent bundle fname wtds their_name = do
+  let auto_subject :: forall pp wA wB. FL (PatchInfoAnd pp) wA wB -> String
+      auto_subject (p :>: NilFL) = "darcs patch: " ++ trim (patchDesc p) 57
+      auto_subject (p :>: ps) =
+        "darcs patch: " ++
+        trim (patchDesc p) 43 ++ " (and " ++ show (lengthFL ps) ++ " more)"
+      auto_subject _ = error "Tried to get a name from empty patch list."
+      trim st n =
+        if length st <= n
+          then st
+          else take (n - 3) st ++ "..."
+  thetargets <- getTargets wtds
+  from <- getAuthor (author ? opts) False
+  let thesubject = fromMaybe (auto_subject to_be_sent) $ getSubject opts
+  (mailcontents, mailfile, mailcharset) <-
+    getDescription opts their_name to_be_sent
+  let warnMailBody =
+        case mailfile of
+          Just mf -> putDocLn $ emailBackedUp mf
+          Nothing -> return ()
+      warnCharset msg = do
+        confirmed <- promptYorn $ promptCharSetWarning msg
+        unless confirmed $ do
+          putDocLn charsetAborted
+          warnMailBody
+          exitSuccess
+  thecharset <-
+    case charset ? opts of
+      -- Always trust provided charset
+      providedCset@(Just _) ->
+        return providedCset
+      Nothing ->
+        case mailcharset of
+          Nothing -> do
+            warnCharset charsetCouldNotGuess
+            return mailcharset
+          Just "utf-8" ->
+            return mailcharset
+          -- Trust other cases (us-ascii)
+          Just _ -> return mailcharset
+  let body =
+        makeEmail
+          their_name
+          (maybe [] (\x -> [("In-Reply-To", x), ("References", x)]) .
+           getInReplyTo $
+           opts)
+          (Just mailcontents) thecharset bundle (Just fname)
+      contentAndBundle = Just (mailcontents, bundle)
+      sendmail =
+        (do let to = generateEmailToString thetargets
+            sm_cmd <- getSendmailCmd opts
+            sendEmailDoc from to thesubject (getCc opts) sm_cmd
+              contentAndBundle body
+            putInfo opts (success to (getCc opts)))
+        `onException`
+        warnMailBody
+  when (null [p | Post p <- thetargets]) sendmail
+  nbody <-
+    withOpenTemp $ \(fh, fn) -> do
+      let to = generateEmailToString thetargets
+      generateEmail fh from to thesubject (getCc opts) body
+      hClose fh
+      mmapFilePS fn
+  forM_
+    [p | Post p <- thetargets]
+    (\url -> do
+       putInfo opts $ postingPatch url
+       postUrl url nbody "message/rfc822") `catch`
+    (\(_ :: IOException) -> sendmail)
+  cleanup opts mailfile
 
 generateEmailToString :: [WhatToDo] -> String
 generateEmailToString = intercalate " , " . filter (/= "") . map extractEmail

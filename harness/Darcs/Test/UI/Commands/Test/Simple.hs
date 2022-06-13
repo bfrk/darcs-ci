@@ -17,7 +17,7 @@ import qualified Darcs.UI.Options.All as O
 import Darcs.UI.Commands.Test.Impl
   ( TestRunner(..), TestResult(..), TestResultValid(..), TestFailure(..)
   , runStrategy, StrategyResultRaw(..)
-  , PatchTree(..), patchTreeToFL
+  , PatchSeq(..), patchTreeToFL
   )
 
 import Darcs.Test.UI.Commands.Test.IndexedApply ( IndexedApply(..) )
@@ -160,7 +160,7 @@ runStrategyOn testStrategy shrinkFailure (initialState, patchStates) =
   unseal (fmap toPatchNums . fst . flip runTestingMonad finalState . runStrategy testStrategy shrinkFailure)
          (genPatchSequence initialState patchStates)
 
-toPatchNums :: (Sealed2 (PatchTree TrivialPatch)) -> [Int]
+toPatchNums :: (Sealed2 (PatchSeq TrivialPatch)) -> [Int]
 toPatchNums (Sealed2 ps) = mapFL (\(TrivialPatch n _ _) -> n) (patchTreeToFL ps)
 
 genPatchSequence :: TestingState -> [TestingState] -> Sealed (RL TrivialPatch Origin)

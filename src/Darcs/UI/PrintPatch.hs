@@ -16,7 +16,7 @@
 -- Boston, MA 02110-1301, USA.
 
 module Darcs.UI.PrintPatch
-    ( contextualPrintPatch
+    ( contextualPrintPatchWithPager
     , printContent
     , printContentWithPager
     , printFriendly
@@ -72,5 +72,13 @@ printContentWithPager = viewDocWith fancyPrinters . prefix "    " . content
 contextualPrintPatch :: (ShowContextPatch p, ApplyState p ~ Tree) => Tree IO
                      -> p wX wY -> IO ()
 contextualPrintPatch s p = do
-    (contextedPatch, _) <- virtualTreeIO (showContextPatch ForDisplay p) s
-    putDocLnWith fancyPrinters contextedPatch
+    (doc, _) <- virtualTreeIO (showContextPatch ForDisplay p) s
+    putDocLnWith fancyPrinters doc
+
+-- | Print a patch, together with its context, on standard output, using a
+-- pager.
+contextualPrintPatchWithPager
+  :: (ShowContextPatch p, ApplyState p ~ Tree) => Tree IO -> p wX wY -> IO ()
+contextualPrintPatchWithPager s p = do
+    (doc, _) <- virtualTreeIO (showContextPatch ForDisplay p) s
+    viewDocWith fancyPrinters doc

@@ -17,7 +17,7 @@
 
 module Darcs.Repository.Match
     (
-      getRecordedUpToMatch
+      getPristineUpToMatch
     , getOnePatchset
     ) where
 
@@ -31,31 +31,33 @@ import Darcs.Patch.Match
     )
 
 import Darcs.Patch.Bundle ( readContextFile )
-import Darcs.Patch.ApplyMonad ( ApplyMonad(..) )
 import Darcs.Patch.Apply( ApplyState )
 import Darcs.Patch ( RepoPatch )
-import Darcs.Patch.Set ( Origin, PatchSet(..), SealedPatchSet, patchSetDrop )
+import Darcs.Patch.Set ( Origin, SealedPatchSet, patchSetDrop )
 
-import Darcs.Repository.Flags
-    ( WithWorkingDir (WithWorkingDir) )
-import Darcs.Repository.ApplyPatches ( DefaultIO, runDefault )
 import Darcs.Repository.InternalTypes ( Repository )
 import Darcs.Repository.Hashed ( readPatches )
-import Darcs.Repository.Pristine ( createPristineDirectoryTree )
+import Darcs.Repository.Pristine ( readPristine )
 
 import Darcs.Util.Tree ( Tree )
+import Darcs.Util.Tree.Monad ( virtualTreeIO )
 
 import Darcs.Util.Path ( toFilePath )
 
--- | Create a new pristine and working tree in the current working directory,
--- corresponding to the state of the 'PatchSet' returned by 'getOnePatchSet'
--- for the same 'PatchSetMatch'.
-getRecordedUpToMatch :: (ApplyMonad (ApplyState p) DefaultIO, RepoPatch p, ApplyState p ~ Tree)
+-- | Return the pristine tree up to the given 'PatchSetMatch'.
+-- In the typical case where the match is closer to the end of the repo than
+-- its beginning, this is (a lot) more efficient than applying the result of
+-- 'getOnePatchset' to an empty tree.
+getPristineUpToMatch :: (RepoPatch p, ApplyState p ~ Tree)
                      => Repository rt p wU wR
                      -> PatchSetMatch
-                     -> IO ()
-getRecordedUpToMatch r = withRecordedMatch r . rollbackToPatchSetMatch
+                     -> IO (Tree IO)
+getPristineUpToMatch r psm = do
+  ps <- readPatches r
+  tree <- readPristine r
+  snd <$> virtualTreeIO (rollbackToPatchSetMatch psm ps) tree
 
+-- | Return the patches up to the given 'PatchSetMatch'.
 getOnePatchset :: RepoPatch p
                => Repository rt p wU wR
                -> PatchSetMatch
@@ -68,11 +70,3 @@ getOnePatchset repository pm =
     ContextMatch path -> do
       ref <- readPatches repository
       readContextFile ref (toFilePath path)
-
-withRecordedMatch :: RepoPatch p
-                  => Repository rt p wU wR
-                  -> (PatchSet p Origin wR -> DefaultIO ())
-                  -> IO ()
-withRecordedMatch r job
-    = do createPristineDirectoryTree r "." WithWorkingDir
-         readPatches r >>= runDefault . job

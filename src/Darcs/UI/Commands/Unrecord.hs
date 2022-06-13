@@ -24,7 +24,7 @@ module Darcs.UI.Commands.Unrecord
     , obliterate
     ) where
 
-import Control.Monad ( when, void )
+import Control.Monad ( unless, when, void )
 import Data.Maybe( fromJust, isJust )
 import Darcs.Util.Tree( Tree )
 import System.Exit ( exitSuccess )
@@ -149,11 +149,8 @@ unpull :: DarcsCommand
 unpull = (commandAlias "unpull" Nothing obliterate)
              { commandHelp = unpullHelp
              , commandDescription = unpullDescription
-             , commandCommand = unpullCmd
+             , commandCommand = obliterateCmd "unpull"
              }
-
-unpullCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
-unpullCmd = genericObliterateCmd "unpull"
 
 obliterateDescription :: String
 obliterateDescription =
@@ -182,7 +179,7 @@ obliterate = DarcsCommand
     , commandDescription = obliterateDescription
     , commandExtraArgs = 0
     , commandExtraArgHelp = []
-    , commandCommand = obliterateCmd
+    , commandCommand = obliterateCmd "obliterate"
     , commandPrereq = amInHashedRepository
     , commandCompleteArgs = noArgs
     , commandArgdefaults = nodefaults
@@ -206,18 +203,9 @@ obliterate = DarcsCommand
       ^ O.changesReverse
     obliterateOpts = obliterateBasicOpts `withStdOpts` obliterateAdvancedOpts
 
-obliterateCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
-obliterateCmd = genericObliterateCmd "obliterate"
-
--- | genericObliterateCmd is the function that executes the "obliterate" and
--- "unpull" commands. The first argument is the name under which the command is
--- invoked (@unpull@ or @obliterate@).
-genericObliterateCmd :: String
-                     -> (AbsolutePath, AbsolutePath)
-                     -> [DarcsFlag]
-                     -> [String]
-                     -> IO ()
-genericObliterateCmd cmdname _ opts _ =
+obliterateCmd
+  :: String -> (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
+obliterateCmd cmdname _ opts _ =
     let cacheOpt = useCache ? opts
         verbOpt = verbosity ? opts
     in withRepoLock cacheOpt (umask ? opts) $
@@ -261,7 +249,8 @@ genericObliterateCmd cmdname _ opts _ =
                         _repository <- finalizeRepositoryChanges _repository
                                         YesUpdatePending (compress ? opts) (O.dryRun ? opts)
                         debugMessage "Applying patches to working tree..."
-                        void $ applyToWorking _repository verbOpt (invert p_after_pending)
+                        unless (O.yes (O.dryRun ? opts)) $
+                          void $ applyToWorking _repository verbOpt (invert p_after_pending)
                     putFinished opts (presentParticiple cmdname)
 
 savetoBundle :: (RepoPatch p, ApplyState p ~ Tree)

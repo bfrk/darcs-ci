@@ -9,6 +9,8 @@ darcs init
 
 echo "X X X" > foo
 echo $'A A,A\tA,A\vA' >> foo
+echo "aä" >> foo
+echo $'\02' >> foo
 darcs rec -alm "Added"
 
 # These should fail until replace handles tokens and
@@ -17,6 +19,13 @@ darcs replace ' X ' ' XX ' --token-chars '[ X]' foo && exit 1 || true
 darcs replace $'A A'  'aaa' --token-chars '[^,]' foo && exit 1 || true
 darcs replace $'A\tA' 'aaa' --token-chars '[^,]' foo && exit 1 || true
 darcs replace $'A\vA' 'aaa' --token-chars '[^,]' foo && exit 1 || true
+
+# These should fail since darcs cannot handle non-ASCII token chars
+# nor non-printable ones
+not darcs replace 'X' 'ä' --token-chars '[Xä]' foo
+not darcs replace 'ä' 'X' --token-chars '[ä]' foo
+not darcs replace $'\02' 'X' --token-chars $'[X\02]' foo
+not darcs replace 'X' $'\02' --token-chars $'[X\02]' foo
 
 # Check that replace is not fooled by duplicate file names
 # (i.e. not trying to performe the replace twice in the same file)

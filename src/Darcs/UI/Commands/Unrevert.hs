@@ -19,7 +19,7 @@ module Darcs.UI.Commands.Unrevert ( unrevert ) where
 
 import Darcs.Prelude
 
-import Control.Monad ( when, void )
+import Control.Monad ( unless, when, void )
 
 import Darcs.Patch ( commute )
 import Darcs.Patch.Depends ( findCommonAndUncommon )
@@ -153,6 +153,7 @@ unrevertCmd _ opts [] =
     _repository <-
       finalizeRepositoryChanges _repository YesUpdatePending
         (compress ? opts) (O.dryRun ? opts)
-    void $ applyToWorking _repository (verbosity ? opts) to_unrevert
+    unless (O.yes (O.dryRun ? opts)) $
+      void $ applyToWorking _repository (verbosity ? opts) to_unrevert
   putFinished opts "unreverting"
 unrevertCmd _ _ _ = error "impossible case"

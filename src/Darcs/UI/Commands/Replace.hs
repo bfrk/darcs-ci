@@ -25,7 +25,7 @@ import Darcs.Prelude
 import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString as B
-import Data.Char ( isSpace )
+import Data.Char ( isAscii, isPrint, isSpace )
 import Data.List.Ordered ( nubSort )
 import Data.Maybe ( fromJust, isJust )
 import Control.Monad ( unless, filterM, void, when )
@@ -171,7 +171,8 @@ replaceCmd fps opts (old : new : args@(_ : _)) =
           _repository <-
             finalizeRepositoryChanges _repository YesUpdatePending
               (O.compress ? opts) (O.dryRun ? opts)
-          void $ applyToWorking _repository (verbosity ? opts) replacePs
+          unless (O.yes (O.dryRun ? opts)) $
+            void $ applyToWorking _repository (verbosity ? opts) replacePs
   where
     exists tree file = if isJust $ findFile tree file
                            then return True
@@ -253,7 +254,11 @@ chooseToks (Just t) a b
     | '^' == head tok && length tok == 1 =
         badTokenSpec "Must be at least one character in the complementary set"
     | any isSpace t =
-        badTokenSpec "Space is not allowed in the spec"
+        badTokenSpec "Space is not allowed"
+    | any (not . isAscii) t =
+        badTokenSpec "Only ASCII characters are allowed"
+    | any (not . isPrint) t =
+        badTokenSpec "Only printable characters are allowed"
     | any isSpace a = badTokenSpec $ spaceyToken a
     | any isSpace b = badTokenSpec $ spaceyToken b
     | not (isTok tok a) = badTokenSpec $ notAToken a
@@ -261,7 +266,7 @@ chooseToks (Just t) a b
     | otherwise = return tok
   where
     tok = init $ tail t :: String
-    badTokenSpec msg = fail $ "Bad token spec: '" ++ t ++ "' (" ++ msg ++ ")"
+    badTokenSpec msg = fail $ "Bad token spec: " ++ show t ++ " (" ++ msg ++ ")"
     spaceyToken x = x ++ " must not contain any space"
     notAToken x = x ++ " is not a token, according to your spec"
 

@@ -28,6 +28,7 @@ module Darcs.Repository.Hashed
     , tentativelyRemovePatches
     , tentativelyRemovePatches_
     , tentativelyAddPatch_
+    , tentativelyAddPatches
     , tentativelyAddPatches_
     , finalizeRepositoryChanges
     , reorderInventory
@@ -303,6 +304,15 @@ tentativelyAddPatch :: (RepoPatch p, ApplyState p ~ Tree)
                     -> PatchInfoAnd p wR wY
                     -> IO (Repository 'RW p wU wY)
 tentativelyAddPatch = tentativelyAddPatch_ UpdatePristine
+
+tentativelyAddPatches :: (RepoPatch p, ApplyState p ~ Tree)
+                      => Repository 'RW p wU wR
+                      -> Compression
+                      -> Verbosity
+                      -> UpdatePending
+                      -> FL (PatchInfoAnd p) wR wY
+                      -> IO (Repository 'RW p wU wY)
+tentativelyAddPatches = tentativelyAddPatches_ UpdatePristine
 
 data UpdatePristine = UpdatePristine 
                     | DontUpdatePristine

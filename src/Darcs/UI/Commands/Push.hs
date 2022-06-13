@@ -164,7 +164,7 @@ pushCmd (_, o) opts [unfixedrepodir] = do
   when (repodir == here) $ die "Cannot push from repository to itself."
   bundle <-
     withRepository (useCache ? opts) $ RepoJob $ prepareBundle opts repodir
-  sbundle <- signString (parseFlags O.sign opts) bundle
+  sbundle <- signString (O.sign ? opts) bundle
   let body =
         if isValidLocalPath repodir
           then sbundle
@@ -178,7 +178,7 @@ pushCmd (_, o) opts [unfixedrepodir] = do
 pushCmd _ _ [] = die "No default repository to push to, please specify one."
 pushCmd _ _ _ = die "Cannot push to more than one repo."
 
-prepareBundle :: forall rt p wR wU. (RepoPatch p, ApplyState p ~ Tree)
+prepareBundle :: (RepoPatch p, ApplyState p ~ Tree)
               => [DarcsFlag] -> String -> Repository rt p wU wR -> IO Doc
 prepareBundle opts repodir repository = do
   old_default <- getPreflist "defaultrepo"
@@ -196,11 +196,11 @@ prepareBundle opts repodir repository = do
   runSelection only_us selection_config
                    >>= bundlePatches opts common
 
-prePushChatter :: forall p a wX wY wC . (RepoPatch p, ShowPatch a) =>
-                 [DarcsFlag] -> PatchSet p Origin wX ->
-                 RL a wC wX -> PatchSet p Origin wY -> IO ()
+prePushChatter :: (RepoPatch p, ShowPatch a)
+               => [DarcsFlag] -> PatchSet p Origin wX
+               -> RL a wC wX -> PatchSet p Origin wY -> IO ()
 prePushChatter opts us only_us them = do
-  checkUnrelatedRepos (parseFlags O.allowUnrelatedRepos opts) us them
+  checkUnrelatedRepos (O.allowUnrelatedRepos ? opts) us them
   let num_to_pull = snd $ countUsThem us them
       pull_reminder = if num_to_pull > 0
                       then text $ "The remote repository has " ++ show num_to_pull
@@ -212,7 +212,7 @@ prePushChatter opts us only_us them = do
       putInfo opts $ text "No recorded local patches to push!"
       exitSuccess
 
-bundlePatches :: forall t p wZ wW wA. (RepoPatch p, ApplyState p ~ Tree)
+bundlePatches :: (RepoPatch p, ApplyState p ~ Tree)
               => [DarcsFlag] -> PatchSet p wA wZ
               -> (FL (PatchInfoAnd p) :> t) wZ wW
               -> IO Doc
@@ -240,14 +240,14 @@ checkOptionsSanity opts repodir =
        let lprot = takeWhile (/= ':') repodir
            msg = text ("Pushing to "++lprot++" URLs is not supported.")
        abortRun opts msg
-   else when (parseFlags O.sign opts /= O.NoSign) $
+   else when (O.sign ? opts /= O.NoSign) $
         abortRun opts $ text "Signing doesn't make sense for local repositories or when pushing over ssh."
 
 
 pushPatchSelOpts :: [DarcsFlag] -> S.PatchSelectionOptions
 pushPatchSelOpts flags = S.PatchSelectionOptions
     { S.verbosity = verbosity ? flags
-    , S.matchFlags = parseFlags O.matchSeveral flags
+    , S.matchFlags = O.matchSeveral ? flags
     , S.interactive = isInteractive True flags
     , S.selectDeps = selectDeps ? flags
     , S.withSummary = O.withSummary ? flags

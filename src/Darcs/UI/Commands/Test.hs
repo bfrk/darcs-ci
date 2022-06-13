@@ -51,7 +51,7 @@ import Darcs.UI.Commands
     )
 import Darcs.UI.Commands.Test.Impl
     ( StrategyResultRaw(..)
-    , PatchTree(..)
+    , PatchSeq(..)
     , exitCodeToTestResult
     , explanatoryTextFor
     , mkTestCmd

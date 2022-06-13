@@ -21,7 +21,7 @@ module Darcs.UI.Commands.Revert ( revert, clean ) where
 
 import Darcs.Prelude
 
-import Control.Monad ( void, when )
+import Control.Monad ( unless, when, void )
 
 import Darcs.UI.Flags
     ( DarcsFlag
@@ -180,7 +180,8 @@ revertCmd fps opts args =
                 finalizeRepositoryChanges _repository YesUpdatePending
                   (O.compress ? opts) (O.dryRun ? opts)
               debugMessage "About to apply to the working tree."
-              void $ applyToWorking _repository verbosity (invert torevert)
+              unless (O.yes (O.dryRun ? opts)) $
+                void $ applyToWorking _repository verbosity (invert torevert)
             putFinished opts "reverting"
   where
     verbosity = O.verbosity ? opts

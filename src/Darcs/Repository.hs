@@ -51,7 +51,9 @@ module Darcs.Repository
     , addToPending
     , unsafeAddToPending
     , tentativelyAddPatch
+    , tentativelyAddPatches
     , tentativelyRemovePatches
+    , setTentativePending
     , tentativelyRemoveFromPW
     , withManualRebaseUpdate
     , tentativelyMergePatches
@@ -108,6 +110,7 @@ import Darcs.Repository.Identify
 import Darcs.Repository.Hashed
     ( readPatches
     , tentativelyAddPatch
+    , tentativelyAddPatches
     , tentativelyRemovePatches
     , revertRepositoryChanges
     , finalizeRepositoryChanges
@@ -118,7 +121,7 @@ import Darcs.Repository.Pristine
     , writePristine
     )
 import Darcs.Repository.Traverse ( cleanRepository )
-import Darcs.Repository.Pending ( tentativelyRemoveFromPW )
+import Darcs.Repository.Pending ( setTentativePending, tentativelyRemoveFromPW )
 import Darcs.Repository.Working
     ( applyToWorking
     , setScriptsExecutable

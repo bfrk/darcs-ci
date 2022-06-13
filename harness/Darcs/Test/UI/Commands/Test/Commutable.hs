@@ -15,7 +15,7 @@ import Darcs.Patch.Witnesses.Sealed
 import Darcs.UI.Commands.Test.Impl
   ( TestRunner(..), TestResult(..), TestResultValid(..), TestFailure(..)
   , runStrategy, StrategyResultRaw(..)
-  , PatchTree(..), patchTreeToFL
+  , PatchSeq(..), patchTreeToFL
   )
 import qualified Darcs.UI.Options.All as O
 
@@ -123,7 +123,7 @@ runStrategyOn testStrategy shrinkFailure transitions =
   unseal (fmap toPatchNums . fst . flip runTestingMonad finalState . runStrategy testStrategy shrinkFailure)
          (genPatchSequence initialState transitions)
 
-toPatchNums :: Sealed2 (PatchTree Patch) -> [Int]
+toPatchNums :: Sealed2 (PatchSeq Patch) -> [Int]
 toPatchNums (Sealed2 ps) = mapFL (\(Patch n _ _) -> n) (patchTreeToFL ps)
 
 genPatchSequence :: TestingState -> [WithDeps Transition] -> Sealed (RL Patch Origin)

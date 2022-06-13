@@ -6,7 +6,7 @@ module Darcs.UI.Commands.Test.Impl
     ( TestRunner(..), runStrategy
     , TestResult(..), TestResultValid(..), TestFailure(..)
     , TestingDone
-    , PatchTree(..), patchTreeToFL
+    , PatchSeq(..), patchTreeToFL
     , StrategyResult, StrategyResultRaw(..)
     , explanatoryTextFor
     , runTestingEnv
@@ -140,7 +140,7 @@ type TestRunnerPatchReqs m p =
     -- In theory QuantifiedConstraints could be used to simplify this but
     -- the fact that ApplyPatchReqs is a type function makes this a bit tricky.
     ApplyPatchReqs m p, ApplyPatchReqs m (RL p), ApplyPatchReqs m (FL p)
-  , ApplyPatchReqs m (PatchTree p), ApplyPatchReqs m (RL (PatchTree p))
+  , ApplyPatchReqs m (PatchSeq p), ApplyPatchReqs m (RL (PatchSeq p))
   , DisplayPatchReqs m p)
 
 type TestablePatch m p = (TestRunner m, TestRunnerPatchReqs m p, Commute p)
@@ -199,15 +199,15 @@ runTestCmd (TestCmd cmd) = cmd
 mkTestCmd :: (forall (wX :: *) . IO (TestResult wX)) -> TestCmd
 mkTestCmd cmd = TestCmd (Testing cmd)
 
--- |'PatchTree' is a sequence of patches, balanced in an arbitrary
--- way depending on how it happened to be constructed.
+-- |'PatchSeq' is a sequence of patches, implemented as a binary tree,
+-- balanced in an arbitrary way depending on how it happened to be constructed.
 -- In the 'darcs test' implementation it is used to
 -- wrap up a single patch or group of patches that might be the cause of a failure.
-data PatchTree p wX wY where
-  Single :: p wX wY -> PatchTree p wX wY
-  Joined :: PatchTree p wX wY -> PatchTree p wY wZ -> PatchTree p wX wZ
+data PatchSeq p wX wY where
+  Single :: p wX wY -> PatchSeq p wX wY
+  Joined :: PatchSeq p wX wY -> PatchSeq p wY wZ -> PatchSeq p wX wZ
 
-instance Show2 p => Show (PatchTree p wX wY) where
+instance Show2 p => Show (PatchSeq p wX wY) where
   showsPrec prec (Single p) =
     showParen (prec >= 11) (showString "Darcs.UI.Commands.Test.Single " . showsPrec2 11 p)
   showsPrec prec (Joined p1 p2) =
@@ -216,37 +216,37 @@ instance Show2 p => Show (PatchTree p wX wY) where
                  . showsPrec2 11 p1 . showSpace . showsPrec2 11 p2)
 
 
-instance Show2 p => Show1 (PatchTree p wX) where
+instance Show2 p => Show1 (PatchSeq p wX) where
   showDict1 = Dict
 
-instance Show2 p => Show2 (PatchTree p) where
+instance Show2 p => Show2 (PatchSeq p) where
   showDict2 = Dict
 
-instance Apply p => Apply (PatchTree p) where
-  type ApplyState (PatchTree p) = ApplyState p
+instance Apply p => Apply (PatchSeq p) where
+  type ApplyState (PatchSeq p) = ApplyState p
   apply (Single p) = apply p
   apply (Joined p1 p2) = apply p1 Base.>> apply p2
   unapply (Single p) = unapply p
   unapply (Joined p1 p2) = unapply p2 Base.>> unapply p1
 
-instance PatchInspect p => PatchInspect (PatchTree p) where
+instance PatchInspect p => PatchInspect (PatchSeq p) where
   listTouchedFiles (Single p) = listTouchedFiles p
   listTouchedFiles (Joined p1 p2) = listTouchedFiles p1 ++ listTouchedFiles p2
   hunkMatches f (Single p) = hunkMatches f p
   hunkMatches f (Joined p1 p2) = hunkMatches f p1 || hunkMatches f p2
 
-patchTreeToFL :: PatchTree p wX wY -> FL p wX wY
+patchTreeToFL :: PatchSeq p wX wY -> FL p wX wY
 patchTreeToFL t = go t NilFL
   where
-    go :: PatchTree p wA wB -> FL p wB wC -> FL p wA wC
+    go :: PatchSeq p wA wB -> FL p wB wC -> FL p wA wC
     go (Single p) rest = p :>: rest
     go (Joined p1 p2) rest = go p1 (go p2 rest)
 
-flToPatchTree :: p wX wY -> FL p wY wZ -> PatchTree p wX wZ
+flToPatchTree :: p wX wY -> FL p wY wZ -> PatchSeq p wX wZ
 flToPatchTree p NilFL = Single p
 flToPatchTree p (q :>: qs) = Joined (Single p) (flToPatchTree q qs)
 
-rlToPatchTree :: RL p wX wY -> p wY wZ -> PatchTree p wX wZ
+rlToPatchTree :: RL p wX wY -> p wY wZ -> PatchSeq p wX wZ
 rlToPatchTree NilRL p = Single p
 rlToPatchTree (qs :<: q) p = Joined (rlToPatchTree qs q) (Single p)
 
@@ -261,10 +261,10 @@ data StrategyResultRaw patches =
   deriving (Eq, Show, Functor)
 
 type StrategyResult p wSuccess wFailure =
-  StrategyResultRaw (PatchTree p wSuccess wFailure)
+  StrategyResultRaw (PatchSeq p wSuccess wFailure)
 
 type StrategyResultSealed p =
-  StrategyResultRaw (Sealed2 (PatchTree p))
+  StrategyResultRaw (Sealed2 (PatchSeq p))
 
 -- |'WithResult' is a continuation passed to a test strategy indicating
 -- what should be done with the final result of the strategy. This for
@@ -510,8 +510,8 @@ trackNextLinear untestables (ps:<:p) withResult = do
 -- so we can connect it to the state of the testing tree.
 data TestingState p wOlder wFocus wNewer where
   TestingState
-    :: RL (PatchTree p) wOlder wFocus
-    -> FL (PatchTree p) wFocus wNewer
+    :: RL (PatchSeq p) wOlder wFocus
+    -> FL (PatchSeq p) wFocus wNewer
     -> TestingState p wOlder wFocus wNewer
 
 lengthTS :: TestingState p wX wZ wY -> Int
@@ -534,7 +534,7 @@ trackNextBackoff
   :: TestablePatch m p
   => TestFailure wNewer -- ^Failure witness
   -> Int -- ^Number of patches to skip.
-  -> RL (PatchTree p) wOlder wNewer -- ^Patches not yet skipped.
+  -> RL (PatchSeq p) wOlder wNewer -- ^Patches not yet skipped.
   -> StrategyDone m p wNewer
 
 -- Normal base case: we've run out of patches.
@@ -593,8 +593,8 @@ findTestableTowardsNewer newerResult ts@(TestingState older (p :>: ps)) cont = d
       applyPatch p
       let
         -- The 'wB' state is untestable, so try to attach the patches on either side of
-        -- it together into the same 'PatchTree' so we don't try it again.
-        joinT :: RL (PatchTree p) wA wB -> PatchTree p wB wC -> RL (PatchTree p) wA wC
+        -- it together into the same 'PatchSeq' so we don't try it again.
+        joinT :: RL (PatchSeq p) wA wB -> PatchSeq p wB wC -> RL (PatchSeq p) wA wC
         -- If we don't have any patches on the left, we can't do anything.
         joinT NilRL x = NilRL :<: x
         -- Otherwise peel off the first patch on the left and attach it to the patch on the right.
@@ -661,7 +661,7 @@ trackNextBisect (dnow, dtotal) ps withResult = do
 -- Precondition: the test fails at 'wNewer'.
 checkAndReturnFinalBisectResult
   :: TestablePatch m p
-  => PatchTree p wOlder wNewer
+  => PatchSeq p wOlder wNewer
   -> StrategyDone m p wOlder
 checkAndReturnFinalBisectResult p withResult = do
   testResult <- getCurrentTestResult
@@ -720,8 +720,8 @@ moveHalfNewer (TestingState older newer) f = doMove older (lengthFL newer `div` 
   where
     doMove
       :: forall wFocus2
-       . RL (PatchTree p) wOlder wFocus2
-      -> (Int, FL (PatchTree p) wFocus2 wNewer)
+       . RL (PatchSeq p) wOlder wFocus2
+      -> (Int, FL (PatchSeq p) wFocus2 wNewer)
       -> m wFocus2 wResult a
 
     doMove ps1 (0, ps2) = f (TestingState ps1 ps2)
@@ -744,8 +744,8 @@ moveToMiddle (TestingState older newer) f = doMove (lengthRL older, older) (leng
   where
     doMove
       :: forall wFocus2
-       . (Int, RL (PatchTree p) wOlder wFocus2)
-      -> (Int, FL (PatchTree p) wFocus2 wNewer)
+       . (Int, RL (PatchSeq p) wOlder wFocus2)
+      -> (Int, FL (PatchSeq p) wFocus2 wNewer)
       -> m wFocus2 wResult a
 
     doMove (len1, ps1) (len2, ps2) | abs (len1 - len2) <= 1 = f (TestingState ps1 ps2)

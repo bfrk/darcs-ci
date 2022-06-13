@@ -19,7 +19,7 @@ module Darcs.UI.Commands.Rollback ( rollback ) where
 
 import Darcs.Prelude
 
-import Control.Monad ( when, void )
+import Control.Monad ( unless, when, void )
 import System.Exit ( exitSuccess )
 
 import Darcs.Patch.Match ( firstMatch )
@@ -148,6 +148,7 @@ rollbackCmd fps opts args = withRepoLock (useCache ? opts)
             _repo <-
               finalizeRepositoryChanges _repo YesUpdatePending
                 (compress ? opts) (O.dryRun ? opts)
-            void $ applyToWorking _repo (verbosity ? opts) pw
+            unless (O.yes (O.dryRun ? opts)) $
+              void $ applyToWorking _repo (verbosity ? opts) pw
         debugMessage "Finished applying unrecorded rollback patch"
         putInfo opts $ text "Changes rolled back in working tree"

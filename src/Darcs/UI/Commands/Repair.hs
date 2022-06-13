@@ -126,7 +126,6 @@ repairCmd opts
           BrokenPatches tree newps -> do
             putInfo opts "Writing out repaired patches..."
             writeTentativeInventory repo (compress ? opts) newps
-            -- HashedRepo.finalizeTentativeChanges repo (compress ? opts)
             putInfo opts "Fixing pristine tree..."
             writePristine repo tree
       index_ok <- checkIndex repo (quiet opts)
