@@ -55,7 +55,7 @@ defaultConfigAnn
      , diffalgs      := "p"      += help "Select which diff alorithms to use (p=patience, m=myers) [p]" += name "a" += typ "SET"
      , index         := "y"      += help "Select whether to use the index (n=no, y=yes) [y]" += typ "SET"
      , cache         := "y"      += help "Select whether to use the cache (n=no, y=yes) [y]" += typ "SET"
-     , full          := False    += help "Shortcut for -s=snu -f=123 -a=mp -i=yn"
+     , full          := False    += help "Shortcut for -s=snu -f=123 -a=mp -c=yn -i=yn"
      , darcs         := ""       += help "Darcs binary path" += typ "PATH"
      , tests         := []       += help "Pattern to limit the tests to run" += typ "PATTERN" += name "t"
      , testDir       := Nothing  += help "Directory to run tests in" += typ "PATH" += name "d"
@@ -222,7 +222,7 @@ main = do hSetBuffering stdout NoBuffering
           clp  <- cmdArgs_ defaultConfigAnn
           run $
             if full clp then clp
-              { suites   = "snuh"
+              { suites   = "snu" -- not with 'h' because they arent' re-entrant
               , formats  = "123"
               , diffalgs = "mp"
               , index = "yn"

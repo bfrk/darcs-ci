@@ -78,7 +78,7 @@ import Darcs.UI.Flags
     )
 import Darcs.UI.Options ( (^), parseFlags, (?), oid )
 import qualified Darcs.UI.Options.All as O
-import Darcs.UI.PrintPatch ( contextualPrintPatchWithPager )
+import Darcs.UI.PrintPatch ( contextualPrintPatch, contextualPrintPatchWithPager )
 import Darcs.UI.SelectChanges
     ( InteractiveSelectionM, KeyPress (..)
     , WhichChanges (..)
@@ -94,7 +94,7 @@ import Darcs.UI.SelectChanges
 import qualified Darcs.UI.SelectChanges as S ( PatchSelectionOptions (..) )
 import Darcs.Util.Path ( AbsolutePath, AnchoredPath )
 import Darcs.Util.Printer
-    ( Doc, formatWords, putDocLn, putDocLnWith, renderString
+    ( Doc, formatWords, putDocLn, renderString
     , text, vcat, ($+$)
     )
 import Darcs.Util.Printer.Color ( fancyPrinters )
@@ -187,10 +187,8 @@ whatsnewHelp =
   $+$ formatWords
   [ "By default, `darcs whatsnew` uses Darcs' internal format for changes."
   , "To see some context (unchanged lines) around each change, use the"
-  , "`--unified` option. (This option has no effect in interactive mode.)"
-  , "To view changes in conventional `diff` format, use"
-  , "the `darcs diff` command; but note that `darcs diff` cannot properly"
-  , "display changes when file renames are involved."
+  , "`--unified` option.  To view changes in conventional `diff` format, use"
+  , "the `darcs diff` command; but note that `darcs whatsnew` is faster."
   ]
   $+$ formatWords
   [ "This command exits unsuccessfully (returns a non-zero exit status) if"
@@ -249,7 +247,8 @@ whatsnewCmd fps opts args =
     announceFiles (verbosity ? opts) existing_files "What's new in"
     if maybeIsInteractive opts
       then
-        runInteractive interactiveHunks (patchSelOpts opts) allInterestingChanges
+        runInteractive (interactiveHunks pristine) (patchSelOpts opts)
+          pristine allInterestingChanges
       else
         if haveLookForAddsAndSummary
           then do
@@ -312,21 +311,22 @@ whatsnewCmd fps opts args =
 -- | Runs the 'InteractiveSelectionM' code
 runInteractive :: InteractiveSelectionM p wX wY () -- Selection to run
                -> S.PatchSelectionOptions
+               -> Tree IO         -- Pristine
                -> FL p wX wY      -- A list of patches
                -> IO ()
-runInteractive i patchsel ps' = do
+runInteractive i patchsel pristine ps' = do
     let lps' = labelPatches Nothing ps'
         choices' = mkPatchChoices lps'
         ps = evalStateT i (initialSelectionState lps' choices')
     void $
       runReaderT ps $
-        selectionConfigPrim First "view" patchsel Nothing Nothing Nothing
+        selectionConfigPrim First "view" patchsel Nothing Nothing (Just pristine)
 
 -- | The interactive part of @darcs whatsnew@
 interactiveHunks :: (IsHunk p, ShowPatch p, ShowContextPatch p, Commute p,
                      PatchInspect p, PrimDetails p, ApplyState p ~ Tree)
-                 => InteractiveSelectionM p wX wY ()
-interactiveHunks = do
+                 => Tree IO -> InteractiveSelectionM p wX wY ()
+interactiveHunks pristine = do
     c <- currentPatch
     case c of
         Nothing -> liftIO $ putStrLn "No more changes!"
@@ -340,14 +340,14 @@ interactiveHunks = do
                 (PromptConfig thePrompt (keysFor basic_options) (keysFor adv_options)
                  (Just 'n') "?h")
         case yorn of
-            -- View change
-            'v' -> liftIO (printPatch (unLabel lp))
+            -- View change in context
+            'v' -> liftIO (contextualPrintPatch pristine (unLabel lp))
                    >> repeatThis lp
             -- View summary of the change
             'x' -> liftIO (putDocLn $ summary $ unLabel lp)
                    >> repeatThis lp
             -- View change and move on
-            'y' -> liftIO (printPatch (unLabel lp))
+            'y' -> liftIO (contextualPrintPatch pristine (unLabel lp))
                    >> decide True lp >> next_hunk
             -- Go to the next patch
             'n' -> decide False lp >> next_hunk
@@ -371,16 +371,15 @@ interactiveHunks = do
             _ -> do liftIO . putStrLn $
                         helpFor "whatsnew" basic_options adv_options
                     repeatThis lp
-    start_over = backAll >> interactiveHunks
-    next_hunk  = skipOne >> skipMundane >> interactiveHunks
-    prev_hunk  = backOne >> interactiveHunks
+    start_over = backAll >> interactiveHunks pristine
+    next_hunk  = skipOne >> skipMundane >> interactiveHunks pristine
+    prev_hunk  = backOne >> interactiveHunks pristine
     options_yn =
-        [ KeyPress 'v' "view this change"
-        , KeyPress 'y' "view this change and go to the next one"
-        , KeyPress 'n' "skip this change and its dependencies"
-        ]
+        [ KeyPress 'v' "view this change in a context"
+        , KeyPress 'y' "view this change in a context and go to the next one"
+        , KeyPress 'n' "skip this change and its dependencies" ]
     optionsView =
-        [ KeyPress 'p' "view this change with pager"
+        [ KeyPress 'p' "view this change in context wih pager "
         , KeyPress 'x' "view a summary of this change"
         ]
     optionsNav =
@@ -395,9 +394,6 @@ interactiveHunks = do
 
 printPatchPager :: ShowPatchBasic p => p wX wY -> IO ()
 printPatchPager = viewDocWith fancyPrinters . displayPatch
-
-printPatch :: ShowPatchBasic p => p wX wY -> IO ()
-printPatch = putDocLnWith fancyPrinters . displayPatch
 
 -- | An alias for 'whatsnew', with implicit @-l@ (and thus implicit @-s@)
 -- flags. We override the default description, to include these flags.

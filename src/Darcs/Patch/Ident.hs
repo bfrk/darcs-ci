@@ -11,8 +11,6 @@ module Darcs.Patch.Ident
     , fastRemoveSubsequenceRL
     , findCommonFL
     , commuteToPrefix
-    , commuteToPostfix
-    , commuteWhatWeCanToPostfix
     -- * Properties
     , prop_identInvariantUnderCommute
     , prop_sameIdentityImpliesCommutable
@@ -25,7 +23,7 @@ import Darcs.Prelude
 
 import Darcs.Patch.Commute ( Commute, commute, commuteFL, commuteRL )
 import Darcs.Patch.Merge ( Merge, mergeFL )
-import Darcs.Patch.Permutations ( partitionFL', commuteWhatWeCanFL )
+import Darcs.Patch.Permutations ( partitionFL' )
 import Darcs.Patch.Show ( ShowPatchFor )
 import Darcs.Patch.Witnesses.Eq ( Eq2(..), EqCheck(..), isIsEq )
 import Darcs.Patch.Witnesses.Ordered
@@ -253,54 +251,14 @@ findCommonFL xs ys =
     commonIds =
       S.fromList (mapFL ident xs) `S.intersection` S.fromList (mapFL ident ys)
 
--- | Try to commute patches matching any of the 'PatchId's in the set to the
--- head of an 'FL', i.e. backwards in history. It is not required that all the
--- 'PatchId's are found in the sequence, but if they do then the traversal
--- terminates as soon as the set is exhausted.
+-- | Try to commute all patches matching any of the 'PatchId's in the set to the
+-- head of an 'FL', i.e. backwards in history.
 commuteToPrefix :: (Commute p, Ident p)
                 => S.Set (PatchId p) -> FL p wX wY -> Maybe ((FL p :> RL p) wX wY)
 commuteToPrefix is ps
   | prefix :> NilRL :> rest <-
       partitionFL' ((`S.member` is) . ident) NilRL NilRL ps = Just (prefix :> rest)
   | otherwise = Nothing
-
--- | Try to commute patches matching any of the 'PatchId's in the set to the
--- head of an 'RL', i.e. forwards in history. It is not required that all the
--- 'PatchId's are found in the sequence, but if they do then the traversal
--- terminates as soon as the set is exhausted.
-commuteToPostfix :: forall p wX wY. (Commute p, Ident p)
-                 => S.Set (PatchId p) -> RL p wX wY -> Maybe ((FL p :> RL p) wX wY)
-commuteToPostfix ids patches = push ids (patches :> NilFL)
-  where
-    push :: S.Set (PatchId p) -> (RL p :> FL p) wA wB -> Maybe ((FL p :> RL p) wA wB)
-    push _ (NilRL :> left) = return (left :> NilRL) -- input RL is ehausted
-    push is (ps :> left)
-      | S.null is = return (ps +>>+ left :> NilRL) -- set of IDs is exhausted
-    push is (ps :<: p :> left)
-      | let i = ident p
-      , i `S.member` is = do
-          left' :> p' <- commuteFL (p :> left)
-          left'' :> right <- push (S.delete i is) (ps :> left')
-          return (left'' :> right :<: p')
-      | otherwise = push is (ps :> p :>: left)
-
--- | Like 'commuteToPostfix' but drag dependencies with us.
-commuteWhatWeCanToPostfix :: forall p wX wY. (Commute p, Ident p)
-                          => S.Set (PatchId p) -> RL p wX wY -> (FL p :> RL p) wX wY
-commuteWhatWeCanToPostfix ids patches = push ids (patches :> NilFL)
-  where
-    push :: S.Set (PatchId p) -> (RL p :> FL p) wA wB -> (FL p :> RL p) wA wB
-    push _ (NilRL :> left) = left :> NilRL -- input RL is ehausted
-    push is (ps :> left)
-      | S.null is = ps +>>+ left :> NilRL -- set of IDs is exhausted
-    push is (ps :<: p :> left)
-      | let i = ident p
-      , i `S.member` is =
-          case commuteWhatWeCanFL (p :> left) of
-            left' :> p' :> deps ->
-              case push (S.delete i is) (ps :> left') of
-                left'' :> right -> left'' :> (right :<: p' +<<+ deps)
-      | otherwise = push is (ps :> p :>: left)
 
 prop_identInvariantUnderCommute :: (Commute p, Ident p)
                                 => (p :> p) wX wY -> Maybe Bool

@@ -21,7 +21,8 @@
 module Darcs.Patch.Permutations ( removeFL, removeRL, removeCommon,
                                   commuteWhatWeCanFL, commuteWhatWeCanRL,
                                   genCommuteWhatWeCanRL, genCommuteWhatWeCanFL,
-                                  partitionFL, partitionRL, partitionFL',
+                                  partitionFL, partitionRL,
+                                  partitionFL', partitionRL',
                                   simpleHeadPermutationsFL, headPermutationsRL,
                                   headPermutationsFL, permutationsRL,
                                   removeSubsequenceFL, removeSubsequenceRL,
@@ -75,6 +76,33 @@ partitionFL' keepleft middle right (p :>: ps)
         (tomiddle :> p' :> right') ->
             partitionFL' keepleft (middle +<+ tomiddle :<: p') right' ps
     | otherwise = partitionFL' keepleft middle (right :<: p) ps
+
+-- | Split an 'RL' according to a predicate, using commutation as necessary,
+-- into those that satisfy the predicate and can be commuted to the right, and
+-- those that do not satisfy it and can be commuted to the left. Whatever
+-- remains stays in the middle.
+--
+-- Note that the predicate @p@ should be invariant under commutation:
+-- if @commute(x:>y)==Just(y':>x')@ then @p x == p x' && p y == p y'@.
+partitionRL' :: forall p wX wY. Commute p
+             => (forall wU wV . p wU wV -> Bool)
+             -> RL p wX wY
+             -> (FL p :> FL p :> RL p) wX wY
+partitionRL' predicate input = go input NilFL NilFL where
+  go :: RL p wA wB  -- input RL
+     -> FL p wB wC  -- the "left" patches found so far
+     -> FL p wC wD  -- the "middle" patches found so far
+     -> (FL p :> FL p :> RL p) wA wD
+  go NilRL left middle = left :> middle :> NilRL
+  go (ps :<: p) left middle
+    | predicate p = case commuteWhatWeCanFL (p :> left) of
+        (left' :> p' :> NilFL) -> case commuteFL (p' :> middle) of
+            Just (middle' :> p'') -> case go ps left' middle' of
+                (a :> b :> c) -> a :> b :> c :<: p''
+            Nothing -> go ps left' (p' :>: middle)
+        (left' :> p' :> tomiddle) ->
+            go ps left' (p' :>: tomiddle +>+ middle)
+    | otherwise = go ps (p :>: left) middle
 
 -- | Split an 'RL' according to a predicate, using commutation as necessary,
 -- into those that satisfy the predicate and can be commuted to the right, and

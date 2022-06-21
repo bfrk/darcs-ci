@@ -32,7 +32,9 @@ import Darcs.UI.Options ( (^), oid, parseFlags, (?) )
 import qualified Darcs.UI.Options.All as O
 import Darcs.Patch.Match ( patchSetMatch )
 import Darcs.Repository ( withRepository, RepoJob(..), readPristine )
-import Darcs.Repository.Match ( getPristineUpToMatch )
+import Darcs.Util.Lock ( withDelayedDir )
+import Darcs.Repository.Match ( getRecordedUpToMatch )
+import Darcs.Util.Tree.Plain( readPlainTree )
 import qualified Darcs.Util.Tree.Monad as TM
 import Darcs.Util.Path( AbsolutePath )
 import Darcs.Util.Printer ( Doc, text )
@@ -73,9 +75,22 @@ showContentsCmd fps opts args = do
     let readContents = do
           okpaths <- filterM TM.fileExists paths
           forM okpaths $ \f -> (B.concat . BL.toChunks) `fmap` TM.readFile f
+        -- Note: The two calls to execReadContents below are from
+        -- different working directories. This matters despite our
+        -- use of virtualTreeIO.
         execReadContents tree = fst `fmap` TM.virtualTreeIO readContents tree
     files <-
-      (case patchSetMatch matchFlags of
-        Just psm -> getPristineUpToMatch repository psm
-        Nothing -> readPristine repository) >>= execReadContents
+      case patchSetMatch matchFlags of
+        Just psm ->
+               withDelayedDir "show.contents" $ \_ -> do
+                 -- this call populates our temporary directory, but note that
+                 -- it does so lazily: the tree gets (partly) expanded inside
+                 -- execReadContents, so it is important that we execute the
+                 -- latter from the same working directory.
+                 getRecordedUpToMatch repository psm
+                 readPlainTree "." >>= execReadContents
+        Nothing ->
+               -- we can use the existing pristine tree because we don't modify
+               -- anything in this case
+               readPristine repository >>= execReadContents
     forM_ files $ B.hPut stdout

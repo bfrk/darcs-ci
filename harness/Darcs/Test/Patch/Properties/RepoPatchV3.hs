@@ -13,7 +13,7 @@ import Darcs.Test.TestOnly.Instance ()
 import Darcs.Patch.Commute
 import Darcs.Patch.Ident
 import Darcs.Patch.Invert
-import Darcs.Patch.Permutations ( headPermutationsRL )
+import Darcs.Patch.Permutations ( headPermutationsRL, partitionRL' )
 import Darcs.Patch.Prim ( PrimPatch )
 import Darcs.Patch.Show ( displayPatch, ShowPatchFor(..) )
 import Darcs.Patch.Witnesses.Ordered
@@ -100,9 +100,11 @@ prop_conflictsCommutePastConflictor ps p
       $ text "undone patches not found in repo:"
       $$ vcat (mapRL displayPatch (ps :<: p))
   | otherwise =
-      case commuteWhatWeCanToPostfix xids ps of
-        _ :> xs ->
-          case commuteRL (xs :> p) of
+      case partitionRL' ((`S.member` xids) . ident) ps of
+        _ :> dragged :> xs ->
+          -- If there are patches that are not directly conflicting with p,
+          -- but depend on ones that do, these must also commute with p.
+          case commuteRL (reverseFL dragged +<+ xs :> p) of
             Just (PrimP _ :> _) -> succeeded
             Just _ ->
               failed

@@ -16,7 +16,8 @@
 -- Boston, MA 02110-1301, USA.
 
 module Darcs.UI.PrintPatch
-    ( contextualPrintPatchWithPager
+    ( contextualPrintPatch
+    , contextualPrintPatchWithPager
     , printContent
     , printContentWithPager
     , printFriendly
