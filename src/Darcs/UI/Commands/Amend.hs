@@ -64,7 +64,7 @@ import Darcs.Patch ( RepoPatch, description, PrimOf
                    , effect, invert, invertFL, sortCoalesceFL
                    )
 import Darcs.Patch.Apply ( ApplyState )
-import Darcs.Patch.Depends ( contextPatches, patchSetUnion, findCommonWithThem )
+import Darcs.Patch.Depends ( contextPatches, patchSetUnion, findCommon )
 import Darcs.Patch.Info ( isTag )
 import Darcs.Patch.Named ( fmapFL_Named )
 import Darcs.Patch.PatchInfoAnd ( hopefully )
@@ -102,7 +102,7 @@ import qualified Darcs.UI.SelectChanges as S
     )
 import Darcs.Util.Exception ( clarifyErrors )
 import Darcs.Patch.Witnesses.Ordered
-    ( FL(..), RL, (:>)(..), (+>+)
+    ( Fork(..), FL(..), RL, (:>)(..), (+>+)
     , nullFL, reverseRL, reverseFL, mapFL_FL
     )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(..) )
@@ -346,7 +346,7 @@ filterNotInRemote cfg repository patchSet = do
         putInfo cfg $
           "Determining patches not in" <+> anyOfClause nirs $$ itemizeVertical 2 nirs
         Sealed thems <- patchSetUnion `fmap` mapM readNir nirs
-        in_remote :> only_ours <- return $ findCommonWithThem patchSet thems
+        Fork in_remote only_ours _ <- return $ findCommon patchSet thems
         return (in_remote :> reverseFL only_ours)
   where
     readNir loc = do

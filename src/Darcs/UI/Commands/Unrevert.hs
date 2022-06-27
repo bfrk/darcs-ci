@@ -22,7 +22,7 @@ import Darcs.Prelude
 import Control.Monad ( unless, when, void )
 
 import Darcs.Patch ( commute )
-import Darcs.Patch.Depends ( findCommonAndUncommon )
+import Darcs.Patch.Depends ( findCommon )
 import Darcs.Patch.Witnesses.Ordered ( (:>)(..), FL(..), (+>+) )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(Sealed) )
 import Darcs.Repository
@@ -135,7 +135,7 @@ unrevertCmd _ opts [] =
                       NoExternalMerge NoWantGuiPause
                       (compress ? opts) (verbosity ? opts) NoReorder
                       (diffingOpts opts)
-                      (findCommonAndUncommon us them)
+                      (findCommon us them)
   let selection_config =
         selectionConfigPrim
             First "unrevert" (patchSelOpts opts)

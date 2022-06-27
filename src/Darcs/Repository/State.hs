@@ -46,7 +46,7 @@ import Data.Ord ( comparing )
 import Data.List ( sortBy, union, delete )
 
 import System.Directory( doesFileExist, renameFile )
-import System.FilePath ( (<.>), (</>) )
+import System.FilePath ( (<.>) )
 
 import qualified Data.ByteString as B ( ByteString, concat )
 import qualified Data.ByteString.Char8 as BC ( pack, unpack )
@@ -90,8 +90,7 @@ import Darcs.Repository.Prefs ( filetypeFunction, isBoring )
 import Darcs.Repository.Pristine ( readPristine )
 import Darcs.Repository.Diff ( treeDiff )
 import Darcs.Repository.Paths
-    ( patchesDirPath
-    , indexPath
+    ( indexPath
     , indexInvalidPath
     )
 
@@ -443,13 +442,10 @@ readPending :: (RepoPatch p, ApplyState p ~ Tree)
 readPending repo = do
   pristine <- readPristine repo
   Sealed pending <- Pending.readPending repo
-  catch ((\t -> (t, seal pending)) <$> applyToTree pending pristine) $
-    \(err :: IOException) -> do
-       putStrLn $ "Yikes, pending has conflicts! " ++ show err
-       putStrLn "Stashing the buggy pending as _darcs/patches/pending_buggy"
-       renameFile (patchesDirPath </> "pending")
-                  (patchesDirPath </> "pending_buggy")
-       return (pristine, seal NilFL)
+  catch ((\t -> (t, seal pending)) <$> applyToTree pending pristine) $ \(e::IOException) -> do
+    fail $
+      "Cannot apply pending patch, please run `darcs repair`\n"
+      ++ show e
 
 -- | Open the index or re-create it in case it is invalid or non-existing.
 readIndex :: (RepoPatch p, ApplyState p ~ Tree)
@@ -465,7 +461,9 @@ readIndex repo = do
 internalUpdateIndex :: (RepoPatch p, ApplyState p ~ Tree)
             => Repository rt p wU wR -> IO Index
 internalUpdateIndex repo = do
-  pris <- readPristineAndPending repo
+  pris <-
+    readPristineAndPending repo
+    `catch` \(_::IOException) -> readPristine repo
   idx <- updateIndexFrom indexPath (Just . darcsTreeHash) pris
   removeFileMayNotExist indexInvalidPath
   return idx

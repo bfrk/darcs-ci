@@ -74,12 +74,15 @@ import Darcs.Patch.Apply( ApplyState )
 import Darcs.Patch.Set ( PatchSet, Origin, emptyPatchSet, SealedPatchSet )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(..), seal )
 import Darcs.Patch.Witnesses.Ordered
-    ( (:>)(..), (:\/:)(..), FL(..), Fork(..)
+    ( (:>)(..), FL(..), Fork(..)
     , mapFL, nullFL, mapFL_FL )
 import Darcs.Patch.Permutations ( partitionFL )
 import Darcs.Repository.Prefs ( addToPreflist, addRepoSource, getPreflist, showMotd )
-import Darcs.Patch.Depends ( findUncommon, findCommonAndUncommon,
-                             patchSetIntersection, patchSetUnion )
+import Darcs.Patch.Depends
+    ( findCommon
+    , patchSetIntersection
+    , patchSetUnion
+    )
 import Darcs.UI.ApplyPatches ( PatchApplier(..), StandardPatchApplier(..) )
 import Darcs.UI.Completion ( prefArgs )
 import Darcs.UI.Commands.Util ( checkUnrelatedRepos, getUniqueDPatchName )
@@ -274,8 +277,8 @@ fetchPatches o opts unfixedrepodirs@(_:_) jobname repository = do
   us <- readPatches repository
   checkUnrelatedRepos (parseFlags O.allowUnrelatedRepos opts) us them
 
-  Fork common us' them' <- return $ findCommonAndUncommon us them
-  _   :\/: compl' <- return $ findUncommon us compl
+  Fork common us' them' <- return $ findCommon us them
+  Fork _ _ compl' <- return $ findCommon us compl
 
   let avoided = mapFL info compl'
   ps :> _ <- return $ partitionFL (not . (`elem` avoided) . info) them'

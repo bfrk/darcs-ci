@@ -5,11 +5,11 @@ module Darcs.Patch.Ident
     , SignedId(..)
     , StorableId(..)
     , IdEq2(..)
-    , merge2FL
     , fastRemoveFL
     , fastRemoveRL
     , fastRemoveSubsequenceRL
     , findCommonFL
+    , findCommonRL
     , commuteToPrefix
     -- * Properties
     , prop_identInvariantUnderCommute
@@ -22,13 +22,11 @@ import qualified Data.Set as S
 import Darcs.Prelude
 
 import Darcs.Patch.Commute ( Commute, commute, commuteFL, commuteRL )
-import Darcs.Patch.Merge ( Merge, mergeFL )
-import Darcs.Patch.Permutations ( partitionFL' )
+import Darcs.Patch.Permutations ( partitionFL', partitionRL' )
 import Darcs.Patch.Show ( ShowPatchFor )
 import Darcs.Patch.Witnesses.Eq ( Eq2(..), EqCheck(..), isIsEq )
 import Darcs.Patch.Witnesses.Ordered
-    ( (:/\:)(..)
-    , (:>)(..)
+    ( (:>)(..)
     , (:\/:)(..)
     , FL(..)
     , RL(..)
@@ -37,6 +35,7 @@ import Darcs.Patch.Witnesses.Ordered
     , (+>>+)
     , mapFL
     , mapRL
+    , reverseFL
     , reverseRL
     )
 import Darcs.Patch.Witnesses.Unsafe ( unsafeCoercePEnd, unsafeCoercePStart )
@@ -143,35 +142,6 @@ instance (Commute p, Ident p) => IdEq2 (FL p) where
     | S.fromList (mapFL ident ps) == S.fromList (mapFL ident qs) = unsafeCoercePStart IsEq
     | otherwise = NotEq
 
--- | This function is similar to 'merge', but with one important
--- difference: 'merge' works on patches for which there is not necessarily a
--- concept of identity (e.g. primitive patches, conflictors, etc). Thus it does
--- not even try to recognize patches that are common to both sequences. Instead
--- these are passed on to the Merge instance for single patches. This instance
--- may handle duplicate patches by creating special patches (Duplicate,
--- Conflictor).
--- 
--- We do not want this to happen for named patches, or in general for patches
--- with an identity. Instead, we want to
--- /discard/ one of the two duplicates, retaining only one copy. This is done
--- by the fastRemoveFL calls below. We call mergeFL only after we have ensured
--- that the head of the left hand side does not occur in the right hand side.
-merge2FL :: (Commute p, Merge p, Ident p)
-         => FL p wX wY
-         -> FL p wX wZ
-         -> (FL p :/\: FL p) wY wZ
-merge2FL xs NilFL = NilFL :/\: xs
-merge2FL NilFL ys = ys :/\: NilFL
-merge2FL xs (y :>: ys)
-  | Just xs' <- fastRemoveFL y xs = merge2FL xs' ys
-merge2FL (x :>: xs) ys
-  | Just ys' <- fastRemoveFL x ys = merge2FL xs ys'
-  | otherwise =
-    case mergeFL (x :\/: ys) of
-      ys' :/\: x' ->
-        case merge2FL xs ys' of
-          ys'' :/\: xs' -> ys'' :/\: (x' :>: xs')
-
 {-# INLINABLE fastRemoveFL #-}
 -- | Remove a patch from an FL of patches with an identity. The result is
 -- 'Just' whenever the patch has been found and removed and 'Nothing'
@@ -232,7 +202,7 @@ fastRemoveSubsequenceRL (xs :<: x) ys =
 
 -- | Find the common and uncommon parts of two lists that start in a common
 -- context, using patch identity for comparison. Of the common patches, only
--- one is retained, the other is discarded, similar to 'merge2FL'.
+-- one is retained, the other is discarded.
 findCommonFL :: (Commute p, Ident p)
              => FL p wX wY
              -> FL p wX wZ
@@ -250,6 +220,24 @@ findCommonFL xs ys =
   where
     commonIds =
       S.fromList (mapFL ident xs) `S.intersection` S.fromList (mapFL ident ys)
+
+findCommonRL :: (Commute p, Ident p)
+             => RL p wX wY
+             -> RL p wX wZ
+             -> Fork (RL p) (RL p) (RL p) wX wY wZ
+findCommonRL xs ys =
+  case partitionRL' (not . (`S.member` commonIds) . ident) xs of
+    cxs :> NilFL :> xs' ->
+      case partitionRL' (not . (`S.member` commonIds) . ident) ys of
+        cys :> NilFL :> ys' ->
+          case cxs =\^/= cys of
+            NotEq -> error "common patches aren't equal"
+            IsEq -> Fork (reverseFL cxs) xs' ys'
+        _ -> error "failed to commute common patches (rhs)"
+    _ -> error "failed to commute common patches (lhs)"
+  where
+    commonIds =
+      S.fromList (mapRL ident xs) `S.intersection` S.fromList (mapRL ident ys)
 
 -- | Try to commute all patches matching any of the 'PatchId's in the set to the
 -- head of an 'FL', i.e. backwards in history.

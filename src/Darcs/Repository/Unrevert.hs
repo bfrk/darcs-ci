@@ -11,12 +11,18 @@ import Darcs.Prelude
 import Darcs.Patch ( PrimOf, RepoPatch, commuteRL )
 import Darcs.Patch.Apply ( ApplyState )
 import Darcs.Patch.Bundle ( interpretBundle, makeBundle, parseBundle )
-import Darcs.Patch.Depends ( mergeThem, removeFromPatchSet )
+import Darcs.Patch.Depends ( patchSetMerge, removeFromPatchSet )
 import Darcs.Patch.Info ( patchinfo )
 import Darcs.Patch.Named ( infopatch )
 import Darcs.Patch.PatchInfoAnd ( PatchInfoAnd, hopefully )
 import Darcs.Patch.Set ( Origin, PatchSet, SealedPatchSet )
-import Darcs.Patch.Witnesses.Ordered ( (:>)(..), FL(..), lengthFL, reverseFL )
+import Darcs.Patch.Witnesses.Ordered
+    ( (:/\:)(..)
+    , (:>)(..)
+    , FL(..)
+    , lengthFL
+    , reverseFL
+    )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(Sealed) )
 import Darcs.Repository.Paths ( tentativeUnrevertPath, unrevertPath )
 import Darcs.Util.Exception ( catchDoesNotExistError, ifDoesNotExistError )
@@ -76,18 +82,18 @@ removeFromUnrevertContext ref ps =
     debugMessage $
       "Removing " ++ show (lengthFL ps) ++ " patches in removeFromUnrevertContext"
     Sealed bundle_ps <- bundle_to_patchset bundle
-    case mergeThem ref bundle_ps of
-      Sealed (h_us :>: NilFL) -> do
-        case commuteRL (reverseFL ps :> h_us) of
+    case patchSetMerge ref bundle_ps of
+      (unrevert :>: NilFL) :/\: _ -> do
+        case commuteRL (reverseFL ps :> unrevert) of
           Nothing -> unrevert_impossible
-          Just (us' :> _) ->
+          Just (unrevert' :> _) ->
             case removeFromPatchSet ps ref of
               Nothing -> unrevert_impossible
               Just common -> do
                 debugMessage "Have now found the new context..."
-                bundle' <- makeBundle Nothing common (hopefully us' :>: NilFL)
+                bundle' <- makeBundle Nothing common (hopefully unrevert' :>: NilFL)
                 writeDocBinFile tentativeUnrevertPath bundle'
-      Sealed _ -> return () -- TODO I guess this should be an error call
+      _ -> return () -- TODO I guess this should be an error call
     debugMessage "Done adjusting the context of the unrevert changes"
   where
     unrevert_impossible = do

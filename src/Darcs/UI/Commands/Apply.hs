@@ -69,7 +69,7 @@ import Darcs.UI.External
     ( verifyPS
     )
 import Darcs.UI.Email ( readEmail )
-import Darcs.Patch.Depends ( findCommonAndUncommon )
+import Darcs.Patch.Depends ( findCommon )
 import Darcs.UI.ApplyPatches ( PatchApplier(..), StandardPatchApplier(..), PatchProxy )
 import Darcs.UI.SelectChanges
     ( WhichChanges(..)
@@ -211,7 +211,7 @@ applyCmdCommon
 applyCmdCommon patchApplier patchProxy opts bundle repository = do
   us <- readPatches repository
   Sealed them <- either fail return =<< getPatchBundle opts us bundle
-  Fork common us' them' <- return $ findCommonAndUncommon us them
+  Fork common us' them' <- return $ findCommon us them
 
   -- all patches in them' need to be available; check that
   let check :: PatchInfoAnd p wX wY -> Maybe PatchInfo
