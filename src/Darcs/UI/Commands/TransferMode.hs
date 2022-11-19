@@ -20,10 +20,10 @@ module Darcs.UI.Commands.TransferMode ( transferMode ) where
 
 import Darcs.Prelude
 
+import System.Directory ( withCurrentDirectory )
 import Control.Exception ( catch )
 import System.IO ( stdout, hFlush )
 
-import Darcs.Util.File ( withCurrentDirectory )
 import Darcs.Util.Exception ( prettyException )
 import Darcs.UI.Commands ( DarcsCommand(..), withStdOpts, nodefaults, amInRepository )
 import Darcs.UI.Completion ( noArgs )
@@ -82,11 +82,11 @@ transfer = do 'g':'e':'t':' ':fn <- getLine
               x <- readfile fn
               case x of
                 Right c -> do putStrLn $ "got " ++ fn
-                              print $ B.length c
+                              putStrLn $ show $ B.length c
                               B.hPut stdout c
                               hFlush stdout
                 Left e -> do putStrLn $ "error " ++ fn
-                             print e
+                             putStrLn $ show e
                              hFlush stdout
               transfer
 

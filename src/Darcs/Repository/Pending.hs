@@ -22,7 +22,6 @@ module Darcs.Repository.Pending
     , writeTentativePending
     , siftForPending
     , tentativelyRemoveFromPending
-    , tentativelyRemoveFromPW
     , revertPending
     , finalizePending
     , setTentativePending
@@ -33,51 +32,45 @@ import Darcs.Prelude
 import Control.Applicative
 import System.Directory ( copyFile, renameFile )
 
-import Darcs.Patch
-    ( PrimOf
-    , RepoPatch
-    , PrimPatch
-    , readPatch
-    )
-import Darcs.Patch.Apply ( ApplyState )
+import Darcs.Patch ( PrimOf, PrimPatch, RepoPatch, commuteFL, readPatch )
 import Darcs.Patch.Commute ( Commute(..) )
-import Darcs.Patch.Invert ( Invert(..) )
-import Darcs.Patch.Permutations
-    ( removeFL
-    , commuteWhatWeCanFL
-    , commuteWhatWeCanRL
-    )
+import Darcs.Patch.Invert ( invertFL )
+import Darcs.Patch.Permutations ( partitionFL )
 import Darcs.Patch.Prim
-    ( PrimSift(siftForPending)
-    , PrimCoalesce(primDecoalesce)
+    ( PrimCoalesce(tryToShrink)
+    , PrimSift(primIsSiftable)
+    , coalesce
     )
-import Darcs.Patch.Progress (progressFL)
-import Darcs.Util.Parser ( Parser )
+import Darcs.Patch.Progress ( progressFL )
 import Darcs.Patch.Read ( ReadPatch(..), bracketedFL )
 import Darcs.Patch.Show ( ShowPatchBasic(..), ShowPatchFor(ForStorage) )
-import Darcs.Patch.Show ( displayPatch )
-import Darcs.Patch.Witnesses.Eq ( Eq2(..) )
+import Darcs.Patch.Witnesses.Maybe ( Maybe2(..) )
 import Darcs.Patch.Witnesses.Ordered
-    ( RL(..), FL(..), (+>+), (+>>+), (:>)(..), mapFL, reverseFL )
-import Darcs.Patch.Witnesses.Sealed ( Sealed(Sealed), mapSeal, unseal )
+    ( FL(..)
+    , RL(..)
+    , mapFL
+    , (+>+)
+    , (:>)(..)
+    )
+import Darcs.Patch.Witnesses.Sealed ( Sealed(..), mapSeal, unseal )
 
 import Darcs.Repository.Flags ( UpdatePending(..) )
 import Darcs.Repository.InternalTypes
     ( AccessType(..)
-    , SAccessType(..)
     , Repository
-    , unsafeCoerceR
+    , SAccessType(..)
     , repoAccessType
-    , withRepoDir
     , unsafeStartTransaction
+    , unsafeCoerceR
+    , withRepoDir
     )
 import Darcs.Repository.Paths ( pendingPath, tentativePendingPath )
 
 import Darcs.Util.ByteString ( gzReadFilePS )
-import Darcs.Util.Exception ( ifDoesNotExistError, catchDoesNotExistError )
-import Darcs.Util.Lock  ( writeDocBinFile )
-import Darcs.Util.Printer ( Doc, ($$), text, vcat, renderString )
-import Darcs.Util.Tree ( Tree )
+import Darcs.Util.Exception ( catchDoesNotExistError, ifDoesNotExistError )
+import Darcs.Util.Lock ( writeDocBinFile )
+import Darcs.Util.Parser ( Parser )
+import Darcs.Util.Printer ( Doc, text, vcat, ($$) )
 
 
 tentativeSuffix :: String
@@ -100,8 +93,8 @@ readTentativePending = readPendingFile tentativeSuffix
 -- directory. Unsafe!
 readPendingFile :: ReadPatch prim => String -> Repository rt p wU wR
                 -> IO (Sealed (FL prim wX))
-readPendingFile suffix _ =
-  ifDoesNotExistError (Sealed NilFL) $ do
+readPendingFile suffix repo =
+  ifDoesNotExistError (Sealed NilFL) $ withRepoDir repo $ do
     let filepath = pendingPath ++ suffix
     raw <- gzReadFilePS filepath
     case readPatch raw of
@@ -147,135 +140,79 @@ writePatch :: ShowPatchBasic p => FilePath -> p wX wY -> IO ()
 writePatch f p = writeDocBinFile f $ showPatch ForStorage p <> text "\n"
 
 -- | Remove as much as possible of the given list of prim patches from the
--- pending patch. The "as much as possible" is due to --look-for-* options
--- which cause changes that normally must be explicitly done by the user (such
--- as add, move, and replace) to be inferred from the the diff between
--- pristine and working. These changes cannot be removed from pending because
--- they have never been part of it.
+-- pending patch. Used by record and amend to update pending.
 --
--- This function is used by Darcs whenever it adds a patch to the repository
--- (eg. with apply or record). Think of it as one part of transferring patches
--- from pending to somewhere else.
-tentativelyRemoveFromPending :: forall p wU wR wO. RepoPatch p
-                             => Repository 'RW p wU wR
-                             -> FL (PrimOf p) wO wR
-                             -> IO ()
-tentativelyRemoveFromPending r ps = do
-    Sealed pend <- readTentativePending (unsafeCoerceR r :: Repository 'RW p wU wO)
-    Sealed newpend <-
-        return $ updatePending (progressFL "Removing from pending:" ps) pend NilFL
-    writeTentativePending r newpend
+-- This is a highly non-trivial operation, since --look-for-* options cause
+-- changes that are normally done explicitly by the user (such as add, move,
+-- and replace) to be inferred from the the diff between pristine and working.
+-- Furthermore, all these changes are coalesced before we present them to the
+-- user to select for recording. Finally, the user can record modified hunks
+-- due to hunk splitting. We have to infer from the recorded changes and the
+-- old pending which parts of pending is "contained" in the recorded changes
+-- and which is not. See 'updatePending' for the details of how to do that.
+tentativelyRemoveFromPending
+  :: RepoPatch p
+  => Repository 'RW p wU wR
+  -> FL (PrimOf p) wO wR -- ^ changes we just recorded
+  -> IO ()
+tentativelyRemoveFromPending r changes = do
+  Sealed pending <- readTentativePending (unsafeCoerceR r)
+  let inverted_changes = invertFL (progressFL "Removing from pending:" changes)
+  unseal (writeTentativePending r) (updatePendingRL inverted_changes pending)
 
--- | Similar to 'tentativelyRemoveFromPending', but also takes the (old)
--- difference between pending and working into account. It is used by amend and
--- record commands to adjust the pending patch. See the docs for
--- 'updatePending' below for details.
-tentativelyRemoveFromPW :: forall p wR wO wP wU. RepoPatch p
-                        => Repository 'RW p wU wR
-                        -> FL (PrimOf p) wO wR -- added repo changes
-                        -> FL (PrimOf p) wO wP -- O = old recorded state
-                        -> FL (PrimOf p) wP wU -- P = (old) pending state
-                        -> IO ()
-tentativelyRemoveFromPW r changes pending working = do
-    Sealed pending' <- return $
-        updatePending (progressFL "Removing from pending:" changes) pending working
-    writeTentativePending r pending'
+-- | Iterate 'updatePending' for all recorded changes.
+updatePendingRL :: PrimPatch p => RL p wR wO -> FL p wO wP -> Sealed (FL p wR)
+updatePendingRL NilRL ys = Sealed ys
+updatePendingRL (xs :<: x) ys = unseal (updatePendingRL xs) (updatePending x ys)
 
-{- |
-@'updatePending' changes pending working@ updates @pending@ by removing the
-@changes@ we added to the repository. If primitive patches were atomic, we
-could assume that @changes@ is a subset of @pending +>+ working@, but alas,
-they are not: before we select changes we coalesce them; and during
-selection we can again arbitrarily split them (though currently this is
-limited to hunks).
+{- | Given an (inverted) single recorded change @x@ and the old pending
+@ys@, for each prim @y@ in pending either cancel @x@ against @y@, or
+coalesce them. If they coalesce, either commute the result past pending, or
+continue with the rest of pending. If coalescing fails, commute @x@ forward
+and try again with the next prim from pending. Repeat until we reach the end
+of pending or @x@ becomes stuck, in which case we keep it there.
 
-The algorithm is as follows. For each @x@ in @changes@ we first try to
-remove it from @pending@ as is. If this fails, we commute it past @pending@,
-pushing any (reverse) dependencies with it, and check if we can remove the
-result from @working@.
+The idea of this algorithm is best explained in terms of an analogy with
+arithmetic, where coalescing is addition. Let's say we start out with @a@ in
+pending and @b@ in working and record the coalesced @a+b@. We now want to
+remove (only) the @a@ from pending. To do that we coalesce @-(a+b)+a@ and
+the result (if successful) is @-b@. If this can be commuted past pending, we
+are done: the part that came from pending (@a@) is removed and the other
+part cancels against what remains in working.
 
-If prim patches were atomic this check would always succeed and we would be
-done now. But due to coalescing and splitting of prims it can fail, so we
-must try harder: we now try to decoalesce the commuted changes from
-@working@. If that fails, too, then we know that our @x@ originated from
-@pending@. So we backtrack and decoalesce @x@ from @pending@. This final
-step must not fail. If it does, then we have a bug because it means we
-recorded a change that cannot be removed from the net effect of @pending@
-and @working@.
+However, we should also guard against the possibility that we recorded a
+change that was coalesced from more than one prim in pending. For instance,
+suppose we recorded @a+b+c@, where @a@ and @b@ are both from pending and @c@
+is form working; after coalescing with @a@ we would be left with
+@-(a+b+c)+a=-(b+c)@ which would then be stuck against the remaining @b@.
+This is why we continue coalescing, giving us @-(b+c)+b=-c@ which we again
+try to commute out etc.
+
+Finally, note that a change can legitimately be stuck in pending i.e. it can
+neither be coalesced nor commuted further. For instance, if we have a hunk
+in pending and some other prim that depends on it, such as a replace, and
+the user records (only) a split-off version of the hunk but not the replace.
+This will coalesce with the remaining hunk but then be stuck at the replace.
+This is how it should be and thus keeping it there is the correct behavior.
 -}
-updatePending :: (PrimPatch p)
-              => FL p wA wB -> FL p wA wC -> FL p wC wD -> Sealed (FL p wB)
--- no changes to the repo => cancel patches in pending whose inverse are in working
-updatePending NilFL ys zs = removeRLFL (reverseFL ys) zs
--- pending is empty => keep it that way
-updatePending _ NilFL _ = Sealed NilFL
--- no working changes =>
---  just prepend inverted repo changes and rely on sifting to clean up pending
-updatePending xs ys NilFL = Sealed (invert xs +>+ ys)
--- x can be removed from pending => continue with the rest
-updatePending (x:>:xs) ys zs | Just ys' <- removeFL x ys = updatePending xs ys' zs
--- x and its reverse dependencies can be commuted through pending
--- *and* the result can be removed or decoalesced from working
-updatePending (x:>:xs) ys zs
-  | ys' :> ix' :> deps <- commuteWhatWeCanFL (invert x :> ys)
-  , Just zs' <- removeFromWorking (invert (ix':>:deps)) zs = updatePending xs ys' zs'
-  where
-    removeFromWorking as bs = removeAllFL as bs <|> decoalesceAllFL bs as
--- decoalesce x from ys and continue with the rest
-updatePending (x:>:xs) ys zs =
-  case decoalesceFL ys x of
-    Just ys' -> updatePending xs ys' zs
+
+updatePending :: PrimCoalesce p => p wR wO -> FL p wO wP -> Sealed (FL p wR)
+updatePending _ NilFL = Sealed NilFL
+updatePending x (y :>: ys) =
+  case coalesce (x :> y) of
+    Just Nothing2 -> Sealed ys -- cancelled out
+    Just (Just2 y') ->
+      case commuteFL (y' :> ys) of
+        Just (ys' :> _) -> Sealed ys' -- drop result if we can commute it past
+        Nothing -> updatePending y' ys -- continue coalescing with with y'
     Nothing ->
-      error $ renderString
-        $ text "cannot eliminate repo change:"
-        $$ displayPatch x
-        $$ text "from pending:"
-        $$ vcat (mapFL displayPatch ys)
-        $$ text "or working:"
-        $$ vcat (mapFL displayPatch zs)
-
--- | Remove as many patches as possible of an 'RL' from an adjacent 'FL'.
-removeRLFL :: (Commute p, Invert p, Eq2 p)
-           => RL p wA wB -> FL p wB wC -> Sealed (FL p wA)
-removeRLFL (ys:<:y) zs
-  | Just zs' <- removeFL (invert y) zs = removeRLFL ys zs'
-  | otherwise = case commuteWhatWeCanRL (ys :> y) of
-      deps :> y' :> ys' -> mapSeal ((deps:<:y') +>>+) $ removeRLFL ys' zs
-removeRLFL NilRL _ = Sealed NilFL
-
--- | Remove all patches of the first 'FL' from the second 'FL' or fail.
-removeAllFL :: (Commute p, Invert p, Eq2 p)
-            => FL p wA wB -> FL p wA wC -> Maybe (FL p wB wC)
-removeAllFL (y:>:ys) zs
-  | Just zs' <- removeFL y zs = removeAllFL ys zs'
-  | otherwise = Nothing
-removeAllFL NilFL zs = Just zs
-
--- | Decoalesce all patches in the second 'FL' from the first 'FL' or fail.
-decoalesceAllFL :: (Commute p, Invert p, PrimCoalesce p)
-                => FL p wA wC -> FL p wA wB -> Maybe (FL p wB wC)
-decoalesceAllFL zs (y:>:ys)
-  | Just zs' <- decoalesceFL zs y = decoalesceAllFL zs' ys
-  | otherwise = Nothing
-decoalesceAllFL zs NilFL = Just zs
-
--- | Decoalesce (subtract) a single patch from an 'FL' by trying to
--- decoalesce it with every element until it succeeds or we cannot
--- commute it any further.
-decoalesceFL :: (Commute p, Invert p, {- Eq2 p,  -}PrimCoalesce p)
-             => FL p wA wC -> p wA wB -> Maybe (FL p wB wC)
-decoalesceFL NilFL y = Just (invert y :>: NilFL)
-decoalesceFL (z :>: zs) y
-  | Just z' <- primDecoalesce z y = Just (z' :>: zs)
-  | otherwise = do
-      z' :> iy' <- commute (invert y :> z)
-      zs' <- decoalesceFL zs (invert iy')
-      return (z' :>: zs')
+      case commute (x :> y) of
+        Just (y' :> x') -> mapSeal (y' :>:) (updatePending x' ys)
+        Nothing -> Sealed (x :>: y :>: ys) -- x is stuck, keep it there
 
 -- | Replace the pending patch with the tentative pending, unless
 -- we get @NoUpdatePending@.
-finalizePending :: (RepoPatch p, ApplyState p ~ Tree)
-                => Repository 'RW p wU wR
+finalizePending :: Repository 'RW p wU wR
                 -> UpdatePending
                 -> IO ()
 finalizePending _ NoUpdatePending = return ()
@@ -298,3 +235,34 @@ setTentativePending :: forall p wU wR wP. RepoPatch p
                     -> IO ()
 setTentativePending repo ps = do
     withRepoDir repo $ writeTentativePending repo ps
+
+-- | Simplify the candidate pending patch through a combination of looking
+-- for self-cancellations (sequences of patches followed by their inverses),
+-- coalescing, and getting rid of any hunk or binary patches we can commute
+-- out the back.
+--
+-- More abstractly, for an argument @p@, pristine state @R@, and working
+-- state @U@, define
+--
+-- > unrecorded p = p +>+ diff (pureApply p R) U
+--
+-- Then the resulting sequence @p'@ must maintain that equality, i.e.
+--
+-- > unrecorded p = unrecorded (siftForPending p)
+--
+-- while trying to "minimize" @p@.
+siftForPending
+  :: (PrimCoalesce prim, PrimSift prim) => FL prim wX wY -> Sealed (FL prim wX)
+siftForPending ps =
+  -- Alternately 'sift' and 'tryToShrink' until shrinking no longer reduces
+  -- the length of the sequence. Here, 'sift' means to commute siftable
+  -- patches to the end of the sequence and then drop them.
+  case sift ps of
+    Sealed sifted ->
+      case tryToShrink sifted of
+        Nothing -> Sealed sifted
+        Just shrunk -> siftForPending shrunk
+  where
+    sift xs =
+      case partitionFL (not . primIsSiftable) xs of
+        (not_siftable :> deps :> _) -> Sealed (not_siftable +>+ deps)

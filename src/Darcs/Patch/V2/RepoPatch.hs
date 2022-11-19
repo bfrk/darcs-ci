@@ -60,7 +60,7 @@ import Darcs.Patch.Apply ( Apply(..) )
 import Darcs.Patch.Inspect ( PatchInspect(..) )
 import Darcs.Patch.Permutations ( commuteWhatWeCanFL, commuteWhatWeCanRL
                                 , genCommuteWhatWeCanRL, removeRL, removeFL
-                                , removeSubsequenceFL )
+                                , removeSubsequenceFL, (=\~/=), (=/~\=) )
 import Darcs.Patch.Show
     ( ShowPatch(..), ShowPatchBasic(..), ShowContextPatch(..), ShowPatchFor(..)
     , displayPatch )
@@ -504,12 +504,12 @@ instance PrimPatch prim => Eq2 (RepoPatchV2 prim) where
     (Normal x) =\/= (Normal y) = x =\/= y
     (Conflictor cx xx x) =\/= (Conflictor cy yy y)
         | map commuteOrAddIXX cx `eqSet` map commuteOrAddIYY cy
-          && commuteOrAddIXX x == commuteOrAddIYY y = xx =/\= yy
+          && commuteOrAddIXX x == commuteOrAddIYY y = reverseFL xx =/~\= reverseFL yy
       where
           commuteOrAddIXX = commutePrimsOrAddToCtx (invertFL xx)
           commuteOrAddIYY = commutePrimsOrAddToCtx (invertFL yy)
     (InvConflictor cx xx x) =\/= (InvConflictor cy yy y)
-        | cx `eqSet` cy && x == y = xx =\/= yy
+        | cx `eqSet` cy && x == y = xx =\~/= yy
     _ =\/= _ = NotEq
 
 eqSet :: Eq a => [a] -> [a] -> Bool
@@ -861,11 +861,11 @@ instance PrimPatch prim => ShowPatchBasic (RepoPatchV2 prim) where
 
 instance PrimPatch prim => ShowContextPatch (RepoPatchV2 prim) where
     showContextPatch f (Normal p) = showContextPatch f p
-    showContextPatch f p = return $ showPatch f p
+    showContextPatch f p = apply p >> return (showPatch f p)
 
 instance PrimPatch prim => ShowPatch (RepoPatchV2 prim) where
     summary = plainSummary
-    summaryFL = plainSummary
+    summaryFL = plainSummary -- FIXME shouldn't this be plainSummaryFL ?
     thing _ = "change"
 
 instance PrimPatch prim => ReadPatch (RepoPatchV2 prim) where
@@ -934,8 +934,10 @@ instance PrimPatch prim => Effect (RepoPatchV2 prim) where
     effect (InvConflictor _ e _) = e
 
 instance IsHunk prim => IsHunk (RepoPatchV2 prim) where
-    isHunk rp = do Normal p <- return rp
-                   isHunk p
+    type ExtraData (RepoPatchV2 prim) = ExtraData prim
+    isHunk (Normal p) = isHunk p
+    isHunk _ = Nothing
+    fromHunk = Normal . fromHunk
 
 displayNons :: (PatchListFormat p, ShowPatchBasic p, PrimPatchBase p) =>
                [Non p wX] -> Doc

@@ -4,14 +4,30 @@ module Darcs.Patch.V3 ( RepoPatchV3 ) where
 import Darcs.Prelude
 
 import Darcs.Patch.Annotate ()
+import Darcs.Patch.Conflict
+    ( Conflict(..)
+    , ConflictDetails
+    , Unravelled
+    , mangleOrFail
+    , mapConflictDetails
+    )
 import Darcs.Patch.FromPrim ( FromPrim(..) )
+import Darcs.Patch.Prim.Class ( PrimPatch )
 import Darcs.Patch.Prim.Named
-  ( PrimPatchId
-  , anonymousNamedPrim, namedPrim, positivePrimPatchIds
-  )
-import Darcs.Patch.Witnesses.Ordered ( FL(..) )
+    ( NamedPrim
+    , PrimPatchId
+    , anonymousNamedPrim
+    , namedPrim
+    , positivePrimPatchIds
+    )
+import Darcs.Patch.Prim.WithName ( wnPatch )
 import qualified Darcs.Patch.V3.Core as Core ( RepoPatchV3(..) )
-import Darcs.Patch.V3.Resolution ()
+import Darcs.Patch.V3.Resolution
+    ( conflictingAlternatives
+    , patchIsConflicted
+    )
+import Darcs.Patch.Witnesses.Sealed ( mapSeal )
+import Darcs.Patch.Witnesses.Ordered ( FL(..), mapFL_FL )
 
 type RepoPatchV3 = Core.RepoPatchV3 PrimPatchId
 
@@ -26,3 +42,13 @@ instance FromPrim (RepoPatchV3 prim) where
       go _ NilFL = NilFL
       go (pid:pids) (p:>:ps) = fromPrim pid p :>: go pids ps
       go [] _ = error "positivePrimPatchIds should return an infinite list"
+
+instance PrimPatch prim => Conflict (RepoPatchV3 prim) where
+  isConflicted = patchIsConflicted
+  resolveConflicts context =
+      map resolveOne . conflictingAlternatives context
+    where
+      resolveOne :: Unravelled (NamedPrim prim) wX -> ConflictDetails prim wX
+      resolveOne
+        | False = mapConflictDetails wnPatch . mangleOrFail
+        | True = mangleOrFail . map (mapSeal (mapFL_FL wnPatch))

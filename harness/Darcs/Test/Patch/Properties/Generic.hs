@@ -15,6 +15,7 @@
 --  the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 --  Boston, MA 02110-1301, USA.
 
+{-# LANGUAGE ViewPatterns #-}
 module Darcs.Test.Patch.Properties.Generic
     ( invertInvolution
     , inverseComposition
@@ -33,6 +34,7 @@ module Darcs.Test.Patch.Properties.Generic
     , mergeArgumentsConsistent
     , coalesceEffectPreserving
     , coalesceCommute
+    , notCoalesceAndCommute
     , PatchProperty
     , MergeProperty
     , SequenceProperty
@@ -71,12 +73,15 @@ import Darcs.Patch.Read ( ReadPatch )
 import Darcs.Patch.Show
     ( ShowPatchBasic, displayPatch, showPatch, ShowPatchFor(ForStorage) )
 import Darcs.Patch ()
-import Darcs.Patch.Apply ( Apply, ApplyState )
+import Darcs.Patch.Apply ( ApplyState, ObjectIdOfPatch )
 import Darcs.Patch.Commute ( Commute, commute, commuteFL )
 import Darcs.Patch.CommuteFn ( CommuteFn )
+import Darcs.Patch.FileHunk
 import Darcs.Patch.Merge ( Merge(merge) )
 import Darcs.Patch.Read ( readPatch )
+import Darcs.Test.Patch.RepoModel ( RepoApply )
 import Darcs.Patch.Invert ( Invert(..) )
+import Darcs.Patch.Prim (PrimCoalesce(..) )
 import Darcs.Patch.Witnesses.Eq ( Eq2(..), EqCheck(..) )
 import Darcs.Patch.Witnesses.Ordered
     ( (:/\:)(..)
@@ -84,7 +89,6 @@ import Darcs.Patch.Witnesses.Ordered
     , (:\/:)(..)
     , FL(..)
     , RL(..)
-    , eqFL
     , mapFL
     )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(..) )
@@ -117,7 +121,7 @@ inverseComposition (Pair (a :> b)) =
   let ab = a:>:b:>:NilFL
       iab = invert ab
       ibia = invert b:>:invert a:>:NilFL
-  in case eqFL iab ibia of
+  in case iab =\/= ibia of
     IsEq -> succeeded
     NotEq ->
       failed $ redText "ab^ /= b^a^, where"
@@ -129,10 +133,10 @@ inverseComposition (Pair (a :> b)) =
 invertRollback
   :: ( ApplyState p ~ RepoState model
      , Invert p
-     , Apply p
      , ShowPatchBasic p
      , RepoModel model
      , model ~ ModelOf p
+     , RepoApply p
      )
   => WithState p wA wB
   -> TestResult
@@ -227,12 +231,12 @@ commuteInverses c (Pair (x :> y)) =
 
 -- | effect preserving  AB <--> B'A' then effect(AB) = effect(B'A')
 effectPreserving
-  :: ( Apply p
-     , MightBeEmptyHunk p
+  :: ( MightBeEmptyHunk p
      , RepoModel model
      , model ~ ModelOf p
      , ApplyState p ~ RepoState model
      , ShowPatchBasic p
+     , RepoApply p
      )
   => CommuteFn p p
   -> WithState (Pair p) wA wB
@@ -505,9 +509,10 @@ mergeCommute (x :\/: y) =
 
 -- | coalesce effect preserving
 coalesceEffectPreserving
-            :: TestablePrim prim
-            => (forall wX wY . (prim :> prim) wX wY -> Maybe (FL prim wX wY))
-            -> WithState (Pair prim) wA wB -> TestResult
+  :: (TestablePrim prim, RepoApply prim)
+  => (forall wX wY . (prim :> prim) wX wY -> Maybe (FL prim wX wY))
+  -> WithState (Pair prim) wA wB
+  -> TestResult
 coalesceEffectPreserving j (WithState r (Pair (a :> b)) r') =
   case j (a :> b) of
        Nothing -> rejected
@@ -644,3 +649,23 @@ inverseDoesntCommute x =
     Just (ix' :> x') -> failed $ redText "x:" $$ displayPatch x
       $$ redText "commutes with x^ to ix':" $$ displayPatch ix'
       $$ redText "x':" $$ displayPatch x'
+
+-- | This property states that two patches cannot both commute and coalesce.
+-- It has a single exception for Prim.V1, namely adjacent
+-- hunks that both add and remove lines.
+notCoalesceAndCommute
+  :: (Eq (ObjectIdOfPatch p), IsHunk p, PrimCoalesce p, ShowPatchBasic p)
+  => Pair p wX wY -> TestResult
+notCoalesceAndCommute (Pair pair@(p1 :> p2))
+  | Just (FileHunk _ f1 l1 (length -> o1) (length -> n1)) <- isHunk p1
+  , Just (FileHunk _ f2 l2 (length -> o2) (length -> n2)) <- isHunk p2
+  , f1 == f2
+  , l1 + n1 == l2 || l2 + o2 == l1
+  , o1 > 0, n1 > 0, o2 > 0, n2 > 0 = rejected
+  | Just _ <- commute pair
+  , Just _ <- primCoalesce p1 p2 =
+      failed $
+        text "patches coalesce and commute:" $$
+        displayPatch p1 $$
+        displayPatch p2
+  | otherwise = succeeded

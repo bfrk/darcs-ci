@@ -31,24 +31,24 @@ import Data.Foldable ( traverse_ )
 import System.Directory ( removeFile )
 import System.Exit ( ExitCode(..), exitFailure, exitSuccess )
 
-import Darcs.Patch ( PrimOf, RepoPatch, sortCoalesceFL, summaryFL )
+import Darcs.Patch ( PrimOf, RepoPatch, summaryFL )
 import Darcs.Patch.Apply ( ApplyState )
 import Darcs.Patch.Info ( PatchInfo, patchinfo )
 import Darcs.Patch.Named ( adddeps, infopatch )
 import Darcs.Patch.PatchInfoAnd ( n2pia )
 import Darcs.Patch.Progress ( progressFL )
 import Darcs.Patch.Split ( primSplitter )
-import Darcs.Patch.Witnesses.Ordered ( (:>)(..), FL(..), nullFL, (+>+) )
+import Darcs.Patch.Witnesses.Ordered ( (:>)(..), FL(..), nullFL )
 import Darcs.Repository
     ( RepoJob(..)
     , Repository
     , AccessType(..)
     , finalizeRepositoryChanges
-    , readPendingAndWorking
     , readPristine
     , readPatches
     , tentativelyAddPatch
-    , tentativelyRemoveFromPW
+    , tentativelyRemoveFromPending
+    , unrecordedChanges
     , withRepoLock
     )
 import Darcs.Repository.Flags ( UpdatePending(..) )
@@ -200,7 +200,6 @@ record = DarcsCommand
       ^ O.lookforreplaces
       ^ O.lookformoves
       ^ O.repoDir
-      ^ O.withContext
       ^ O.diffAlgorithm
     advancedOpts
       = O.logfile
@@ -236,18 +235,16 @@ recordCmd fps cfg args = do
         return files''
       announceFiles (O.verbosity ? cfg) existing_files "Recording changes in"
       debugMessage "About to get the unrecorded changes."
-      changes <-
-        readPendingAndWorking (diffingOpts cfg) repository existing_files
-      debugMessage "I've got unrecorded changes."
-      case changes of
-          NilFL :> NilFL | not (O.askDeps ? cfg) -> do
+      unrecorded <- unrecordedChanges (diffingOpts cfg) repository existing_files
+      case unrecorded of
+          NilFL | not (O.askDeps ? cfg) -> do
               -- We need to grab any input waiting for us, since we
               -- might break scripts expecting to send it to us; we
               -- don't care what that input is, though.
               void (getDate (O.pipe ? cfg))
               putStrLn "No changes!"
               exitFailure
-          _ -> doRecord repository cfg existing_files changes
+          _ -> doRecord repository cfg existing_files unrecorded
 
 -- | Check user specified patch name is not accidentally a command line flag
 checkNameIsNotOption :: Maybe String -> Bool -> IO ()
@@ -260,18 +257,18 @@ checkNameIsNotOption (Just name) True   =
 
 doRecord :: (RepoPatch p, ApplyState p ~ Tree)
          => Repository 'RW p wU wR -> Config -> Maybe [AnchoredPath]
-         -> (FL (PrimOf p) :> FL (PrimOf p)) wR wU -> IO ()
-doRecord repository cfg files pw@(pending :> working) = do
+         -> FL (PrimOf p) wR wU -> IO ()
+doRecord repository cfg files unrecorded = do
+    debugMessage "I've got unrecorded changes."
     date <- getDate (O.pipe ? cfg)
     my_author <- getAuthor (O.author ? cfg) (O.pipe ? cfg)
     debugMessage "I'm slurping the repository."
-    pristine <- readPristine repository
     debugMessage "About to select changes..."
-    (chs :> _ ) <- runInvertibleSelection (sortCoalesceFL $ pending +>+ working) $
+    (chs :> _ ) <- runInvertibleSelection unrecorded $
                       selectionConfigPrim
                           First "record" (patchSelOpts cfg)
                           (Just (primSplitter (O.diffAlgorithm ? cfg)))
-                          files (Just pristine)
+                          files
     when (not (O.askDeps ? cfg) && nullFL chs) $
               do putStrLn "Ok, if you don't want to record anything, that's fine!"
                  exitSuccess
@@ -290,7 +287,7 @@ doRecord repository cfg files pw@(pending :> working) = do
                               (O.logfile ? cfg) (O.askLongComment ? cfg)
                               Nothing (summaryFL chs)
                           debugMessage ("Patch name as received from getLog: " ++ show (map ord name))
-                          doActualRecord repository cfg name date my_author my_log logf deps chs pw
+                          doActualRecord repository cfg name date my_author my_log logf deps chs
 
 doActualRecord :: (RepoPatch p, ApplyState p ~ Tree)
                => Repository 'RW p wU wR
@@ -298,9 +295,8 @@ doActualRecord :: (RepoPatch p, ApplyState p ~ Tree)
                -> String -> String -> String
                -> [String] -> Maybe String
                -> [PatchInfo] -> FL (PrimOf p) wR wX
-               -> (FL (PrimOf p) :> FL (PrimOf p)) wR wU -> IO ()
-doActualRecord _repository cfg name date my_author my_log logf deps chs
-      (pending :> working) = do
+               -> IO ()
+doActualRecord _repository cfg name date my_author my_log logf deps chs = do
     debugMessage "Writing the patch file..."
     myinfo <- patchinfo date name my_author my_log
     let mypatch = infopatch myinfo $ progressFL "Writing changes:" chs
@@ -312,7 +308,7 @@ doActualRecord _repository cfg name date my_author my_log logf deps chs
     testTentativeAndMaybeExit tp cfg
       ("you have a bad patch: '" ++ name ++ "'")
       "record it" (Just failuremessage)
-    tentativelyRemoveFromPW _repository chs pending working
+    tentativelyRemoveFromPending _repository chs
     _repository <-
       finalizeRepositoryChanges _repository YesUpdatePending (O.compress ? cfg) (O.dryRun ? cfg)
       `clarifyErrors` failuremessage
@@ -344,7 +340,6 @@ patchSelOpts cfg = S.PatchSelectionOptions
     , S.interactive = isInteractive cfg
     , S.selectDeps = O.PromptDeps -- option not supported, use default
     , S.withSummary = O.NoSummary -- option not supported, use default
-    , S.withContext = O.withContext ? cfg
     }
 
 isInteractive :: Config -> Bool

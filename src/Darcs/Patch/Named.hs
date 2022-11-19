@@ -15,10 +15,21 @@
 --  the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 --  Boston, MA 02110-1301, USA.
 
+-- | 'Named' patches group a set of changes with meta data ('PatchInfo') and
+-- explicit dependencies (created using `darcs tag` or using --ask-deps).
+--
+-- While the data constructor 'NamedP' is exported for technical reasons, code
+-- outside this modules should (and generally does) treat it as an abstract
+-- data type. The only exception is the rebase implementation i.e. the modules
+-- under "Darcs.Patch.Rebase".
+
+{-# LANGUAGE UndecidableInstances #-}
 module Darcs.Patch.Named
     ( Named(..)
+    -- treated as abstract data type except by Darcs.Patch.Rebase
     , infopatch
     , adddeps
+    , setinfo
     , anonymous
     , HasDeps(..)
     , patch2patchinfo
@@ -45,9 +56,10 @@ import Darcs.Patch.Format ( PatchListFormat )
 import Darcs.Patch.Info ( PatchInfo, readPatchInfo, showPatchInfo, patchinfo,
                           piName, displayPatchInfo, makePatchname )
 import Darcs.Patch.Merge ( CleanMerge(..), Merge(..) )
-import Darcs.Patch.Apply ( Apply(..) )
+import Darcs.Patch.Object ( ObjectId )
+import Darcs.Patch.Apply ( Apply(..), ObjectIdOfPatch )
 import Darcs.Patch.Commute ( Commute(..) )
-import Darcs.Patch.Ident ( Ident(..), PatchId, IdEq2(..) )
+import Darcs.Patch.Ident ( Ident(..), PatchId )
 import Darcs.Patch.Inspect ( PatchInspect(..) )
 import Darcs.Patch.Permutations ( genCommuteWhatWeCanRL )
 import Darcs.Patch.Read ( ReadPatch(..) )
@@ -106,11 +118,6 @@ type instance PatchId (Named p) = PatchInfo
 instance Ident (Named p) where
     ident = patch2patchinfo
 
-instance IdEq2 (Named p)
-
-instance IsHunk (Named p) where
-    isHunk _ = Nothing
-
 instance PatchListFormat (Named p)
 
 instance (ReadPatch p, PatchListFormat p) => ReadPatch (Named p) where
@@ -154,6 +161,9 @@ infopatch pi ps = NamedP pi [] (fromPrims pi ps) where
 adddeps :: Named p wX wY -> [PatchInfo] -> Named p wX wY
 adddeps (NamedP pi _ p) ds = NamedP pi ds p
 
+setinfo :: PatchInfo -> Named p wX wY -> Named p wX wY
+setinfo i (NamedP _ ds ps) = NamedP i ds ps
+
 -- | This slightly ad-hoc class is here so we can call 'getdeps' with patch
 -- types that wrap a 'Named', such as 'RebaseChange'.
 class HasDeps p where
@@ -180,8 +190,9 @@ fmapNamed f (NamedP i deps p) = NamedP i deps (mapFL_FL f p)
 fmapFL_Named :: (FL p wA wB -> FL q wC wD) -> Named p wA wB -> Named q wC wD
 fmapFL_Named f (NamedP i deps p) = NamedP i deps (f p)
 
-instance Eq2 (Named p) where
-    unsafeCompare (NamedP n1 _ _) (NamedP n2 _ _) = n1 == n2
+instance (Commute p, Eq2 p) => Eq2 (Named p) where
+    unsafeCompare (NamedP n1 ds1 ps1) (NamedP n2 ds2 ps2) =
+        n1 == n2 && ds1 == ds2 && unsafeCompare ps1 ps2
 
 instance Commute p => Commute (Named p) where
     commute (NamedP n1 d1 p1 :> NamedP n2 d2 p2) =
@@ -269,12 +280,12 @@ instance ( Commute p
       -- dependencies for the patches we have traversed. The third parameter
       -- is the context, which is only needed as input to 'findConflicting'.
       separate
-        :: S.Set PatchInfo
-        -> [S.Set PatchInfo]
-        -> RL (Named p) w0 w1
-        -> RL (Named p) w1 w2
-        -> FL p w2 w3
-        -> FL p w3 w4
+        :: S.Set PatchInfo    -- names of resolved Named patches so far
+        -> [S.Set PatchInfo]  -- transitive explicit dependencies so far
+        -> RL (Named p) w0 w1 -- context for Named patches
+        -> RL (Named p) w1 w2 -- Named patches under consideration
+        -> FL p w2 w3         -- result: resolved at RepoPatch layer so far
+        -> FL p w3 w4         -- result: unresolved at RepoPatch layer so far
         -> (FL p :> FL p) w1 w4
       separate acc_res acc_deps ctx (ps :<: p@(NamedP name deps contents)) resolved unresolved
         | name `S.member` acc_res || isConflicted p
@@ -351,8 +362,13 @@ showNamedPrefix f@ForDisplay n d p =
 instance (PatchListFormat p, ShowPatchBasic p) => ShowPatchBasic (Named p) where
     showPatch f (NamedP n d p) = showNamedPrefix f n d $ showPatch f p
 
-instance (Apply p, IsHunk p, PatchListFormat p,
-          ShowContextPatch p) => ShowContextPatch (Named p) where
+instance ( Apply p
+         , IsHunk p
+         , PatchListFormat p
+         , ObjectId (ObjectIdOfPatch p)
+         , ShowContextPatch p
+         ) =>
+         ShowContextPatch (Named p) where
     showContextPatch f (NamedP n d p) =
         showNamedPrefix f n d <$> showContextPatch f p
 

@@ -69,7 +69,6 @@ import Darcs.Repository.Format
     , formatHas
     )
 import Darcs.Repository.Prefs ( addRepoSource, deleteSources )
-import Darcs.Repository.Match ( getOnePatchset )
 import Darcs.Util.File
     ( copyFileOrUrl
     , Cachable(..)
@@ -122,7 +121,7 @@ import Darcs.Patch.Set
     , patchSetInventoryHashes
     , progressPatchSet
     )
-import Darcs.Patch.Match ( MatchFlag(..), patchSetMatch )
+import Darcs.Patch.Match ( MatchFlag(..), patchSetMatch, matchOnePatchset )
 import Darcs.Patch.Progress ( progressRLShowTags, progressFL )
 import Darcs.Patch.Apply ( Apply(..) )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(..) )
@@ -232,7 +231,7 @@ cloneRepository repourl mysimplename v useCache cloneKind um rdarcs sse remoteRe
         -- the following is necessary to be able to read _toRepo's patches
         _toRepo <- revertRepositoryChanges _toRepo NoUpdatePending
         patches <- readPatches _toRepo
-        Sealed context <- getOnePatchset _toRepo psm
+        Sealed context <- matchOnePatchset patches psm
         Fork _ to_remove only_in_context <- return $ findCommon patches context
         case only_in_context of
           NilFL -> do

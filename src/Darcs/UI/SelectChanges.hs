@@ -127,7 +127,7 @@ import Darcs.Patch.Witnesses.WZipper
 import Darcs.UI.External ( editText )
 import Darcs.UI.Options.All
     ( Verbosity(..), WithSummary(..)
-    , WithContext(..), SelectDeps(..), MatchFlag )
+    , SelectDeps(..), MatchFlag )
 import Darcs.UI.PrintPatch
     ( printContent
     , printContentWithPager
@@ -192,7 +192,6 @@ data PatchSelectionOptions = PatchSelectionOptions
   , interactive :: Bool
   , selectDeps :: SelectDeps
   , withSummary :: WithSummary
-  , withContext :: WithContext
   }
 
 -- | All the static settings for selecting patches.
@@ -203,7 +202,6 @@ data SelectionConfig p =
       , matchCriterion :: MatchCriterion p
       , jobname :: String
       , allowSkipAll :: Bool
-      , pristine :: Maybe (Tree IO)
       , whichChanges :: WhichChanges
       }
 
@@ -213,16 +211,14 @@ selectionConfigPrim :: WhichChanges
                     -> PatchSelectionOptions
                     -> Maybe (Splitter prim)
                     -> Maybe [AnchoredPath]
-                    -> Maybe (Tree IO)
                     -> SelectionConfig prim
-selectionConfigPrim whch jn o spl fs p =
+selectionConfigPrim whch jn o spl fs =
  PSC { opts = o
      , splitter = spl
      , files = fs
      , matchCriterion = triv
      , jobname = jn
      , allowSkipAll = True
-     , pristine = p
      , whichChanges = whch
      }
 
@@ -241,7 +237,6 @@ selectionConfig whch jn o spl fs =
      , matchCriterion = iswanted seal2 (matchFlags o)
      , jobname = jn
      , allowSkipAll = True
-     , pristine = Nothing
      , whichChanges = whch
      }
 
@@ -260,7 +255,6 @@ selectionConfigGeneric extract whch jn o fs =
      , matchCriterion = iswanted extract (matchFlags o)
      , jobname = jn
      , allowSkipAll = True
-     , pristine = Nothing
      , whichChanges = whch
      }
 
@@ -401,7 +395,7 @@ runInvertibleSelection ps psc = runReaderT (selection ps) psc where
   {- end of runInvertibleSelection -}
 
 -- | The equivalent of 'runSelection' for the @darcs log@ command
-viewChanges :: (ShowPatch p, ShowContextPatch p, ApplyState p ~ Tree)
+viewChanges :: (ShowPatch p, ShowContextPatch p)
             => PatchSelectionOptions -> [Sealed2 p] -> IO ()
 viewChanges ps_opts = textView ps_opts Nothing 0 []
 
@@ -430,7 +424,7 @@ keysFor = concatMap (map kp)
 
 -- | The function for selecting a patch to amend record. Read at your own risks.
 withSelectedPatchFromList
-    :: (Commute p, Matchable p, ShowPatch p, ShowContextPatch p, ApplyState p ~ Tree)
+    :: (Commute p, Matchable p, ShowPatch p, ShowContextPatch p)
     => String   -- name of calling command (always "amend" as of now)
     -> RL p wX wY
     -> PatchSelectionOptions
@@ -454,7 +448,7 @@ data WithSkipped p wX wY = WithSkipped
 -- patches, including pending and also that the skipped sequences has an
 -- ending context that matches the recorded state, z, of the repository.
 wspfr :: forall p wX wY wZ.
-         (Commute p, Matchable p, ShowPatch p, ShowContextPatch p, ApplyState p ~ Tree)
+         (Commute p, Matchable p, ShowPatch p, ShowContextPatch p)
       => String
       -> (forall wA wB . p wA wB -> Bool)
       -> RL p wX wY
@@ -518,7 +512,7 @@ wspfr jn matches remaining@(pps:<:p) skipped
                      , KeyPress 'q' ("cancel " ++ jn)
                     ]]
         defaultPrintFriendly =
-          printFriendly Nothing NormalVerbosity NoSummary NoContext
+          printFriendly NormalVerbosity NoSummary
 
 -- | Runs a function on the underlying @PatchChoices@ object
 liftChoices :: StateT (PatchChoices p wX wY) Identity a
@@ -545,7 +539,7 @@ initialSelectionState lps pcs =
 
 -- | The actual interactive selection process.
 textSelect :: ( Commute p, Invert p, ShowPatch p, ShowContextPatch p
-              , PatchInspect p, ApplyState p ~ Tree )
+              , PatchInspect p )
            => FL (LabelledPatch p) wX wY
            -> PatchChoices p wX wY
            -> PatchSelectionM p IO (PatchChoices p wX wY)
@@ -559,7 +553,7 @@ textSelect lps' pcs =
       unless (rightmost z) $ textSelect'
 
 textSelect' :: ( Commute p, Invert p, ShowPatch p, ShowContextPatch p
-               , PatchInspect p, ApplyState p ~ Tree )
+               , PatchInspect p )
             => InteractiveSelectionM p wX wY ()
 textSelect' = do
   z <- gets lps
@@ -805,8 +799,7 @@ promptUser single def = do
                                    }
 
 -- | Ask the user what to do with the next patch.
-textSelectOne :: ( Commute p, ShowPatch p, ShowContextPatch p, PatchInspect p
-                 , ApplyState p ~ Tree )
+textSelectOne :: ( Commute p, ShowPatch p, PatchInspect p )
               => InteractiveSelectionM p wX wY Bool
 textSelectOne = do
  c <- currentPatch
@@ -863,7 +856,7 @@ textSelectOne = do
                  liftIO . putStrLn $ helpFor jn basicOptions advancedOptions
                  return False
 
-lastQuestion :: (Commute p, ShowPatch p, ShowContextPatch p, ApplyState p ~ Tree)
+lastQuestion :: (Commute p, ShowPatch p)
              => InteractiveSelectionM p wX wY Bool
 lastQuestion = do
   jn <- asks jobname
@@ -890,19 +883,17 @@ lastQuestion = do
                  return False
 
 -- | Shows the current patch as it should be seen by the user.
-printCurrent :: (ShowPatch p, ShowContextPatch p, ApplyState p ~ Tree)
-             => InteractiveSelectionM p wX wY ()
+printCurrent :: ShowPatch p => InteractiveSelectionM p wX wY ()
 printCurrent = do
   o <- asks opts
-  pr <- asks pristine
   c <- currentPatch
   case c of
     Nothing -> return ()
     Just (Sealed2 lp) ->
-      liftIO $ printFriendly pr (verbosity o) (withSummary o) (withContext o) $ unLabel lp
+      liftIO $ printFriendly (verbosity o) (withSummary o) $ unLabel lp
 
 -- | The interactive part of @darcs changes@
-textView :: (ShowPatch p, ShowContextPatch p, ApplyState p ~ Tree)
+textView :: (ShowPatch p, ShowContextPatch p)
          => PatchSelectionOptions -> Maybe Int -> Int
          -> [Sealed2 p] -> [Sealed2 p]
          -> IO ()
@@ -913,7 +904,7 @@ textView o n_max n
       repeatThis -- prompt the user
     where
         defaultPrintFriendly =
-          unseal2 (printFriendly Nothing (verbosity o) (withSummary o) (withContext o))
+          unseal2 (printFriendly (verbosity o) (withSummary o))
         prev_patch :: IO ()
         prev_patch = case ps_done of
                        [] -> repeatThis

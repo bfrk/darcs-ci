@@ -25,7 +25,6 @@ import Control.Exception ( try, evaluate, SomeException )
 import System.IO.Unsafe
 
 import Darcs.Patch
-import Darcs.Patch.Annotate
 import Darcs.Patch.V1 ()
 import Darcs.Patch.V1.Core ( RepoPatchV1(..) )
 import qualified Darcs.Patch.V1.Prim as V1 ( Prim )
@@ -34,7 +33,7 @@ import Darcs.Patch.Witnesses.Sealed ( Sealed(Sealed) )
 
 
 import Darcs.Test.Patch.Arbitrary.Generic ( MightHaveDuplicate, ArbitraryPrim, PrimBased(..) )
-import Darcs.Test.Patch.Arbitrary.RepoPatch
+import Darcs.Test.Patch.Arbitrary.Mergeable
 import Darcs.Test.Patch.Merge.Checked ( CheckedMerge(..) )
 import Darcs.Test.Patch.RepoModel ( RepoState, ModelOf )
 import Darcs.Test.Patch.WithState
@@ -45,12 +44,9 @@ import Darcs.Test.Patch.WithState
 
 type Patch = RepoPatchV1 V1.Prim
 
-instance
-  (Annotate prim, ArbitraryPrim prim, PrimPatch prim, ApplyState prim ~ RepoState (ModelOf prim))
-  => ArbitraryRepoPatch (RepoPatchV1 prim)
-  where
-
-    notRepoPatchV1 = Nothing
+instance (ArbitraryPrim prim, ApplyState prim ~ RepoState (ModelOf prim)) =>
+         ArbitraryMergeable (RepoPatchV1 prim) where
+  notRepoPatchV1 = Nothing
 
 instance PrimPatch prim => CheckedMerge (RepoPatchV1 prim) where
   validateMerge v =

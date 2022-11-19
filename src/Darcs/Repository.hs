@@ -54,7 +54,7 @@ module Darcs.Repository
     , tentativelyAddPatches
     , tentativelyRemovePatches
     , setTentativePending
-    , tentativelyRemoveFromPW
+    , tentativelyRemoveFromPending
     , withManualRebaseUpdate
     , tentativelyMergePatches
     , considerMergeToWorking
@@ -80,7 +80,6 @@ module Darcs.Repository
     , readPristine
     , readUnrecorded
     , unrecordedChanges
-    , readPendingAndWorking
     , filterOutConflicts
     , readPristineAndPending
     ) where
@@ -89,7 +88,6 @@ import Darcs.Repository.State
     ( readPristine
     , readUnrecorded
     , unrecordedChanges
-    , readPendingAndWorking
     , readPristineAndPending
     , filterOutConflicts
     , unsafeAddToPending
@@ -121,7 +119,7 @@ import Darcs.Repository.Pristine
     , writePristine
     )
 import Darcs.Repository.Traverse ( cleanRepository )
-import Darcs.Repository.Pending ( setTentativePending, tentativelyRemoveFromPW )
+import Darcs.Repository.Pending ( setTentativePending, tentativelyRemoveFromPending )
 import Darcs.Repository.Working
     ( applyToWorking
     , setScriptsExecutable

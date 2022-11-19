@@ -149,7 +149,8 @@ makeBundle state repo to_be_sent
     format context <$>
       case state of
         Just tree ->
-          fst <$> virtualTreeIO (showContextPatch ForStorage to_be_sent) tree
+          fmap fst $ flip virtualTreeIO tree $
+            fmap vcat $ sequence $ mapFL (showContextPatch ForStorage) to_be_sent
         Nothing -> return (vsep $ mapFL (showPatch ForStorage) to_be_sent)
   where
     format context patches =

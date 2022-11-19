@@ -39,6 +39,7 @@ import Darcs.Patch.Prim.Class
     , PrimApply(..)
     , PrimSift(..)
     , PrimMangleUnravelled(..)
+    , showPrimCtx
     )
 import qualified Darcs.Patch.Prim.V1 as Base ( Prim )
 

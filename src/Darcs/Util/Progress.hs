@@ -82,14 +82,14 @@ printProgress :: String
 printProgress k (ProgressData {sofar=s, total=Just t, latest=Just l}) =
     myput output output
   where
-    output = k ++ " " ++ show s ++ " done, " ++ show (t - s) ++ " queued. " ++ l
+    output = k ++ " ... " ++ show s ++ " done, " ++ show (t - s) ++ " queued. " ++ l
 printProgress k (ProgressData {latest=Just l}) =
-    myput (k ++ " " ++ l) k
+    myput (k ++ " ... " ++ l) k
 printProgress k (ProgressData {sofar=s, total=Just t}) | t >= s =
-    myput (k ++ " " ++ show s ++ " done, " ++ show (t - s) ++ " queued")
-          (k ++ " " ++ show s)
+    myput (k ++ " ... " ++ show s ++ " done, " ++ show (t - s) ++ " queued")
+          (k ++ " ... " ++ show s)
 printProgress k (ProgressData {sofar=s}) =
-    myput (k ++ " " ++ show s) k
+    myput (k ++ " ... " ++ show s) k
 
 
 myput :: String -> String -> IO ()
@@ -132,7 +132,7 @@ endTedious :: String -> IO ()
 endTedious k = whenProgressMode $ do
     p <- getProgressData k
     modifyIORef _progressData (second $ delete k)
-    when (isJust p) $ debugMessage $ "Done " ++ map toLower k
+    when (isJust p) $ simpleput $ k ++ " ... done"
 
 
 tediousSize :: String

@@ -313,7 +313,7 @@ setEnvDarcsPatches ps = do
     finishedOneIO k "DARCS_PATCHES_XML"
     setEnvCautiously "DARCS_PATCHES_XML" . renderString $
         text "<patches>" $$
-        vcat (mapFL (toXml . info) ps) $$
+        vcat (mapFL (flip toXml mempty . info) ps) $$
         text "</patches>"
     finishedOneIO k "DARCS_FILES"
     setEnvCautiously "DARCS_FILES" $ unlines filepaths

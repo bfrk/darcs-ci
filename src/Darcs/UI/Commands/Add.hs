@@ -85,7 +85,7 @@ import Darcs.Repository
     )
 import Darcs.Repository.Prefs ( isBoring )
 import Darcs.Util.File ( getFileStatus )
-import Darcs.Patch.Witnesses.Ordered ( FL(..), (+>+), nullFL )
+import Darcs.Patch.Witnesses.Ordered ( FL(..), concatGapsFL, nullFL )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(..), Gap(..), FreeLeft, unFreeLeft )
 
 addDescription :: String
@@ -246,7 +246,7 @@ addp msgs opts cur0 files = do
        putWarning opts . text $ "WARNING: Some files were not added because they are already in the repository."
        putVerboseWarning opts . text $ dupMsg ++ caseMsg
        mapM_ (putVerboseWarning opts . text . displayPath) uniq_dups
-    return $ foldr (joinGap (+>+)) (emptyGap NilFL) ps
+    return $ concatGapsFL ps
   where
     addp' :: Tree IO
           -> AnchoredPath

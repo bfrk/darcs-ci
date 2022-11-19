@@ -176,11 +176,21 @@ class Gap w where
 instance Gap FreeLeft where
   emptyGap e = FLInternal (Poly (Compose (Sealed e)))
   freeGap e =  FLInternal (Poly (Compose (Sealed e)))
-  joinGap op (FLInternal p) (FLInternal q)
-    = FLInternal (Poly (case unPoly p of Compose (Sealed p') -> case unPoly q of Compose (Sealed q') -> Compose (Sealed (p' `op` q'))))
+  joinGap op (FLInternal p) (FLInternal q) =
+    FLInternal
+      (Poly
+         (case unPoly p of
+            Compose (Sealed p') ->
+              case unPoly q of
+                Compose (Sealed q') -> Compose (Sealed (p' `op` q'))))
 
 instance Gap FreeRight where
   emptyGap e = FRInternal (Poly (FlippedSeal e))
   freeGap e =  FRInternal (Poly (FlippedSeal e))
-  joinGap op (FRInternal p) (FRInternal q)
-    = FRInternal (Poly (case unPoly q of FlippedSeal q' -> case unPoly p of FlippedSeal p' -> FlippedSeal (p' `op` q')))
+  joinGap op (FRInternal p) (FRInternal q) =
+    FRInternal
+      (Poly
+         (case unPoly q of
+            FlippedSeal q' ->
+              case unPoly p of
+                FlippedSeal p' -> FlippedSeal (p' `op` q')))

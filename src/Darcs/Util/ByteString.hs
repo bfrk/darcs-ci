@@ -32,6 +32,8 @@ module Darcs.Util.ByteString
     , dropSpace
     , linesPS
     , unlinesPS
+    , linesBS
+    , unlinesBS
     , hashPS
     , breakFirstPS
     , breakLastPS
@@ -62,6 +64,7 @@ import qualified Data.ByteString.Char8      as BC
 import qualified Data.ByteString.Lazy       as BL
 import Data.ByteString (intercalate)
 import qualified Data.ByteString.Base16     as B16
+import qualified Data.ByteString.Short      as BS
 
 import System.Directory ( getFileSize )
 import System.IO ( withFile, IOMode(ReadMode)
@@ -164,8 +167,20 @@ linesPS ps
 {-# INLINE unlinesPS #-}
 -- | Concatenate the inputs with '\n' bytes in interspersed.
 unlinesPS :: [B.ByteString] -> B.ByteString
-unlinesPS [] = B.empty
-unlinesPS x  = B.concat $ intersperse (BC.singleton '\n') x
+unlinesPS = B.concat . intersperse (BC.singleton '\n')
+
+{-# INLINE linesBS #-}
+-- | Split the input into lines, that is, sections separated by '\n' bytes,
+-- unless it is empty, in which case the result has one empty line.
+linesBS :: BS.ShortByteString -> [BS.ShortByteString]
+linesBS ps
+     | BS.null ps = [BS.empty]
+     | otherwise = BS.split 10 ps
+
+{-# INLINE unlinesBS #-}
+-- | Concatenate the inputs with '\n' bytes in interspersed.
+unlinesBS :: [BS.ShortByteString] -> BS.ShortByteString
+unlinesBS = BS.concat . intersperse (BS.singleton 10)
 
 -- properties of linesPS and unlinesPS
 

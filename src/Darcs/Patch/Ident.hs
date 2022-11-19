@@ -2,9 +2,10 @@ module Darcs.Patch.Ident
     ( Ident(..)
     , SignedIdent
     , PatchId
+    , (=\^/=)
+    , (=/^\=)
     , SignedId(..)
     , StorableId(..)
-    , IdEq2(..)
     , fastRemoveFL
     , fastRemoveRL
     , fastRemoveSubsequenceRL
@@ -15,6 +16,7 @@ module Darcs.Patch.Ident
     , prop_identInvariantUnderCommute
     , prop_sameIdentityImpliesCommutable
     , prop_equalImpliesSameIdentity
+    , prop_sameIdentityImpliesEqual
     ) where
 
 import qualified Data.Set as S
@@ -43,51 +45,79 @@ import Darcs.Patch.Witnesses.Unsafe ( unsafeCoercePEnd, unsafeCoercePStart )
 import Darcs.Util.Parser ( Parser )
 import Darcs.Util.Printer ( Doc )
 
+-- | The reason this is not associated to class 'Ident' is that for technical
+-- reasons we want to be able to define type instances for patches that don't
+-- have an identity and therefore cannot be lawful members of class 'Ident'.
 type family PatchId (p :: * -> * -> *)
 
-{- | Class of patches that have an identity.
+{- | Class of patches that have an identity/name.
 
-It generalizes named prim patches a la camp (see Darcs.Patch.Prim.Named) and
-Named patches i.e. those with a PatchInfo.
+Patches with an identity give rise to the notion of /nominal equality/,
+expressed by the operators '=\^/=' and '=/^\='.
 
-Patch identity should be invariant under commutation: if there is also an
-@instance 'Commute' p@, then
+Laws:
 
-prop> commute (p :> q) == Just (q' :> p') => ident p == ident p' && ident q == ident q'
+  [/ident-commute/] Patch identity must be invariant under commutation and,
+    vice versa, patches with the same identity must 'commute':
 
-The converse should also be true: patches with the same identity can be
-commuted (back) to the same context and then compare equal. Assuming
+    prop> 'commute' (p :> _) == 'Just' (_ :> p') <=> 'ident' p == 'ident' p'
 
-@
-  p :: p wX wY, (ps :> q) :: (RL p :> p) wX wZ
-@
+    and thus (via symmetry of 'commute'):
 
-then
+    prop> 'commute' (_ :> q) == 'Just' (q' :> _) <=> 'ident' q == 'ident' q'
 
-prop> ident p == ident q => commuteRL (ps :> q) == Just (p :> _)
+    as long as the types match. In other words, nominal equality coincides
+    with equality up to commutation/re-ordering.
 
-As a special case we get that parallel patches with the same identity are
-equal: if @p :: p wX wY, q :: p wX wZ@, then
+  [/ident-compare/] In general, comparing patches via their identity is
+    weaker than (semantic) equality:
 
-prop> ident p == ident q => p =\/= q == IsEq
+    prop> 'unsafeCompare' p q => ('ident' p == 'ident' q)
 
-In general, comparing patches via their identity is coarser than
-(structural) equality, so we only have
+    However, if the patches have a common context, then semantic and nominal
+    equality should coincide:
 
-prop> unsafeCompare p q => (ident p == ident q)
+    prop> p '=\/=' q  <=> p '=\^/=' q
+    prop> p '=/\=' q  <=> p '=/^\=' q
+
+  Taken together, these laws express the intuition that patch identities are
+  created in a universally unique way.
+
 -}
 class Ord (PatchId p) => Ident p where
   ident :: p wX wY -> PatchId p
+
+type instance PatchId (FL p) = S.Set (PatchId p)
+type instance PatchId (RL p) = S.Set (PatchId p)
+type instance PatchId (p :> p) = S.Set (PatchId p)
+
+instance Ident p => Ident (FL p) where
+  ident = S.fromList . mapFL ident
+
+instance Ident p => Ident (RL p) where
+  ident = S.fromList . mapRL ident
+
+instance Ident p => Ident (p :> p) where
+  ident (p :> q) = S.fromList [ident p, ident q]
+
+-- | Nominal equality for patches with an identity in the same context. Usually
+-- quite a bit faster than structural equality.
+(=\^/=) :: Ident p => p wA wB -> p wA wC -> EqCheck wB wC
+p =\^/= q = if ident p == ident q then unsafeCoercePEnd IsEq else NotEq
+
+(=/^\=) :: Ident p => p wA wC -> p wB wC -> EqCheck wA wB
+p =/^\= q = if ident p == ident q then unsafeCoercePStart IsEq else NotEq
+
 
 {- | Signed identities.
 
 Like for class 'Invert', we require that 'invertId' is self-inverse:
 
-prop> invertId . invertId = id
+prop> 'invertId' . 'invertId' = 'id'
 
 We also require that inverting changes the sign:
 
-prop> positiveId . invertId = not . positiveId
+prop> 'positiveId' . 'invertId' = 'not' . 'positiveId'
 
 Side remark: in mathematical terms, these properties can be expressed by
 stating that 'invertId' is an involution and that 'positiveId' is a
@@ -105,7 +135,7 @@ class Ord a => SignedId a where
 Provided that an instance 'Invert' exists, inverting a patch
 inverts its identity:
 
-prop> ident (invert p) = invertId (ident p)
+prop> 'ident' ('invert' p) = 'invertId' ('ident' p)
 
 -}
 type SignedIdent p = (Ident p, SignedId (PatchId p))
@@ -117,30 +147,14 @@ The methods here can be used to help implement ReadPatch and ShowPatch
 for a patch type containing the identity.
 
 As with all Read/Show pairs, We expect that the output of
-@showId ForStorage a@ can be parsed by 'readId' to produce @a@.
+@showId ForStorage x@ can be parsed by 'readId' to produce @x@:
+
+prop> 'parse' 'readId' . 'renderPS' . 'showId' 'ForStorage' == 'id'
+
 -}
 class StorableId a where
   readId :: Parser a
   showId :: ShowPatchFor -> a -> Doc
-
--- | Faster equality tests for patches with an identity.
-class IdEq2 p where
-  (=\^/=) :: p wA wB -> p wA wC -> EqCheck wB wC
-  (=/^\=) :: p wA wC -> p wB wC -> EqCheck wA wB
-  default (=\^/=) :: Ident p => p wA wB -> p wA wC -> EqCheck wB wC
-  p =\^/= q = if ident p == ident q then unsafeCoercePEnd IsEq else NotEq
-  default (=/^\=) :: Ident p => p wA wC -> p wB wC -> EqCheck wA wB
-  p =/^\= q = if ident p == ident q then unsafeCoercePStart IsEq else NotEq
-
--- | The 'Commute' requirement here is not technically needed but makes
--- sense logically.
-instance (Commute p, Ident p) => IdEq2 (FL p) where
-  ps =\^/= qs
-    | S.fromList (mapFL ident ps) == S.fromList (mapFL ident qs) = unsafeCoercePEnd IsEq
-    | otherwise = NotEq
-  ps =/^\= qs
-    | S.fromList (mapFL ident ps) == S.fromList (mapFL ident qs) = unsafeCoercePStart IsEq
-    | otherwise = NotEq
 
 {-# INLINABLE fastRemoveFL #-}
 -- | Remove a patch from an FL of patches with an identity. The result is
@@ -153,6 +167,10 @@ instance (Commute p, Ident p) => IdEq2 (FL p) where
 -- two patches have the same identity, then they have originally been the same
 -- patch; thus being at a different position must be due to commutation,
 -- meaning we can commute it back.
+--
+-- For patch types that define semantic equality via nominal equality, this is
+-- only faster than 'removeFL' if the patch does not occur in the sequence,
+-- otherwise we have to perform the same number of commutations.
 fastRemoveFL :: forall p wX wY wZ. (Commute p, Ident p)
              => p wX wY
              -> FL p wX wZ
@@ -265,7 +283,14 @@ prop_sameIdentityImpliesCommutable (p :\/: (ps :> q))
   | otherwise = Nothing
 
 prop_equalImpliesSameIdentity :: (Eq2 p, Ident p)
+                              => p wA wB -> p wC wD -> Maybe Bool
+prop_equalImpliesSameIdentity p q
+  | p `unsafeCompare` q = Just $ ident p == ident q
+  | otherwise = Nothing
+
+-- Note the assumption of coinciding start states here!
+prop_sameIdentityImpliesEqual :: (Eq2 p, Ident p)
                               => (p :\/: p) wX wY -> Maybe Bool
-prop_equalImpliesSameIdentity (p :\/: q)
-  | IsEq <- p =\/= q = Just $ ident p == ident q
+prop_sameIdentityImpliesEqual (p :\/: q)
+  | ident p == ident q = Just $ isIsEq $ p =\/= q
   | otherwise = Nothing

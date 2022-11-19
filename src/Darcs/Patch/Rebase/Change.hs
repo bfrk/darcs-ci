@@ -24,7 +24,6 @@ import Darcs.Patch.CommuteFn
     )
 import Darcs.Patch.Debug ( PatchDebug(..) )
 import Darcs.Patch.Effect ( Effect(..) )
-import Darcs.Patch.FileHunk ( IsHunk(..) )
 import Darcs.Patch.Format ( PatchListFormat(..) )
 import Darcs.Patch.Ident ( Ident(..), PatchId )
 import Darcs.Patch.Info ( PatchInfo, patchinfo, displayPatchInfo )
@@ -177,9 +176,9 @@ instance PrimPatch prim => ShowPatch (RebaseChange prim) where
     content = rebaseChangeContent
 
 -- TODO this is a dummy instance that does not actually show context
-instance (ShowPatchBasic prim, Invert prim, PatchListFormat prim)
+instance (Apply prim, ShowPatchBasic prim, Invert prim, PatchListFormat prim)
   => ShowContextPatch (RebaseChange prim) where
-    showContextPatch f p = return $ showPatch f p
+    showContextPatch f p = apply p >> return (showPatch f p)
 
 instance (ReadPatch prim, PatchListFormat prim) => ReadPatch (RebaseChange prim) where
   readPatch' = do
@@ -468,11 +467,6 @@ mkDummy :: FromPrim p => RebaseName wX wY -> Named p wX wY
 mkDummy (AddName pi) = infopatch pi (unsafeCoerceP NilFL)
 mkDummy (DelName _) = error "internal error: can't make a dummy patch from a delete"
 mkDummy (Rename _ _) = error "internal error: can't make a dummy patch from a rename"
-
-instance IsHunk (RebaseChange prim) where
-    -- RebaseChange is a compound patch, so it doesn't really make sense to
-    -- ask whether it's a hunk. TODO: get rid of the need for this.
-    isHunk _ = Nothing
 
 instance PatchListFormat (RebaseChange prim)
 

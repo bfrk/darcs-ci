@@ -24,7 +24,6 @@ module Darcs.Patch.PatchInfoAnd
     , patchInfoAndPatch
     , fmapPIAP
     , fmapFLPIAP
-    , conscientiously
     , hopefully
     , info
     , hopefullyM
@@ -46,10 +45,9 @@ import Darcs.Patch.Commute ( Commute(..) )
 import Darcs.Patch.Conflict ( Conflict(..) )
 import Darcs.Patch.Debug ( PatchDebug(..) )
 import Darcs.Patch.Effect ( Effect(..) )
-import Darcs.Patch.FileHunk ( IsHunk(..) )
 import Darcs.Patch.Format ( PatchListFormat )
 import Darcs.Patch.FromPrim ( PrimPatchBase(..) )
-import Darcs.Patch.Ident ( IdEq2(..), Ident(..), PatchId )
+import Darcs.Patch.Ident ( Ident(..), PatchId )
 import Darcs.Patch.Info ( PatchInfo, displayPatchInfo, justName, showPatchInfo )
 import Darcs.Patch.Inspect ( PatchInspect(..) )
 import Darcs.Patch.Merge ( CleanMerge(..), Merge(..) )
@@ -99,6 +97,11 @@ type PatchInfoAnd p = PatchInfoAndG (Named p)
 -- patch through its info. We're not sure we have the patch, but we
 -- know its info.
 data PatchInfoAndG p wA wB =
+  -- TODO Should the PatchInfo really be strict here and in Named?
+  -- Sharing it with the one inside the Named (if present) would probably
+  -- consume a lot less memory. Similarly when we manipulate (commute, merge)
+  -- patches. For the vast majority of patches their PatchInfo never changes
+  -- once it is read from disk.
   PIAP !PatchInfo
        (Hopefully p wA wB)
   deriving (Show)
@@ -165,8 +168,7 @@ conscientiously er ~(PIAP pinf hp) =
       Right p -> p
       Left e -> throw $ PatchNotAvailable $ er (displayPatchInfo pinf $$ text e)
 
--- | @hopefullyM@ is a version of @hopefully@ which calls @fail@ in a
--- monad instead of erroring.
+-- | Return 'Just' the patch content or 'Nothing' if it is unavailable.
 hopefullyM :: PatchInfoAndG p wA wB -> Maybe (p wA wB)
 hopefullyM (PIAP _ hp) = case hopefully2either hp of
                               Right p -> return p
@@ -213,18 +215,26 @@ instance RepairToFL p => Repair (PatchInfoAnd p) where
 instance PrimPatchBase p => PrimPatchBase (PatchInfoAndG p) where
    type PrimOf (PatchInfoAndG p) = PrimOf p
 
--- Equality on PatchInfoAndG is solely determined by the PatchInfo
--- It is a global invariant of darcs that once a patch is recorded,
--- it should always have the same representation in the same context.
-instance Eq2 (PatchInfoAndG p) where
-    unsafeCompare (PIAP i _) (PIAP i2 _) = i == i2
+getHopefully :: Hopefully p wX wY -> SimpleHopefully p wX wY
+getHopefully (Hashed _ x) = x
+getHopefully (Hopefully x) = x
+
+instance Eq2 p => Eq2 (SimpleHopefully p) where
+    Actually p1 `unsafeCompare` Actually p2 = p1 `unsafeCompare` p2
+    _ `unsafeCompare` _ = error "cannot compare unavailable patches"
+
+instance Eq2 p => Eq2 (Hopefully p) where
+    Hashed h1 _ `unsafeCompare` Hashed h2 _ = h1 == h2
+    hp1 `unsafeCompare` hp2 =
+      getHopefully hp1 `unsafeCompare` getHopefully hp2
+
+instance Eq2 p => Eq2 (PatchInfoAndG p) where
+    PIAP i1 p1 `unsafeCompare` PIAP i2 p2 = i1 == i2 && p1 `unsafeCompare` p2
 
 type instance PatchId (PatchInfoAndG p) = PatchInfo
 
 instance Ident (PatchInfoAndG p) where
     ident (PIAP i _) = i
-
-instance IdEq2 (PatchInfoAndG p)
 
 instance PatchListFormat (PatchInfoAndG p)
 
@@ -279,7 +289,7 @@ instance PatchInspect p => PatchInspect (PatchInfoAndG p) where
 instance Apply p => Apply (PatchInfoAndG p) where
     type ApplyState (PatchInfoAndG p) = ApplyState p
     apply = apply . hopefully
-    unapply = unapply .hopefully
+    unapply = unapply . hopefully
 
 instance ( ReadPatch p, Ident p, PatchId p ~ PatchInfo
          ) => ReadPatch (PatchInfoAndG p) where
@@ -287,9 +297,6 @@ instance ( ReadPatch p, Ident p, PatchId p ~ PatchInfo
 
 instance Effect p => Effect (PatchInfoAndG p) where
     effect = effect . hopefully
-
-instance IsHunk (PatchInfoAndG p) where
-    isHunk _ = Nothing
 
 instance PatchDebug p => PatchDebug (PatchInfoAndG p)
 

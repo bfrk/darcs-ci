@@ -5,7 +5,7 @@ module Darcs.Repository.Working
     )  where
 
 import Control.Monad ( when, unless, filterM )
-import System.Directory ( doesFileExist )
+import System.Directory ( doesFileExist, withCurrentDirectory )
 import System.IO.Error ( catchIOError )
 
 import qualified Data.ByteString as B ( readFile
@@ -15,7 +15,6 @@ import qualified Data.ByteString.Char8 as BC (pack)
 
 import Darcs.Prelude
 
-import Darcs.Util.File ( withCurrentDirectory )
 import Darcs.Util.Progress ( debugMessage )
 import Darcs.Util.Workaround ( setExecutable )
 import Darcs.Util.Tree ( Tree )
@@ -27,6 +26,7 @@ import Darcs.Patch.Apply ( ApplyState )
 import Darcs.Patch.Witnesses.Ordered
     ( FL(..) )
 import Darcs.Patch.Inspect ( PatchInspect )
+import Darcs.Patch.Progress ( progressFL )
 
 import Darcs.Repository.Format ( RepoProperty( NoWorkingDir ), formatHas )
 import Darcs.Repository.Flags  ( Verbosity(..) )
@@ -43,14 +43,15 @@ applyToWorking :: (ApplyState p ~ Tree, RepoPatch p)
                -> Verbosity
                -> FL (PrimOf p) wU wY
                -> IO (Repository rt p wY wR)
-applyToWorking repo verb patch =
+applyToWorking repo verb ps =
   do
     unless (formatHas NoWorkingDir (repoFormat repo)) $ do
       debugMessage "Applying changes to working tree"
       withCurrentDirectory (repoLocation repo) $
+        let ps' = progressFL "Applying patches to working" ps in
         if verb == Quiet
-          then runSilently $ apply patch
-          else runTolerantly $ apply patch
+          then runSilently $ apply ps'
+          else runTolerantly $ apply ps'
     return $ unsafeCoerceU repo
   `catchIOError` (\e -> fail $ "Error applying changes to working tree:\n" ++ show e)
 

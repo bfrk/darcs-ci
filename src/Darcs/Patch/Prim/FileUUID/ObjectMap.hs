@@ -29,14 +29,19 @@ module Darcs.Patch.Prim.FileUUID.ObjectMap
 
 import Darcs.Prelude
 
+import Darcs.Patch.Object ( ObjectIdOf )
 import Darcs.Util.Hash ( Hash )
 import Darcs.Util.Path ( Name )
 import qualified Data.ByteString as B (ByteString)
 import qualified Data.Map as M
+import System.Posix.Types ( FileID )
 
 type FileContent = B.ByteString
 
-newtype UUID = UUID B.ByteString deriving (Eq, Ord, Show)
+data UUID
+  = Recorded B.ByteString
+  | Unrecorded FileID
+  deriving (Eq, Ord, Show)
 
 -- | An object is located by giving the 'UUID' of the parent
 -- 'Directory' and a 'Name'.
@@ -63,3 +68,5 @@ data ObjectMap (m :: * -> *) = ObjectMap
   , putObject :: UUID -> Object m -> m (ObjectMap m)
   , listObjects :: m [UUID]
   }
+
+type instance ObjectIdOf ObjectMap = UUID

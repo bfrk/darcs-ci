@@ -44,6 +44,7 @@ module Darcs.Patch.Depends
     , countUsThem
     , removeFromPatchSet
     , slightlyOptimizePatchset
+    , fullyOptimizePatchSet
     , splitOnTag
     , patchSetUnion
     , patchSetIntersection
@@ -189,6 +190,43 @@ cleanLatestTag inp@(PatchSet ts ps) =
       case splitOnTag (info t) (PatchSet ts left) of
         Just (PatchSet ts' ps') -> PatchSet ts' (ps' +<+ right)
         _ -> error "impossible case" -- because t is in left
+
+-- | Create a 'Tagged' section for every clean tag. For unclean tags we try to
+-- make them clean, but only if that doesn't make an earlier clean tag dirty.
+-- This means that the operation is idempotent and in particular monotonic,
+-- which justifies the "optimize" in the name.
+fullyOptimizePatchSet
+  :: forall p wZ . Commute p => PatchSet p Origin wZ -> PatchSet p Origin wZ
+fullyOptimizePatchSet = go emptyPatchSet . patchSet2FL
+  where
+    go :: PatchSet p Origin wY -> FL (PatchInfoAnd p) wY wZ -> PatchSet p Origin wZ
+    go s NilFL = s
+    go s@(PatchSet ts ps) (q:>:qs)
+      | isTag qi, getUncovered s' == [qi] =
+          -- tag is clean
+          go (PatchSet (ts :<: Tagged ps q Nothing) NilRL) qs
+      | isTag qi, Just s'' <- makeClean s q = go s'' qs
+      | otherwise = go s' qs
+      where
+        qi = info q
+        s' = PatchSet ts (ps:<:q)
+
+-- | Take a 'PatchSet' and an adjacent tag and try to make the tag clean
+-- by commuting out trailing patches that are not covered by the tag.
+makeClean
+  :: Commute p
+  => PatchSet p Origin wY
+  -> PatchInfoAnd p wY wZ
+  -> Maybe (PatchSet p Origin wZ)
+makeClean (PatchSet ts ps) t =
+  let ti = info t in
+  case partitionRL ((`notElem` (ti : getdeps (hopefully t))) . info) (ps :<: t) of
+    tagAndDeps@(ds :<: t') :> nonDeps ->
+      -- check if tag really became clean
+      if getUncovered (PatchSet ts tagAndDeps) == [ti]
+        then Just $ PatchSet (ts :<: Tagged ds t' Nothing) nonDeps
+        else Nothing
+    _ -> error "imposible"
 
 -- |'unwrapOneTagged' unfolds a single Tagged object in a PatchSet, adding the
 -- tag and patches to the PatchSet's patch list.

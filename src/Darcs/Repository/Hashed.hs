@@ -53,12 +53,13 @@ import System.IO ( IOMode(..), hClose, hPutStrLn, openBinaryFile, stderr )
 import System.IO.Error ( catchIOError )
 import System.IO.Unsafe ( unsafeInterleaveIO )
 
-import Darcs.Patch ( RepoPatch, effect, readPatch )
+import Darcs.Patch ( RepoPatch, effect, invertFL, readPatch )
 import Darcs.Patch.Apply ( Apply(..) )
 import Darcs.Patch.Depends
     ( cleanLatestTag
     , removeFromPatchSet
     , slightlyOptimizePatchset
+    , fullyOptimizePatchSet
     )
 import Darcs.Patch.Format ( PatchListFormat )
 import Darcs.Patch.Info ( displayPatchInfo, makePatchname, piName )
@@ -88,6 +89,7 @@ import Darcs.Patch.Witnesses.Ordered
     , foldrwFL
     , mapRL
     , (+>+)
+    , (+>>+)
     )
 import Darcs.Patch.Witnesses.Sealed ( Dup(..), Sealed(..) )
 import Darcs.Patch.Witnesses.Unsafe ( unsafeCoerceP )
@@ -95,6 +97,7 @@ import Darcs.Patch.Witnesses.Unsafe ( unsafeCoerceP )
 import Darcs.Repository.Flags
     ( Compression
     , DryRun(..)
+    , OptimizeDeep(..)
     , RemoteDarcs
     , UpdatePending(..)
     , Verbosity(..)
@@ -121,12 +124,10 @@ import Darcs.Repository.InternalTypes
     , withRepoDir
     )
 import Darcs.Repository.Inventory
-    ( Inventory(..)
-    , peekPristineHash
+    ( peekPristineHash
     , pokePristineHash
-    , readInventoryPrivate
-    , readPatchesFromInventoryEntries
-    , readPatchesUsingSpecificInventory
+    , readOneInventory
+    , readPatchesFromInventoryFile
     , showInventoryEntry
     , writeInventory
     , writePatchIfNecessary
@@ -141,7 +142,6 @@ import Darcs.Repository.Pending
     ( finalizePending
     , readTentativePending
     , revertPending
-    , tentativelyRemoveFromPending
     , writeTentativePending
     )
 import Darcs.Repository.Pristine
@@ -159,6 +159,7 @@ import Darcs.Repository.Rebase
     , writeTentativeRebase
     )
 import Darcs.Repository.State ( updateIndex )
+import Darcs.Repository.Traverse ( cleanRepository )
 import Darcs.Repository.Unrevert
     ( finalizeTentativeUnrevert
     , removeFromUnrevertContext
@@ -234,8 +235,8 @@ readPatchesHashed :: (PatchListFormat p, ReadPatch p) => Repository rt p wU wR
                   -> IO (PatchSet p Origin wR)
 readPatchesHashed repo =
   case repoAccessType repo of
-    SRO -> readPatchesUsingSpecificInventory hashedInventoryPath repo
-    SRW -> readPatchesUsingSpecificInventory tentativeHashedInventoryPath repo
+    SRO -> readPatchesFromInventoryFile hashedInventoryPath repo
+    SRW -> readPatchesFromInventoryFile tentativeHashedInventoryPath repo
 
 -- | Read the tentative 'PatchSet' of a (hashed) 'Repository'.
 readTentativePatches :: (PatchListFormat p, ReadPatch p)
@@ -347,7 +348,8 @@ tentativelyAddPatch_ upr r compr verb upe p = do
           applyToTentativePristine r ApplyNormal verb p
        when (upe == YesUpdatePending) $ do
           debugMessage "Updating pending..."
-          tentativelyRemoveFromPending r' (effect p)
+          Sealed pend <- readTentativePending r
+          writeTentativePending r' $ invertFL (effect p) +>>+ pend
        return r'
 
 tentativelyRemovePatches :: (RepoPatch p, ApplyState p ~ Tree)
@@ -485,14 +487,23 @@ checkIndexIsWritable = do
 -- to a given tag are included in that tag, so less commutation and
 -- history traversal is needed.  This latter issue can become very
 -- important in large repositories.
+--
+-- In addition, if 'YesOptimizeDeep' is passed, then we first create
+-- a 'Tagged' section for every clean tag.
 reorderInventory :: (RepoPatch p, ApplyState p ~ Tree)
                  => Repository 'RW p wU wR
                  -> Compression
+                 -> OptimizeDeep
                  -> IO ()
-reorderInventory r compr
+reorderInventory r compr deep
   | formatHas HashedInventory (repoFormat r) = do
-      cleanLatestTag `fmap` readPatches r >>=
+      let prepare =
+            case deep of
+              OptimizeDeep -> fullyOptimizePatchSet
+              OptimizeShallow -> id
+      (cleanLatestTag . prepare) `fmap` readPatches r >>=
         writeTentativeInventory r compr
+      cleanRepository r
       withSignalsBlocked $ finalizeTentativeChanges r compr
   | otherwise = fail Old.oldRepoFailMsg
 
@@ -524,9 +535,8 @@ upgradeOldStyleRebase :: forall p wU wR.
                       => Repository 'RW p wU wR -> Compression -> IO ()
 upgradeOldStyleRebase repo compr = do
   PatchSet (ts :: RL (Tagged p) Origin wX) _ <- readTentativePatches repo
-  Inventory _ invEntries <- readInventoryPrivate tentativeHashedInventoryPath
   Sealed wps <-
-    readPatchesFromInventoryEntries @(W.WrappedNamed p) (repoCache repo) invEntries
+    readOneInventory @(W.WrappedNamed p) (repoCache repo) tentativeHashedInventoryPath
   case extractOldStyleRebase wps of
     Nothing ->
       ePutDocLn $ text "No old-style rebase state found, no upgrade needed."

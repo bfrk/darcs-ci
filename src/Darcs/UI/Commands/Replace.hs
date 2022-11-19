@@ -58,7 +58,14 @@ import Darcs.Repository.Prefs ( FileType(TextFile) )
 import Darcs.Util.Path ( AnchoredPath, displayPath )
 import Darcs.Util.Printer ( Doc, formatWords, vsep )
 import Darcs.Util.SignalHandler ( withSignalsBlocked )
-import Darcs.Patch.Witnesses.Ordered ( FL(..), (+>+), concatFL, toFL, nullFL )
+import Darcs.Patch.Witnesses.Ordered
+    ( FL(..)
+    , concatFL
+    , consGapFL
+    , joinGapsFL
+    , nullFL
+    , (+>+)
+    )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(..), mapSeal, FreeLeft, Gap(..), unFreeLeft, unseal )
 
 replaceDescription :: String
@@ -71,8 +78,12 @@ replaceHelp = vsep $ map formatWords
     , "each occurrence of the old word is replaced by the new word."
     , "This is intended to provide a clean way to rename a function or"
     , "variable.  Such renamings typically affect lines all through the"
-    , "source code, so a traditional line-based patch would be very likely to"
-    , "conflict with other branches, requiring manual merging."
+    , "source code, so a traditional line-based patch (hunk) would be very"
+    , "likely to conflict with other hunks, requiring manual merging."
+    , "Note that replace patches will cleanly merge with hunks that introduce"
+    , "the old token, even if the original file did not contain any of them."
+    , "(But this does not hold for hunks that introduce the new token, see"
+    , "the section about the --force option below.)"
     ]
   , [ "Files are tokenized according to one simple rule: words are strings of"
     , "valid token characters, and everything between them (punctuation and"
@@ -91,25 +102,18 @@ replaceHelp = vsep $ map formatWords
     , "could be used to match fields in the passwd(5), where records and"
     , "fields are separated by newlines and colons respectively."
     ]
-  , [ "If you choose to use `--token-chars`, you are STRONGLY encouraged to do"
-    , "so consistently.  The consequences of using multiple replace patches"
-    , "with different `--token-chars` arguments on the same file are not well"
-    , "tested nor well understood."
-    ]
   , [ "By default Darcs will refuse to perform a replacement if the new token"
-    , "is already in use, because the replacements would be not be"
-    , "distinguishable from the existing tokens.  This behaviour can be"
-    , "overridden by supplying the `--force` option, but an attempt to `darcs"
-    , "rollback` the resulting patch will affect these existing tokens."
+    , "already occurs as a token in the file.  This behaviour can be overridden"
+    , "by supplying the `--force` option. This will add extra hunk changes before"
+    , "the replace change that rename the new token to the old one. The more"
+    , "often the new token occurs in the file, the less useful a forced replace"
+    , "becomes, so choose with care."
     ]
   , [ "Limitations:"
     ]
   , [ "The tokenizer treats files as byte strings, so it is not possible for"
     , "`--token-chars` to include multi-byte characters, such as the non-ASCII"
-    , "parts of UTF-8.  Similarly, trying to replace a \"high-bit\" character"
-    , "from a unibyte encoding will also result in replacement of the same"
-    , "byte in files with different encodings.  For example, an acute a from"
-    , "ISO 8859-1 will also match an alpha from ISO 8859-7."
+    , "parts of UTF-8 or ISO-8895 encodings."
     ]
   , [ "Due to limitations in the patch file format, `--token-chars` arguments"
     , "cannot contain literal whitespace.  For example, `[^ \\n\\t]` cannot be"
@@ -162,7 +166,7 @@ replaceCmd fps opts (old : new : args@(_ : _)) =
         mapM_ checkToken [ old, new ]
         working <- readUnrecorded _repository (O.useIndex ? opts) Nothing
         files <- filterM (exists working) paths
-        Sealed replacePs <- mapSeal concatFL . toFL <$>
+        Sealed replacePs <- mapSeal concatFL . unFreeLeft . joinGapsFL <$>
             mapM (doReplace toks working) files
         withSignalsBlocked $ do
           -- Note: addToPending takes care of commuting the replace patch and
@@ -189,7 +193,7 @@ replaceCmd fps opts (old : new : args@(_ : _)) =
         workReplaced <- maybeApplyToTree replacePatch work
         case workReplaced of
           Just _ -> do
-            return $ joinGap (:>:) (freeGap replacePatch) gapNilFL
+            return $ consGapFL replacePatch gapNilFL
           Nothing
             | O.forceReplace ? opts -> getForceReplace f toks work
             | otherwise -> putStrLn existsMsg >> return gapNilFL
@@ -237,10 +241,8 @@ isTok :: String -> String -> Bool
 isTok _ "" = False
 isTok toks s = all (regChars toks) s
 
--- | This function checks for @--token-chars@ on the command-line. If found,
--- it validates the argument and returns it, without the surrounding square
--- brackets. Otherwise, it returns either 'defaultToks' or 'filenameToks' as
--- explained in 'replaceHelp'.
+-- | This function validates the argument to the --token-chars option and returns
+-- it without the surrounding square brackets.
 --
 -- Note: Limitations in the current replace patch file format prevents tokens
 -- and token-char specifiers from containing any whitespace.

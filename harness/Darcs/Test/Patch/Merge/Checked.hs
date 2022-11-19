@@ -11,6 +11,7 @@ import Darcs.Patch.FromPrim ( PrimOf )
 import Darcs.Patch.Invert
 import Darcs.Patch.Merge
 import Darcs.Patch.Named
+import Darcs.Patch.Permutations ( (=\~/=) )
 
 import Darcs.Patch.Witnesses.Eq
 import Darcs.Patch.Witnesses.Ordered
@@ -67,7 +68,7 @@ checkMerge (p :\/: q) (q' :/\: p')
   -- sense to keep or not.
   -- The convoluted guard False==True is to avoid a warning as the pattern match checker
   -- knows that False makes a guard unreachable.
-  | False==True, NotEq <- (p :>: q' :>: NilFL) =\/= (q :>: p' :>: NilFL) =
+  | False==True, NotEq <- (p :>: q' :>: NilFL) =\~/= (q :>: p' :>: NilFL) =
       error "internal error: merge didn't produce equivalent sequences"
   | NotEq <- squashes (effect p +>+ effect q' +>+ invert (effect q +>+ effect p')) =
       error "internal error: merge didn't produce equivalent effects"

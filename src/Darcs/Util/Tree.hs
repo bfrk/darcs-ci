@@ -297,17 +297,15 @@ class (Monad m) => FilterTree a m where
     filter :: (AnchoredPath -> TreeItem m -> Bool) -> a m -> a m
 
 instance (Monad m) => FilterTree Tree m where
-    filter predicate t_ = filter' t_ (AnchoredPath [])
-        where filter' t path = t { items = M.mapMaybeWithKey (wibble path) $ items t }
+    filter predicate = filter' (AnchoredPath [])
+        where filter' path t = t { items = M.mapMaybeWithKey (wibble path) $ items t }
               wibble path name item =
                   let npath = path `appendPath` name in
                       if predicate npath item
                          then Just $ filterSub npath item
                          else Nothing
-              filterSub npath (SubTree t) = SubTree $ filter' t npath
-              filterSub npath (Stub stub h) =
-                  Stub (do x <- stub
-                           return $ filter' x npath) h
+              filterSub npath (SubTree t) = SubTree (filter' npath t)
+              filterSub npath (Stub stub _) = Stub (filter' npath <$> stub) Nothing
               filterSub _ x = x
 
 -- | Given two Trees, a @guide@ and a @tree@, produces a new Tree that is a

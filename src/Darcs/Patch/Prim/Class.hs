@@ -10,6 +10,7 @@ module Darcs.Patch.Prim.Class
     , PrimMangleUnravelled(..)
     , Mangled
     , Unravelled
+    , showPrimCtx
     , primCleanMerge
     )
     where
@@ -17,19 +18,21 @@ module Darcs.Patch.Prim.Class
 import Darcs.Prelude
 
 import Darcs.Patch.ApplyMonad ( ApplyMonad )
-import Darcs.Patch.FileHunk ( FileHunk, IsHunk )
+import Darcs.Patch.FileHunk ( IsHunk(..) )
 import Darcs.Patch.Format ( FileNameFormat, PatchListFormat )
 import Darcs.Patch.Inspect ( PatchInspect )
-import Darcs.Patch.Apply ( Apply(..) )
+import Darcs.Patch.Apply ( Apply(..), ObjectIdOfPatch )
 import Darcs.Patch.Commute ( Commute(..) )
 import Darcs.Patch.CommuteFn ( PartialMergeFn )
 import Darcs.Patch.Invert ( Invert(..) )
 import Darcs.Patch.Merge ( CleanMerge(..) )
+import Darcs.Patch.Object ( ObjectId )
 import Darcs.Patch.Read ( ReadPatch )
 import Darcs.Patch.Repair ( RepairToFL )
 import Darcs.Patch.Show ( ShowPatch, ShowContextPatch )
 import Darcs.Patch.SummaryData ( SummDetail )
-import Darcs.Patch.Witnesses.Eq ( Eq2(..) )
+import Darcs.Patch.Viewing ( showContextHunk )
+import Darcs.Patch.Witnesses.Eq ( Eq2(..), EqCheck )
 import Darcs.Patch.Witnesses.Ordered ( (:/\:)(..), (:>)(..), (:\/:)(..), FL )
 import Darcs.Patch.Witnesses.Show ( Show2 )
 import Darcs.Patch.Witnesses.Sealed ( Sealed )
@@ -73,35 +76,39 @@ class PrimConstruct prim where
    hunk :: AnchoredPath -> Int -> [B.ByteString] -> [B.ByteString] -> prim wX wY
    tokreplace :: AnchoredPath -> String -> String -> String -> prim wX wY
    binary :: AnchoredPath -> B.ByteString -> B.ByteString -> prim wX wY
-   primFromHunk :: FileHunk wX wY -> prim wX wY
 
-class PrimCoalesce prim where
+class (Commute prim, Eq2 prim, Invert prim) => PrimCoalesce prim where
    -- | Try to shrink the input sequence by getting rid of self-cancellations
    -- and identity patches or by coalescing patches. Also sort patches
    -- according to some internally defined order (specific to the patch type)
    -- as far as possible while respecting dependencies.
    -- A result of 'Nothing' means that we could not shrink the input.
+   --
+   -- This method is included in the class for optimization. Instances are free
+   -- to use 'Darcs.Patch.Prim.Coalesce.defaultTryToShrink'.
    tryToShrink :: FL prim wX wY -> Maybe (FL prim wX wY)
 
    -- | This is similar to 'tryToShrink' but always gives back a result: if the
    -- sequence could not be shrunk we merely give back a sorted version.
-   sortCoalesceFL :: FL prim wX wY -> FL prim wX wY
-
-   -- | Either 'primCoalesce' or cancel inverses.
    --
-   -- prop> primCoalesce (p :> q) == Just r => apply r = apply p >> apply q
-   -- prop> primCoalesce (p :> q) == Just r => lengthFL r < 2
-   coalesce :: (prim :> prim) wX wY -> Maybe (FL prim wX wY)
+   -- This method is included in the class for optimization. Instances are free
+   -- to use 'Darcs.Patch.Prim.Coalesce.defaultSortCoalesceFL'.
+   sortCoalesceFL :: FL prim wX wY -> FL prim wX wY
 
    -- | Coalesce adjacent patches to one with the same effect.
    --
    -- prop> apply (primCoalesce p q) == apply p >> apply q
    primCoalesce :: prim wX wY -> prim wY wZ -> Maybe (prim wX wZ)
 
-   -- | If 'primCoalesce' is addition, then this is subtraction.
+   -- | Whether prim patch has no effect at all and thus can be eliminated
+   -- as far as coalescing is concerned.
+   isIdentity :: prim wX wY -> EqCheck wX wY
+
+   -- | Provide a total order between arbitrary patches that is consistent
+   -- with 'Eq2':
    --
-   -- prop> Just r == primCoalesce p q => primDecoalesce r p == Just q
-   primDecoalesce :: prim wX wZ -> prim wX wY -> Maybe (prim wY wZ)
+   -- prop> unsafeCompare p q == IsEq  <=>  comparePrim p q == EQ
+   comparePrim :: prim wA wB -> prim wC wD -> Ordering
 
 -- | Prim patches that support "sifting". This is the process of eliminating
 -- changes from a sequence of prims that can be recovered by comparing states
@@ -110,29 +117,34 @@ class PrimCoalesce prim where
 -- implementation is allowed and expected to shrink and coalesce changes in the
 -- process.
 class PrimSift prim where
-  -- | Simplify the candidate pending patch through a combination of looking
-  -- for self-cancellations (sequences of patches followed by their inverses),
-  -- coalescing, and getting rid of any hunk or binary patches we can commute
-  -- out the back.
-  --
-  -- More abstractly, for an argument @p@, pristine state @R@, and working
-  -- state @U@, define
-  --
-  -- > unrecorded p = p +>+ diff (pureApply p R) U
-  --
-  -- Then the resulting sequence @p'@ must maintain that equality, i.e.
-  --
-  -- > unrecorded p = unrecorded (siftForPending p)
-  --
-  -- while trying to "minimize" @p@.
-  siftForPending :: FL prim wX wY -> Sealed (FL prim wX)
+  -- | Whether a prim is a candidate for sifting
+  primIsSiftable :: prim wX wY -> Bool
 
 class PrimDetails prim where
    summarizePrim :: prim wX wY -> [SummDetail]
 
 class PrimShow prim where
    showPrim :: FileNameFormat -> prim wA wB -> Doc
-   showPrimCtx :: ApplyMonad  (ApplyState prim) m => FileNameFormat -> prim wA wB -> m Doc
+
+showPrimCtx
+  :: ( PrimShow prim
+     , ApplyMonad (ApplyState prim) m
+     , IsHunk prim
+     , ObjectId (ObjectIdOfPatch prim)
+     , Apply prim
+     )
+  => FileNameFormat
+  -> prim wA wB
+  -> m Doc
+showPrimCtx fmt p =
+  case isHunk p of
+    Just fh -> do
+      r <- showContextHunk fmt fh
+      apply p
+      return r
+    Nothing -> do
+      apply p
+      return $ showPrim fmt p
 
 class PrimRead prim where
    readPrim :: FileNameFormat -> Parser (Sealed (prim wX))
@@ -145,7 +157,7 @@ class PrimApply prim where
 type Unravelled prim wX = [Sealed (FL prim wX)]
 
 -- | Result of mangling a single Unravelled.
-type Mangled prim wX = Sealed (FL prim wX)
+type Mangled prim wX = Sealed (prim wX)
 
 class PrimMangleUnravelled prim where
   -- | Mangle conflicting alternatives if possible.

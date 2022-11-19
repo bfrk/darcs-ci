@@ -396,7 +396,7 @@ minimiseBlame (WithResult finalRunner) =
 type StrategyDone m p wY = forall a . WithResult m p a ->  m wY TestingDone a
 
 -- |Report that the strategy has finished with the given result.
-strategyDone :: TestRunner m => StrategyResult p wSuccess wFailure -> StrategyDone m p wSuccess
+strategyDone :: StrategyResult p wSuccess wFailure -> StrategyDone m p wSuccess
 strategyDone result withResult = runWithResult withResult result
 
 -- |The implementation type for a given "test strategy" like bisect, backoff, linear or once.

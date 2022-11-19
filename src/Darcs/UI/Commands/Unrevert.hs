@@ -30,7 +30,6 @@ import Darcs.Repository
     , applyToWorking
     , considerMergeToWorking
     , finalizeRepositoryChanges
-    , readPristine
     , readPatches
     , addToPending
     , unrecordedChanges
@@ -59,7 +58,6 @@ import Darcs.UI.Flags
     , umask
     , useCache
     , verbosity
-    , withContext
     )
 import Darcs.UI.Flags ( DarcsFlag )
 import Darcs.UI.Options ( (?), (^) )
@@ -97,7 +95,6 @@ patchSelOpts flags = S.PatchSelectionOptions
     , S.interactive = isInteractive True flags
     , S.selectDeps = O.PromptDeps -- option not supported, use default
     , S.withSummary = O.NoSummary -- option not supported, use default
-    , S.withContext = withContext ? flags
     }
 
 unrevert :: DarcsCommand
@@ -118,7 +115,6 @@ unrevert = DarcsCommand
     unrevertBasicOpts
       = O.interactive -- True
       ^ O.repoDir
-      ^ O.withContext
       ^ O.diffAlgorithm
     unrevertAdvancedOpts = O.umask
     unrevertOpts = unrevertBasicOpts `withStdOpts` unrevertAdvancedOpts
@@ -128,7 +124,6 @@ unrevertCmd _ opts [] =
  withRepoLock (useCache ? opts) (umask ? opts) $ RepoJob $ \_repository -> do
   us <- readPatches _repository
   Sealed them <- readUnrevert us
-  pristine <- readPristine _repository
   unrecorded <- unrecordedChanges (diffingOpts opts) _repository Nothing
   Sealed pw <- considerMergeToWorking _repository "unrevert"
                       YesAllowConflictsAndMark
@@ -139,7 +134,7 @@ unrevertCmd _ opts [] =
   let selection_config =
         selectionConfigPrim
             First "unrevert" (patchSelOpts opts)
-            Nothing Nothing (Just pristine)
+            Nothing Nothing
   (to_unrevert :> to_keep) <- runInvertibleSelection pw selection_config
   addToPending _repository (diffingOpts opts) to_unrevert
   recorded <- readPatches _repository

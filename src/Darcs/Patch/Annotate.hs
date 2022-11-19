@@ -62,7 +62,7 @@ import Darcs.Patch.Info ( PatchInfo(..), displayPatchInfo, piAuthor, makePatchna
 import Darcs.Patch.Invert ( Invert, invert )
 import Darcs.Patch.Named ( patchcontents )
 import Darcs.Patch.PatchInfoAnd( info, PatchInfoAnd, hopefully )
-import Darcs.Patch.Prim.V1.Core ( Prim(..), DirPatchType(..), FilePatchType(..) )
+import Darcs.Patch.Prim.V1.Core ( Prim(..), TreePatchType(..), FilePatchType(..) )
 import Darcs.Patch.TokenReplace ( annotateReplace )
 import Darcs.Patch.Witnesses.Ordered
 
@@ -108,10 +108,6 @@ type AnnotateRP p = (Annotate (PrimOf p), Invert (PrimOf p), Effect p)
 
 instance Annotate Prim where
   annotate (FP fn fp) = case fp of
-    RmFile -> do
-      whenPathIs fn $ modify' (\s -> s { currentPath = Nothing })
-      withDirectory $ updateDirectory fn
-    AddFile -> return ()
     Hunk off o n -> whenPathIs fn $ withFile $ \c -> do
       let remove = length o
       let add = length n
@@ -126,7 +122,7 @@ instance Annotate Prim where
               , annotated = merge i a $ map eval $ take remove $ from
               }
     TokReplace t o n -> whenPathIs fn $ withFile $ \c -> do
-      let test = annotateReplace t (BC.pack o) (BC.pack n)
+      let test = annotateReplace t o n
       i <- gets currentInfo
       a <- gets annotated
       modify' $ \s -> s
@@ -135,16 +131,20 @@ instance Annotate Prim where
         }
     -- TODO what if the status of a file changed from text to binary?
     Binary _ _ -> whenPathIs fn $ error "annotate: can't handle binary changes"
-  annotate (DP _ AddDir) = return ()
-  annotate (DP fn RmDir) = withDirectory $ \c -> do
+  annotate (TP (RmFile fn)) = do
+      whenPathIs fn $ modify' (\s -> s { currentPath = Nothing })
+      withDirectory $ updateDirectory fn
+  annotate (TP (AddFile _)) = return ()
+  annotate (TP (AddDir _)) = return ()
+  annotate (TP (RmDir fn)) = withDirectory $ \c -> do
     whenPathIs fn $ modify' (\s -> s { currentPath = Nothing })
     updateDirectory fn c
-  annotate (Move fn fn') = do
+  annotate (TP (Move fn fn')) = do
     modify' (\s -> s { currentPath = fmap (movedirfilename fn fn') (currentPath s) })
     withDirectory $ \c -> do
       let fix (i, x) = (i, movedirfilename fn fn' x)
       modify $ \s -> s { current = DirContent $ map fix c }
-  annotate (ChangePref _ _ _) = return ()
+  annotate (CP _ _ _) = return ()
 
 instance Annotate FileUUID.Prim where
   annotate _ = error "annotate not implemented for FileUUID patches"

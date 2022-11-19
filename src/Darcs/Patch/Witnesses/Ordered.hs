@@ -70,15 +70,14 @@ module Darcs.Patch.Witnesses.Ordered
     , spanFL
     , spanFL_M
     , zipWithFL
-    , toFL
+    , consGapFL
+    , concatGapsFL
+    , joinGapsFL
     , mapFL_FL_M
     , sequenceFL_
-    , eqFL
-    , eqFLUnsafe
     , initsFL
     -- * 'RL' only
     , isShorterThanRL
-    , snocRLSealed
     , spanRL
     , breakRL
     , takeWhileRL
@@ -96,10 +95,11 @@ import Darcs.Patch.Witnesses.Sealed
     ( FlippedSeal(..)
     , flipSeal
     , Sealed(..)
-    , FreeLeft
-    , unFreeLeft
     , Sealed2(..)
     , seal
+    , Gap(..)
+    , emptyGap
+    , joinGap
     )
 import Darcs.Patch.Witnesses.Eq ( Eq2(..), EqCheck(..) )
 
@@ -180,11 +180,11 @@ instance (Show2 a, Show2 b) => Show1 ((a :> b) wX)
 -- (non-haddock version)
 --      wZ
 --     :/\:
--- a3 /    \ a4
---   /      \
+--  a3 /  \ a4
+--    /    \
 --  wX      wY
---   \      /
--- a1 \    / a2
+--    \    /
+--  a1 \  / a2
 --     :\/:
 --      wZ
 -- 
@@ -239,6 +239,21 @@ instance (Eq2 a, Eq2 b) => Eq2 (a :> b) where
 instance (Eq2 a, Eq2 b) => Eq ((a :> b) wX wY) where
     (==) = unsafeCompare
 
+instance Eq2 p => Eq2 (FL p) where
+  NilFL =\/= NilFL = IsEq
+  a:>:as =\/= b:>:bs
+    | IsEq <- a =\/= b = as =\/= bs
+    | otherwise = NotEq
+  _ =\/= _ = NotEq
+  xs =/\= ys = reverseFL xs =/\= reverseFL ys
+
+instance Eq2 p => Eq2 (RL p) where
+  NilRL =/\= NilRL = IsEq
+  as:<:a =/\= bs:<:b
+    | IsEq <- a =/\= b = as =/\= bs
+    | otherwise = NotEq
+  _ =/\= _ = NotEq
+
 instance (Show2 a, Show2 b) => Show2 (a :> b)
 
 instance (Show2 a, Show2 b) => Show ( (a :\/: b) wX wY ) where
@@ -282,10 +297,12 @@ filterRL _ NilRL = []
 filterRL f (xs :<: x) | f x = Sealed2 x : (filterRL f xs)
                       | otherwise = filterRL f xs
 
+-- | Concatenate two 'FL's. This traverses only the left hand side.
 (+>+) :: FL a wX wY -> FL a wY wZ -> FL a wX wZ
 NilFL +>+ ys = ys
 (x:>:xs) +>+ ys = x :>: xs +>+ ys
 
+-- | Concatenate two 'RL's. This traverses only the right hand side.
 (+<+) :: RL a wX wY -> RL a wY wZ -> RL a wX wZ
 xs +<+ NilRL = xs
 xs +<+ (ys:<:y) = xs +<+ ys :<: y
@@ -478,12 +495,14 @@ isShorterThanRL _ n | n <= 0 = False
 isShorterThanRL NilRL _ = True
 isShorterThanRL (xs:<:_) n = isShorterThanRL xs (n-1)
 
-snocRLSealed :: FlippedSeal (RL a) wY -> a wY wZ -> FlippedSeal (RL a) wZ
-snocRLSealed (FlippedSeal as) a = flipSeal $ as :<: a
+consGapFL :: Gap w => (forall wX wY. p wX wY) -> w (FL p) -> w (FL p)
+consGapFL p = joinGap (:>:) (freeGap p)
 
-toFL :: [FreeLeft a] -> Sealed (FL a wX)
-toFL [] = Sealed NilFL
-toFL (x:xs) = case unFreeLeft x of Sealed y -> case toFL xs of Sealed ys -> Sealed (y :>: ys)
+joinGapsFL :: Gap w => [w p] -> w (FL p)
+joinGapsFL = foldr (joinGap (:>:)) (emptyGap NilFL)
+
+concatGapsFL :: Gap w => [w (FL p)] -> w (FL p)
+concatGapsFL = foldr (joinGap (+>+)) (emptyGap NilFL)
 
 dropWhileFL :: (forall wX wY . a wX wY -> Bool) -> FL a wR wV -> FlippedSeal (FL a) wV
 dropWhileFL _ NilFL       = flipSeal NilFL
@@ -514,19 +533,6 @@ spanRL f left@(ps :<: p)
 -- elements before the split point should not be touched.
 breakRL :: (forall wA wB . p wA wB -> Bool) -> RL p wX wY -> (RL p :> RL p) wX wY
 breakRL f = spanRL (not . f)
-
--- |Check that two 'FL's are equal element by element.
--- This differs from the 'Eq2' instance for 'FL' which
--- uses commutation.
-eqFL :: Eq2 a => FL a wX wY -> FL a wX wZ -> EqCheck wY wZ
-eqFL NilFL NilFL = IsEq
-eqFL (x:>:xs) (y:>:ys) | IsEq <- x =\/= y, IsEq <- eqFL xs ys = IsEq
-eqFL _ _ = NotEq
-
-eqFLUnsafe :: Eq2 a => FL a wX wY -> FL a wZ wW -> Bool
-eqFLUnsafe NilFL NilFL = True
-eqFLUnsafe (x:>:xs) (y:>:ys) = unsafeCompare x y && eqFLUnsafe xs ys
-eqFLUnsafe _ _ = False
 
 infixr 5 +>>+
 infixl 5 +<<+

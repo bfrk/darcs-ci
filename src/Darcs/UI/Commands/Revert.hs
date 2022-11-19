@@ -31,7 +31,6 @@ import Darcs.UI.Flags
     , pathSetFromArgs
     , umask
     , useCache
-    , withContext
     )
 import Darcs.UI.Options ( (^), (?) )
 import qualified Darcs.UI.Options.All as O
@@ -59,7 +58,6 @@ import Darcs.Repository
     , finalizeRepositoryChanges
     , applyToWorking
     , readPatches
-    , readPristine
     , unrecordedChanges
     , withRepoLock
     )
@@ -107,7 +105,6 @@ patchSelOpts flags = S.PatchSelectionOptions
     , S.interactive = isInteractive True flags
     , S.selectDeps = O.PromptDeps -- option not supported, use default
     , S.withSummary = O.NoSummary -- option not supported, use default
-    , S.withContext = withContext ? flags
     }
 
 revert :: DarcsCommand
@@ -128,7 +125,6 @@ revert = DarcsCommand
     basicOpts
       = O.interactive -- True
       ^ O.repoDir
-      ^ O.withContext
       ^ O.diffAlgorithm
       ^ O.maybelookforadds False
     advancedOpts = O.umask
@@ -141,14 +137,13 @@ revertCmd fps opts args =
     existing_paths <- existingPaths _repository =<< pathSetFromArgs fps args
     announceFiles verbosity existing_paths "Reverting changes in"
     changes <- unrecordedChanges diffOpts _repository existing_paths
-    pristine <- readPristine _repository
     case changes of
       NilFL -> putInfo opts "There are no changes to revert!"
       _ -> do
         let selection_config =
               selectionConfigPrim Last "revert" (patchSelOpts opts)
                 (Just (reversePrimSplitter (diffAlgorithm ? opts)))
-                existing_paths (Just pristine)
+                existing_paths
         norevert :> torevert <- runInvertibleSelection changes selection_config
         if nullFL torevert
           then
@@ -216,7 +211,6 @@ clean = alias
     basicOpts
       = O.interactive -- True
       ^ O.repoDir
-      ^ O.withContext
       ^ O.diffAlgorithm
       ^ O.maybelookforadds True
     advancedOpts = O.umask

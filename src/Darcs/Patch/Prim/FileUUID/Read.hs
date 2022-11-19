@@ -28,7 +28,10 @@ instance PrimRead Prim where
       manifest kind ctor = liftM2 ctor (patch kind) location
       identity = lexString "identity" >> return Identity
       patch x = string x >> uuid
-      uuid = UUID <$> lexWord
+      uuid =
+        Recorded <$> (lexString "r" >> lexWord)
+        <|>
+        Unrecorded <$> (lexString "u" >> unsigned)
       filename = do
         word <- lexWord
         either fail return $ decodeWhiteName word

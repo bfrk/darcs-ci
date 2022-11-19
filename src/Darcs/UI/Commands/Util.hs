@@ -91,7 +91,7 @@ import Darcs.Util.File ( getFileStatus )
 import Darcs.Util.Path ( AnchoredPath, displayPath, getUniquePathName )
 import Darcs.Util.Printer
     ( Doc, formatWords, ($+$), text, (<+>), hsep, ($$), vcat, vsep
-    , putDocLn, insertBeforeLastline, prefix
+    , putDocLn, prefix
     , putDocLnWith, pathlist
     )
 import Darcs.Util.Printer.Color ( fancyPrinters )
@@ -154,13 +154,10 @@ printDryRunMessageAndExit action v s d x interactive patches = do
 
     putInfoX = if x == YesXml then const (return ()) else putDocLn
 
-    xml_info YesSummary = xml_with_summary
-    xml_info NoSummary  = toXml . info
-
-    xml_with_summary hp
-        | Just p <- hopefullyM hp = insertBeforeLastline (toXml $ info hp)
-                                        (indent $ xmlSummary p)
-    xml_with_summary hp = toXml (info hp)
+    xml_info withSummary hp =
+      case hopefullyM hp of
+        Just p | O.yes withSummary -> toXml (info hp) (xmlSummary p)
+        _ -> toXml (info hp) mempty
 
     indent = prefix "    "
 

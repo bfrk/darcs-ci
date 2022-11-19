@@ -54,7 +54,7 @@ import Darcs.Patch.Witnesses.Ordered
 import Darcs.Patch.Witnesses.Sealed ( Sealed(..), unFreeLeft )
 
 import Darcs.Patch.Info ( PatchInfo, patchinfo )
-import Darcs.Patch.Prim ( sortCoalesceFL )
+import Darcs.Patch.Prim ( canonizeFL )
 
 import Darcs.Repository
     ( EmptyRepository(..)
@@ -319,7 +319,7 @@ fastImport' repo compression diffalg marks = do
                       -- Either missing (not possible) or non-empty.
                       _ -> return ()
 
-        -- generate a Hunk primitive patch from diffing
+        -- generate Hunk primitive patches from diffing
         diffCurrent :: State p -> TreeIO (State p)
         diffCurrent (InCommit mark ancestors branch start ps info_) = do
           current <- updateHashes
@@ -445,7 +445,8 @@ fastImport' repo compression diffalg marks = do
               liftIO $ putStrLn $ "WARNING: Linearising non-linear ancestry " ++ show list
 
           {- current <- updateHashes -} -- why not?
-          (prims :: FL (PrimOf p) cX cY)  <- return $ sortCoalesceFL $ reverseRL ps
+          (prims :: FL (PrimOf p) cX cY) <-
+            return $ canonizeFL diffalg $ reverseRL ps
           let patch :: Named p cX cY
               patch = infopatch info_ prims
           liftIO $
@@ -458,7 +459,7 @@ fastImport' repo compression diffalg marks = do
           process (Toplevel mark branch) x
 
         process state obj = do
-          liftIO $ print obj
+          liftIO $ putStrLn $ show obj
           fail $ "Unexpected object in state " ++ show state
 
         extractNames :: CopyRenameNames

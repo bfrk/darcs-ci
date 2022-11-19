@@ -19,7 +19,6 @@ module Darcs.Patch.Info
     ( PatchInfo(..) -- constructor and fields exported *only for tests*
     , rawPatchInfo  -- exported *only for tests*
     , patchinfo
-    , addJunk
     , replaceJunk
     , makePatchname
     , readPatchInfo
@@ -49,42 +48,56 @@ module Darcs.Patch.Info
 
 import Darcs.Prelude
 
-import Data.Char ( isAscii )
+import Control.Monad ( unless, void, when )
 import Crypto.Random ( seedNew, seedToInteger )
+import qualified Data.ByteString.Char8 as BC
+import qualified Data.ByteString.Short as BS
+import Data.Char ( isAscii )
+import Data.List ( isPrefixOf, lookup )
+import Data.String ( fromString )
 import Numeric ( showHex )
-import Control.Monad ( when, unless, void )
+import System.IO.Unsafe ( unsafePerformIO )
+import System.Time
+    ( CalendarTime
+    , calendarTimeToString
+    , toCalendarTime
+    , toClockTime
+    )
 
+import Darcs.Patch.Show ( ShowPatchFor(..) )
+import Darcs.Test.TestOnly ( TestOnly )
 import Darcs.Util.ByteString
     ( decodeLocale
     , packStringToUTF8
-    , unlinesPS
+    , unlinesBS
     , unpackPSFromUTF8
     )
-import qualified Darcs.Util.Parser as RM ( take )
-import Darcs.Util.Parser as RM ( skipSpace, char,
-                                      takeTill, anyChar, Parser,
-                                      option,
-                                      takeTillChar,
-                                      linesStartingWithEndingWith)
-import Darcs.Patch.Show ( ShowPatchFor(..) )
-import qualified Data.ByteString       as B  (length, splitAt, null
-                                             ,isPrefixOf, tail, concat
-                                             ,empty, head, cons, append
-                                             ,ByteString )
-import qualified Data.ByteString.Char8 as BC
-    ( index, head, notElem, all, unpack, pack )
-import Data.List( isPrefixOf )
-
-import Darcs.Util.Printer ( Doc, packedString,
-                 empty, ($$), (<+>), vcat, text, cyanText, blueText, prefix )
+import Darcs.Util.Hash ( SHA1, sha1PS )
 import Darcs.Util.IsoDate ( readUTCDate )
-import System.Time ( CalendarTime, calendarTimeToString, toClockTime,
-                     toCalendarTime )
-import System.IO.Unsafe ( unsafePerformIO )
-import Darcs.Util.Hash ( sha1PS, SHA1 )
+import Darcs.Util.Parser as RM
+    ( Parser
+    , anyChar
+    , char
+    , linesStartingWithEndingWith
+    , option
+    , skipSpace
+    , takeTill
+    , takeTillChar
+    )
+import qualified Darcs.Util.Parser as RM ( take )
+import Darcs.Util.Printer
+    ( Doc
+    , blueText
+    , cyanText
+    , empty
+    , packedString
+    , prefix
+    , text
+    , vcat
+    , ($$)
+    , (<+>)
+    )
 import Darcs.Util.Prompt ( promptYorn )
-
-import Darcs.Test.TestOnly ( TestOnly )
 
 {- |
 A PatchInfo value contains the metadata of a patch. The date, name, author
@@ -135,10 +148,10 @@ confusion when reading a patch from disk. Within the codebase they
 serve completely different purposes and should not interact at all.
 -}
 data PatchInfo =
-  PatchInfo { _piDate    :: !B.ByteString
-            , _piName    :: !B.ByteString
-            , _piAuthor  :: !B.ByteString
-            , _piLog     :: ![B.ByteString]
+  PatchInfo { _piDate    :: !BS.ShortByteString
+            , _piName    :: !BS.ShortByteString
+            , _piAuthor  :: !BS.ShortByteString
+            , _piLog     :: ![BS.ShortByteString]
               -- | See the long description of this field in the
               -- docs above.
             , _piLegacyIsInverted :: !Bool
@@ -153,8 +166,8 @@ data PatchInfo =
 validDate :: String -> Bool
 validDate = all validCharForDate
 
-validDatePS :: B.ByteString -> Bool
-validDatePS = BC.all validCharForDate
+validDatePS :: BS.ShortByteString -> Bool
+validDatePS = BC.all validCharForDate . BS.fromShort
 
 -- | The isAscii limitation is due to the use of BC.pack below.
 validCharForDate :: Char -> Bool
@@ -163,14 +176,14 @@ validCharForDate c = isAscii c && c /= '\n' && c /= ']'
 validLog :: String -> Bool
 validLog = notElem '\n'
 
-validLogPS :: B.ByteString -> Bool
-validLogPS = BC.notElem '\n'
+validLogPS :: BS.ShortByteString -> Bool
+validLogPS = BC.notElem '\n' . BS.fromShort
 
 validAuthor :: String -> Bool
 validAuthor = notElem '*'
 
-validAuthorPS :: B.ByteString -> Bool
-validAuthorPS = BC.notElem '*'
+validAuthorPS :: BS.ShortByteString -> Bool
+validAuthorPS = BC.notElem '*' . BS.fromShort
 
 rawPatchInfo
   :: TestOnly
@@ -179,10 +192,10 @@ rawPatchInfo = rawPatchInfoInternal
 
 rawPatchInfoInternal :: String -> String -> String -> [String] -> Bool -> PatchInfo
 rawPatchInfoInternal date name author log inverted =
-    PatchInfo { _piDate     = BC.pack $ validateDate date
-              , _piName     = packStringToUTF8 $ validateName name
-              , _piAuthor   = packStringToUTF8 $ validateAuthor author
-              , _piLog      = map (packStringToUTF8 . validateLog) log
+    PatchInfo { _piDate     = fromString $ validateDate date
+              , _piName     = BS.toShort $ packStringToUTF8 $ validateName name
+              , _piAuthor   = BS.toShort $ packStringToUTF8 $ validateAuthor author
+              , _piLog      = map (BS.toShort . packStringToUTF8 . validateLog) log
               , _piLegacyIsInverted  = inverted
               }
   where
@@ -212,19 +225,19 @@ addJunk pinf =
                           "will not be shown when displaying a patch."
                confirmed <- promptYorn "Proceed? "
                unless confirmed $ fail "User cancelled because of Ignore-this."
-       return $ pinf { _piLog = BC.pack (head ignored++showHex x ""):
-                                 _piLog pinf }
+       return $ pinf { _piLog = head ignored <> (fromString $ showHex x "") : _piLog pinf }
 
 replaceJunk :: PatchInfo -> IO PatchInfo
 replaceJunk pi@(PatchInfo {_piLog=log}) = addJunk $ pi{_piLog = ignoreJunk log}
 
-ignored :: [String] -- this is a [String] so we can change the junk header.
-ignored = ["Ignore-this: "]
+-- this is a list so we can change the junk header
+ignored :: [BS.ShortByteString]
+ignored = map fromString ["Ignore-this: "]
 
-ignoreJunk :: [B.ByteString] -> [B.ByteString]
+ignoreJunk :: [BS.ShortByteString] -> [BS.ShortByteString]
 ignoreJunk = filter isnt_ignored
-    where isnt_ignored x = doesnt_start_with x (map BC.pack ignored) -- TODO
-          doesnt_start_with x ys = not $ any (`B.isPrefixOf` x) ys
+    where isnt_ignored x = doesnt_start_with x ignored
+          doesnt_start_with x ys = not $ any (`BS.isPrefixOf` x) ys
 
 
 -- * Patch info formatting
@@ -243,7 +256,7 @@ justAuthor :: PatchInfo -> String
 justAuthor =  metadataToString . _piAuthor
 
 justLog :: PatchInfo -> String
-justLog = unlines . map BC.unpack . _piLog
+justLog = unlines . map (BC.unpack . BS.fromShort) . _piLog
 
 displayPatchInfo :: PatchInfo -> Doc
 displayPatchInfo pi =
@@ -263,7 +276,7 @@ piName :: PatchInfo -> String
 piName = metadataToString . _piName
 
 piRename :: PatchInfo -> String -> PatchInfo
-piRename x n = x { _piName = packStringToUTF8 n }
+piRename x n = x { _piName = BS.toShort $ packStringToUTF8 n }
 
 -- | Returns the author of a patch.
 piAuthor :: PatchInfo -> String
@@ -276,14 +289,14 @@ isTag pinfo = "TAG " `isPrefixOf` justName pinfo
 -- The raw data may contain timezone info. This is for compatibiltity
 -- with patches that were created before 2003-11, when darcs still
 -- created patches that contained localized date strings.
-readPatchDate :: B.ByteString -> CalendarTime
-readPatchDate = readUTCDate . BC.unpack
+readPatchDate :: BS.ShortByteString -> CalendarTime
+readPatchDate = readUTCDate . BC.unpack . BS.fromShort
 
 piDate :: PatchInfo -> CalendarTime
 piDate = readPatchDate . _piDate
 
 piDateString :: PatchInfo -> String
-piDateString = BC.unpack . _piDate
+piDateString = BC.unpack . BS.fromShort . _piDate
 
 -- | Get the log message of a patch.
 piLog :: PatchInfo -> [String]
@@ -295,31 +308,31 @@ piTag pinf =
     if l == t
       then Just $ metadataToString r
       else Nothing
-    where (l, r) = B.splitAt (B.length t) (_piName pinf)
-          t = BC.pack "TAG "
+    where (l, r) = BS.splitAt (BS.length t) (_piName pinf)
+          t = fromString "TAG "
 
 -- | Convert a metadata ByteString to a string. It first tries to convert
 --   using UTF-8, and if that fails, tries the locale encoding.
 --   We try UTF-8 first because UTF-8 is clearly recognizable, widely used,
 --   and people may have UTF-8 patches even when UTF-8 is not their locale.
-metadataToString :: B.ByteString -> String
+metadataToString :: BS.ShortByteString -> String
 metadataToString bs | '\xfffd' `notElem` bsUtf8 = bsUtf8
-                    | otherwise                 = decodeLocale bs
-  where bsUtf8 = unpackPSFromUTF8 bs
+                    | otherwise                 = decodeLocale (BS.fromShort bs)
+  where bsUtf8 = unpackPSFromUTF8 (BS.fromShort bs)
 
-friendlyD :: B.ByteString -> String
+friendlyD :: BS.ShortByteString -> String
 friendlyD d = unsafePerformIO $ do
     ct <- toCalendarTime $ toClockTime $ readPatchDate d
     return $ calendarTimeToString ct
 
-toXml :: PatchInfo -> Doc
+toXml :: PatchInfo -> Doc -> Doc
 toXml = toXml' True
 
-toXmlShort :: PatchInfo -> Doc
+toXmlShort :: PatchInfo -> Doc -> Doc
 toXmlShort = toXml' False
 
-toXml' :: Bool -> PatchInfo -> Doc
-toXml' includeComments pi =
+toXml' :: Bool -> PatchInfo -> Doc -> Doc
+toXml' includeComments pi summary =
         text "<patch"
     <+> text "author='" <> escapeXMLByteString (_piAuthor pi) <> text "'"
     <+> text "date='" <> escapeXMLByteString (_piDate pi) <> text "'"
@@ -327,6 +340,7 @@ toXml' includeComments pi =
     <+> text "inverted='" <> text (show $ _piLegacyIsInverted pi) <> text "'"
     <+> text "hash='" <> text (show $ makePatchname pi) <> text "'>"
     $$  indent abstract
+    $$  indent summary
     $$  text "</patch>"
       where
         indent = prefix "    "
@@ -334,13 +348,13 @@ toXml' includeComments pi =
         abstract | includeComments = name $$ commentsAsXml (_piLog pi)
                  | otherwise = name
 
-commentsAsXml :: [B.ByteString] -> Doc
+commentsAsXml :: [BS.ShortByteString] -> Doc
 commentsAsXml comments
-  | B.length comments' > 0 = text "<comment>"
+  | BS.length comments' > 0 = text "<comment>"
                           <> escapeXMLByteString comments'
                           <> text "</comment>"
   | otherwise = empty
-    where comments' = unlinesPS comments
+    where comments' = unlinesBS comments
 
 -- escapeXML is duplicated in Patch.lhs and Annotate.lhs
 -- It should probably be refactored to exist in one place.
@@ -350,12 +364,17 @@ escapeXML = text . strReplace '\'' "&apos;" . strReplace '"' "&quot;" .
 
 -- Escape XML characters in a UTF-8 encoded ByteString, and turn it into a Doc.
 -- The data will be in the Doc as a bytestring.
-escapeXMLByteString :: B.ByteString -> Doc
-escapeXMLByteString = packedString . bstrReplace '\'' "&apos;"
-                                   . bstrReplace '"'  "&quot;"
-                                   . bstrReplace '>'  "&gt;"
-                                   . bstrReplace '<'  "&lt;"
-                                   . bstrReplace '&'  "&amp;"
+escapeXMLByteString :: BS.ShortByteString -> Doc
+escapeXMLByteString =
+  packedString .
+  bstrReplace
+    [ ('\'', "&apos;")
+    , ('"', "&quot;")
+    , ('>', "&gt;")
+    , ('<', "&lt;")
+    , ('&', "&amp;")
+    ] .
+  BS.fromShort
 
 strReplace :: Char -> String -> String -> String
 strReplace _ _ [] = []
@@ -363,13 +382,14 @@ strReplace x y (z:zs)
   | x == z    = y ++ strReplace x y zs
   | otherwise = z : strReplace x y zs
 
-bstrReplace :: Char -> String -> B.ByteString -> B.ByteString
-bstrReplace c s bs | B.null bs   = B.empty
-                   | otherwise   = if BC.head bs == c
-                                     then B.append (BC.pack s)
-                                                   (bstrReplace c s (B.tail bs))
-                                     else B.cons (B.head bs)
-                                                 (bstrReplace c s (B.tail bs))
+bstrReplace :: [(Char,String)] -> BC.ByteString -> BC.ByteString
+bstrReplace tbl = BC.concat . go where
+  go bs
+    | BC.null bs = []
+    | otherwise =
+        case lookup (BC.head bs) tbl of
+          Just s -> BC.pack s : go (BC.tail bs)
+          Nothing -> BC.singleton (BC.head bs) : go (BC.tail bs)
 
 -- | Hash on patch metadata (patch name, author, date, log, and the legacy
 -- \"inverted\" flag.
@@ -379,10 +399,10 @@ makePatchname :: PatchInfo -> SHA1
 makePatchname pi = sha1PS sha1_me
         where b2ps True = BC.pack "t"
               b2ps False = BC.pack "f"
-              sha1_me = B.concat [_piName pi,
-                                  _piAuthor pi,
-                                  _piDate pi,
-                                  B.concat $ _piLog pi,
+              sha1_me = BC.concat [BS.fromShort $ _piName pi,
+                                  BS.fromShort $ _piAuthor pi,
+                                  BS.fromShort $ _piDate pi,
+                                  BC.concat $ map BS.fromShort $ _piLog pi,
                                   b2ps $ _piLegacyIsInverted pi]
 
 
@@ -405,13 +425,14 @@ showPatchInfo ForStorage = storePatchInfo
 -- There are more assumptions, see validation functions above.
 storePatchInfo :: PatchInfo -> Doc
 storePatchInfo pi =
-    blueText "[" <> packedString (_piName pi)
- $$ packedString (_piAuthor pi) <> text inverted <> packedString (_piDate pi)
+    blueText "[" <> bsToDoc (_piName pi)
+ $$ bsToDoc (_piAuthor pi) <> text inverted <> bsToDoc (_piDate pi)
                                  <> myunlines (_piLog pi) <> blueText "] "
     where inverted = if _piLegacyIsInverted pi then "*-" else "**"
           myunlines [] = empty
           myunlines xs =
-              foldr (\s -> ((text "\n " <> packedString s) <>)) (text "\n") xs
+              foldr (\s -> ((text "\n " <> bsToDoc s) <>)) (text "\n") xs
+          bsToDoc = packedString . BS.fromShort
 
 -- |Parser for 'PatchInfo' as stored in patch bundles and inventory files,
 -- for example:
@@ -434,9 +455,9 @@ readPatchInfo = do
   ct <- takeTill (\c->c==']'||c=='\n')
   option () (void (char '\n')) -- consume newline char, if present
   log <- linesStartingWithEndingWith ' ' ']'
-  return PatchInfo { _piDate = ct
-                   , _piName = name
-                   , _piAuthor = author
-                   , _piLog = log
+  return PatchInfo { _piDate = BS.toShort ct
+                   , _piName = BS.toShort name
+                   , _piAuthor = BS.toShort author
+                   , _piLog = map BS.toShort log
                    , _piLegacyIsInverted = BC.index s2 1 /= '*'
                    }

@@ -1,10 +1,9 @@
 module Darcs.Repository.Inventory
     ( module Darcs.Repository.Inventory.Format
-    , readPatchesUsingSpecificInventory
+    , readPatchesFromInventoryFile
     , readPatchesFromInventory
-    , readPatchesFromInventoryEntries
     , readSinglePatch
-    , readInventoryPrivate
+    , readOneInventory
     , writeInventory
     , writePatchIfNecessary
     , writeHashFile
@@ -50,11 +49,12 @@ import Darcs.Util.Printer ( Doc, renderPS, renderString, text, ($$) )
 import Darcs.Util.Progress ( debugMessage, finishedOneIO )
 
 -- | Read a 'PatchSet' starting with a specific inventory inside a 'Repository'.
-readPatchesUsingSpecificInventory :: (PatchListFormat p, ReadPatch p)
-                                  => FilePath
-                                  -> Repository rt p wU wR
-                                  -> IO (PatchSet p Origin wS)
-readPatchesUsingSpecificInventory invPath repo = do
+readPatchesFromInventoryFile
+  :: (PatchListFormat p, ReadPatch p)
+  => FilePath
+  -> Repository rt p wU wR
+  -> IO (PatchSet p Origin wS)
+readPatchesFromInventoryFile invPath repo = do
   let repodir = repoLocation repo
   Sealed ps <-
     catch
@@ -109,8 +109,8 @@ readPatchesFromInventory cache = parseInv
 
     readTaggedInventory :: InventoryHash -> IO Inventory
     readTaggedInventory invHash = do
-        (fileName, pristineAndInventory) <- fetchFileUsingCache cache invHash
-        case parseInventory pristineAndInventory of
+        (fileName, inventory) <- fetchFileUsingCache cache invHash
+        case parseInventory inventory of
           Right r -> return r
           Left e -> fail $ unlines [unwords ["parse error in file", fileName],e]
 
@@ -175,6 +175,12 @@ readSinglePatch cache i h = do
             , renderString $ displayPatchInfo i
             , e
             ]
+
+readOneInventory :: ReadPatch p
+                 => Cache -> FilePath -> IO (Sealed (RL (PatchInfoAndG p) wX))
+readOneInventory cache path = do
+  Inventory _ invEntries <- readInventoryPrivate path
+  readPatchesFromInventoryEntries cache invEntries
 
 -- | Read an 'Inventory' from a file. Fails with an error message if
 -- file is not there or cannot be parsed.

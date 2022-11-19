@@ -48,7 +48,7 @@ checkMerge :: ((FL Patch:\/: FL Patch) wX wY, FL Patch wY wZ) -> TestResult
 checkMerge (p1:\/:p2,p1') =
    case merge (p1:\/:p2) of
    _ :/\: p1a ->
-       if isIsEq (p1a `eqFL` p1')
+       if isIsEq (p1a =\/= p1')
        then succeeded
        else failed $ text $ "Merge gave wrong value!\n"++show p1++show p2
             ++"I expected\n"++show p1'
@@ -75,7 +75,7 @@ checkMergeSwap (p1, p2) =
         _ :/\: p1' ->
             case commute (p1 :> p2') of
             Just (_ :> p1'b) ->
-                if not $ p1'b `eqFLUnsafe` p1'
+                if not $ p1'b `unsafeCompare` p1'
                 then failed $ text $ "Merge swapping problem with...\np1 "++
                       show p1++"merged with\np2 "++
                       show p2++"p1' is\np1' "++
@@ -89,8 +89,8 @@ checkMergeSwap (p1, p2) =
 
 checkCanon :: forall wX wY . (FL Patch wX wY, FL Patch wX wY) -> TestResult
 checkCanon (p1,p2) =
-    if isIsEq $ eqFL p1_myers p2
-    then if isIsEq $ eqFL p1_patience p2
+    if isIsEq $ p1_myers =\/= p2
+    then if isIsEq $ p1_patience =\/= p2
          then succeeded
          else failed $ text $ "Canonization with Patience Diff failed:\n"++show p1++"canonized is\n"
                ++ show p1_patience

@@ -29,7 +29,7 @@ cat foo.tmp | grep -v b | grep -v d > foo
 
 echo "nyy" | darcs revert
 
-DARCS_DONT_COLOR=1 darcs wh > whatsnew
+darcs wh > whatsnew
 cat > correct <<EOF
 hunk ./foo 2
 -b
@@ -46,9 +46,10 @@ echo hello world > foo
 darcs add bar
 darcs replace hello goodbye bar foo
 
-echo "cnnnyy/y" | tr / \\012 | darcs revert
+# revert only the last of 4 changes which is the replace in ./foo
+echo "nnnyy" | darcs revert
 
-DARCS_DONT_COLOR=1 darcs wh > whatsnew
+darcs wh > whatsnew
 cat > correct <<EOF
 addfile ./bar
 hunk ./bar 1

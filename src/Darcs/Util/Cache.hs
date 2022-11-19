@@ -40,6 +40,7 @@ import System.Directory
     , getDirectoryContents
     , getPermissions
     , removeFile
+    , withCurrentDirectory
     )
 import qualified System.Directory as SD ( writable )
 import System.FilePath.Posix ( dropFileName, joinPath, (</>) )
@@ -59,7 +60,6 @@ import Darcs.Util.File
     , fetchFilePS
     , gzFetchFilePS
     , speculateFileOrUrl
-    , withCurrentDirectory
     , withTemp
     )
 import Darcs.Util.Global ( darcsdir, defaultRemoteDarcsCmd )

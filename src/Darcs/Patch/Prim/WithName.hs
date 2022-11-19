@@ -14,10 +14,9 @@ import Darcs.Patch.Ident
     , PatchId
     , SignedId(..)
     , StorableId(..)
-    , IdEq2(..)
     )
 import Darcs.Patch.Inspect ( PatchInspect(..) )
-import Darcs.Patch.FileHunk ( IsHunk(..) )
+import Darcs.Patch.FileHunk ( IsHunk(..), FileHunk(..) )
 import Darcs.Patch.Prim.Class ( PrimApply(..), PrimDetails(..) )
 import Darcs.Patch.Invert ( Invert(..) )
 import Darcs.Patch.Merge ( CleanMerge(..) )
@@ -49,8 +48,6 @@ type instance PatchId (PrimWithName name p) = name
 
 instance SignedId name => Ident (PrimWithName name p) where
   ident = wnName
-
-instance (SignedId name, Eq2 p) => IdEq2 (PrimWithName name p)
 
 instance (Eq name, Eq2 p) => Eq2 (PrimWithName name p) where
   PrimWithName i p =\/= PrimWithName j q
@@ -89,8 +86,13 @@ instance Apply p => RepairToFL (PrimWithName name p) where
 instance Annotate p => Annotate (PrimWithName name p) where
   annotate = annotate . wnPatch
 
-instance IsHunk p => IsHunk (PrimWithName name p) where
-  isHunk = isHunk . wnPatch
+instance (IsHunk p, Print name) => IsHunk (PrimWithName name p) where
+  type ExtraData (PrimWithName name p) = (name, ExtraData p)
+  isHunk (PrimWithName name p) = do
+    FileHunk xd oid l n o <- isHunk p
+    return $ FileHunk (name, xd) oid l n o
+  fromHunk (FileHunk (name, xd) oid l n o) =
+    PrimWithName name (fromHunk (FileHunk xd oid l n o))
 
 instance PrimApply p => PrimApply (PrimWithName name p) where
   applyPrimFL = applyPrimFL . mapFL_FL wnPatch
@@ -128,10 +130,13 @@ instance (StorableId name, ReadPatch p) => ReadPatch (PrimWithName name p) where
 instance (StorableId name, ShowPatchBasic p) => ShowPatchBasic (PrimWithName name p) where
   showPatch use (PrimWithName name p) = showId use name $$ showPatch use p
 
-instance (StorableId name, PrimDetails p, ShowPatchBasic p) => ShowPatch (PrimWithName name p) where
+instance (StorableId name, PrimDetails p, ShowPatch p) => ShowPatch (PrimWithName name p) where
+  content = content . wnPatch
+  description = description . wnPatch
   summary = plainSummaryPrim . wnPatch
   summaryFL = plainSummaryPrims False
-  thing _ = "change"
+  thing = thing . wnPatch
+  things = things . wnPatch
 
 instance (StorableId name, ShowContextPatch p) => ShowContextPatch (PrimWithName name p) where
   showContextPatch use (PrimWithName name p) = do

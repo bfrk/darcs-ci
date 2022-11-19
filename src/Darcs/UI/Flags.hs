@@ -105,7 +105,7 @@ import Data.Maybe
     , catMaybes
     )
 import Control.Monad ( void, unless )
-import System.Directory ( doesDirectoryExist, createDirectory )
+import System.Directory ( createDirectory, doesDirectoryExist, withCurrentDirectory )
 import System.FilePath.Posix ( (</>) )
 import System.Environment ( lookupEnv )
 import System.Posix.Files ( getSymbolicLinkStatus )
@@ -117,7 +117,6 @@ import Darcs.UI.Options ( Config, (?), (^), oparse, parseFlags, unparseOpt )
 import qualified Darcs.UI.Options.All as O
 
 import Darcs.Util.Exception ( catchall, ifDoesNotExistError )
-import Darcs.Util.File ( withCurrentDirectory )
 import Darcs.Util.Prompt
     ( askUser
     , askUserListItem
@@ -217,9 +216,10 @@ fixRemoteRepos d = mapM fixRemoteRepo where
 -- a file path or a URL. It returns either the URL, or an absolute version of
 -- the path, interpreted relative to the first argument.
 fixUrl :: AbsolutePath -> String -> IO String
-fixUrl d f = if isValidLocalPath f
-                then toFilePath `fmap` withCurrentDirectory d (ioAbsolute f)
-                else return f
+fixUrl d f =
+  if isValidLocalPath f
+    then withCurrentDirectory (toFilePath d) (toFilePath <$> ioAbsolute f)
+    else return f
 
 -- TODO move the following four functions somewhere else,
 -- they have nothing to do with flags
