@@ -33,7 +33,7 @@ jobs:
       run: git config --global core.autocrlf input
 
     - name: Checkout
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
 
     - name: Setup Haskell
       id: setup-haskell-cabal
@@ -43,7 +43,7 @@ jobs:
         cabal-version: ${{ matrix.cabal }}
 
     - name: Cache cabal store
-      uses: actions/cache@v2
+      uses: actions/cache@v3
       with:
         path: ${{ steps.setup-haskell-cabal.outputs.cabal-store }}
         key: cabal-store-${{ matrix.os }}-ghc-${{ matrix.ghc }}-${{ hashFiles('dist-newstyle/cache/plan.json') }}
@@ -57,7 +57,7 @@ jobs:
       run: cabal build --only-dependencies
 
     - name: Cache dist-newstyle
-      uses: actions/cache@v2
+      uses: actions/cache@v3
       with:
         path: dist-newstyle/build
         key: dist-newstyle-${{ matrix.os }}-ghc-${{ matrix.ghc }}-${{ hashFiles('dist-newstyle/cache/plan.json','Setup.hs','*.cabal','cabal*','darcs/*','src/**','harness/**','shelly/src/**','release/*') }}
