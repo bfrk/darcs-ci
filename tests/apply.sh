@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+## Test for issue2017 - apply should gracefully handle tag missing
+## from context (complain, not crash)
 ##
 ## Copyright (C) 2010 Eric Kow
 ## Copyright (C) 2012 Owen Stephens

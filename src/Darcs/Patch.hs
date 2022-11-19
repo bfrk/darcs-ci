@@ -53,6 +53,7 @@ module Darcs.Patch
     , invert
     , invertFL
     , invertRL
+    , dropInverses
     , commuteFL
     , commuteRL
     , readPatch
@@ -85,7 +86,7 @@ import Darcs.Patch.Apply ( apply, effectOnPaths, applyToTree,
 import Darcs.Patch.Commute ( commute, commuteFL, commuteRL )
 import Darcs.Patch.Conflict ( resolveConflicts )
 import Darcs.Patch.Effect ( Effect(effect) )
-import Darcs.Patch.Invert ( invert, invertRL, invertFL )
+import Darcs.Patch.Invert ( invert, invertRL, invertFL, dropInverses )
 import Darcs.Patch.Inspect ( listTouchedFiles, hunkMatches )
 import Darcs.Patch.Merge ( merge )
 import Darcs.Patch.Named ( Named,

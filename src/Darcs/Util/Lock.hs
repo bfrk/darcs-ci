@@ -80,7 +80,6 @@ import System.Directory
     , renameDirectory
     )
 import System.FilePath.Posix ( splitDirectories, splitFileName )
-import System.Directory ( withCurrentDirectory )
 import System.Environment ( lookupEnv )
 import System.IO.Temp ( createTempDirectory )
 
@@ -96,7 +95,8 @@ import Darcs.Util.Exception
     ( firstJustIO
     , catchall
     )
-import Darcs.Util.File ( removeFileMayNotExist )
+import Darcs.Util.File ( withCurrentDirectory
+                       , removeFileMayNotExist )
 import Darcs.Util.Path ( AbsolutePath, FilePathLike, toFilePath,
                         getCurrentDirectory, setCurrentDirectory )
 

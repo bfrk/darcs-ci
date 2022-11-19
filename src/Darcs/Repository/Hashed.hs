@@ -53,7 +53,7 @@ import System.IO ( IOMode(..), hClose, hPutStrLn, openBinaryFile, stderr )
 import System.IO.Error ( catchIOError )
 import System.IO.Unsafe ( unsafeInterleaveIO )
 
-import Darcs.Patch ( RepoPatch, effect, invertFL, readPatch )
+import Darcs.Patch ( RepoPatch, effect, readPatch )
 import Darcs.Patch.Apply ( Apply(..) )
 import Darcs.Patch.Depends
     ( cleanLatestTag
@@ -89,7 +89,6 @@ import Darcs.Patch.Witnesses.Ordered
     , foldrwFL
     , mapRL
     , (+>+)
-    , (+>>+)
     )
 import Darcs.Patch.Witnesses.Sealed ( Dup(..), Sealed(..) )
 import Darcs.Patch.Witnesses.Unsafe ( unsafeCoerceP )
@@ -124,10 +123,12 @@ import Darcs.Repository.InternalTypes
     , withRepoDir
     )
 import Darcs.Repository.Inventory
-    ( peekPristineHash
+    ( Inventory(..)
+    , peekPristineHash
     , pokePristineHash
-    , readOneInventory
-    , readPatchesFromInventoryFile
+    , readInventoryPrivate
+    , readPatchesFromInventoryEntries
+    , readPatchesUsingSpecificInventory
     , showInventoryEntry
     , writeInventory
     , writePatchIfNecessary
@@ -142,6 +143,7 @@ import Darcs.Repository.Pending
     ( finalizePending
     , readTentativePending
     , revertPending
+    , tentativelyRemoveFromPending
     , writeTentativePending
     )
 import Darcs.Repository.Pristine
@@ -235,8 +237,8 @@ readPatchesHashed :: (PatchListFormat p, ReadPatch p) => Repository rt p wU wR
                   -> IO (PatchSet p Origin wR)
 readPatchesHashed repo =
   case repoAccessType repo of
-    SRO -> readPatchesFromInventoryFile hashedInventoryPath repo
-    SRW -> readPatchesFromInventoryFile tentativeHashedInventoryPath repo
+    SRO -> readPatchesUsingSpecificInventory hashedInventoryPath repo
+    SRW -> readPatchesUsingSpecificInventory tentativeHashedInventoryPath repo
 
 -- | Read the tentative 'PatchSet' of a (hashed) 'Repository'.
 readTentativePatches :: (PatchListFormat p, ReadPatch p)
@@ -348,8 +350,7 @@ tentativelyAddPatch_ upr r compr verb upe p = do
           applyToTentativePristine r ApplyNormal verb p
        when (upe == YesUpdatePending) $ do
           debugMessage "Updating pending..."
-          Sealed pend <- readTentativePending r
-          writeTentativePending r' $ invertFL (effect p) +>>+ pend
+          tentativelyRemoveFromPending r' (effect p)
        return r'
 
 tentativelyRemovePatches :: (RepoPatch p, ApplyState p ~ Tree)
@@ -535,8 +536,9 @@ upgradeOldStyleRebase :: forall p wU wR.
                       => Repository 'RW p wU wR -> Compression -> IO ()
 upgradeOldStyleRebase repo compr = do
   PatchSet (ts :: RL (Tagged p) Origin wX) _ <- readTentativePatches repo
+  Inventory _ invEntries <- readInventoryPrivate tentativeHashedInventoryPath
   Sealed wps <-
-    readOneInventory @(W.WrappedNamed p) (repoCache repo) tentativeHashedInventoryPath
+    readPatchesFromInventoryEntries @(W.WrappedNamed p) (repoCache repo) invEntries
   case extractOldStyleRebase wps of
     Nothing ->
       ePutDocLn $ text "No old-style rebase state found, no upgrade needed."

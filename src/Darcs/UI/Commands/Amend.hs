@@ -61,7 +61,7 @@ import Darcs.UI.PatchHeader
 
 import Darcs.Repository.Flags ( UpdatePending(..) )
 import Darcs.Patch ( RepoPatch, description, PrimOf
-                   , effect, invert, invertFL
+                   , effect, invert, invertFL, sortCoalesceFL
                    )
 import Darcs.Patch.Apply ( ApplyState )
 import Darcs.Patch.Depends ( contextPatches, patchSetUnion, findCommon )
@@ -85,10 +85,10 @@ import Darcs.Repository
     , tentativelyAddPatch
     , withManualRebaseUpdate
     , finalizeRepositoryChanges
+    , readPendingAndWorking
     , readPristine
     , readPatches
-    , tentativelyRemoveFromPending
-    , unrecordedChanges
+    , tentativelyRemoveFromPW
     )
 import Darcs.Repository.Prefs ( getDefaultRepo )
 import Darcs.UI.SelectChanges
@@ -180,6 +180,7 @@ amend = DarcsCommand
       ^ O.lookforreplaces
       ^ O.lookformoves
       ^ O.repoDir
+      ^ O.withContext
       ^ O.diffAlgorithm
     advancedOpts
       = O.compress
@@ -202,7 +203,9 @@ doAmend cfg files =
       -- reconstruct context patchset
       context <- return $ appendPSFL common (reverseRL kept)
       announceFiles (O.verbosity ? cfg) files "Amending changes in"
-      unrecorded <- unrecordedChanges (diffingOpts cfg) repository files
+      pristine <- readPristine repository
+      pending :> working <-
+        readPendingAndWorking (diffingOpts cfg) repository files
       -- auxiliary function needed because the witness types differ for the
       -- isTag case
       let go :: FL (PrimOf p) wR wU1 -> IO ()
@@ -213,8 +216,9 @@ doAmend cfg files =
                        (patchSelOpts cfg)
                        (Just (primSplitter (O.diffAlgorithm ? cfg)))
                        files
+                       (Just pristine)
             (chosenPatches :> _) <- runInvertibleSelection ch selection_config
-            addChangesToPatch cfg repository context oldp chosenPatches
+            addChangesToPatch cfg repository context oldp chosenPatches pending working
       if not (isTag (info oldp))
         -- amending a normal patch
         then
@@ -223,13 +227,13 @@ doAmend cfg files =
               let selection_config =
                     selectionConfigPrim Last "unrecord" (patchSelOpts cfg)
                       (Just (primSplitter (O.diffAlgorithm ? cfg)))
-                      files
+                      files (Just pristine)
               (_ :> chosenPrims) <-
                 runInvertibleSelection (effect oldp) selection_config
               let invPrims = reverseRL (invertFL chosenPrims)
-              addChangesToPatch cfg repository context oldp invPrims
+              addChangesToPatch cfg repository context oldp invPrims pending working
             else
-              go unrecorded
+              go (sortCoalesceFL (pending +>+ working))
         -- amending a tag
         else
           if hasEditMetadata cfg && isNothing files
@@ -255,8 +259,10 @@ addChangesToPatch :: (RepoPatch p, ApplyState p ~ Tree)
                   -> PatchSet p Origin wX -- ^ the context
                   -> PatchInfoAnd p wX wR -- ^ original patch
                   -> FL (PrimOf p) wR wY  -- ^ changes to add
+                  -> FL (PrimOf p) wR wP  -- ^ pending
+                  -> FL (PrimOf p) wP wU  -- ^ working
                   -> IO ()
-addChangesToPatch cfg _repository context oldp chs =
+addChangesToPatch cfg _repository context oldp chs pending working =
   if nullFL chs && not (hasEditMetadata cfg)
     then putInfo cfg "You don't want to record anything!"
     else do
@@ -311,7 +317,7 @@ addChangesToPatch cfg _repository context oldp chs =
         ("you have a bad patch: '" ++ patchDesc newp ++ "'")
         "amend it"
         (Just failmsg)
-      tentativelyRemoveFromPending _repository chs
+      tentativelyRemoveFromPW _repository chs pending working
       _repository <-
         finalizeRepositoryChanges _repository YesUpdatePending (O.compress ? cfg)
           (O.dryRun ? cfg) `clarifyErrors` failmsg
@@ -369,6 +375,7 @@ patchSelOpts cfg = S.PatchSelectionOptions
     , S.interactive = isInteractive cfg
     , S.selectDeps = O.PromptDeps -- option not supported, use default
     , S.withSummary = O.NoSummary -- option not supported, use default
+    , S.withContext = O.withContext ? cfg
     }
 
 isInteractive :: Config -> Bool

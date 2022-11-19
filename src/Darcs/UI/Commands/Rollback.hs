@@ -79,6 +79,7 @@ patchSelOpts flags = S.PatchSelectionOptions
     , S.interactive = isInteractive True flags
     , S.selectDeps = O.PromptDeps
     , S.withSummary = O.NoSummary
+    , S.withContext = O.NoContext
     }
 
 rollback :: DarcsCommand
@@ -129,7 +130,7 @@ rollbackCmd fps opts args = withRepoLock (useCache ? opts)
               selectionConfigPrim
                   Last "rollback" (patchSelOpts opts)
                   (Just (reversePrimSplitter (diffAlgorithm ? opts)))
-                  files
+                  files Nothing
             hunks = canonizeFL (diffAlgorithm ? opts) . effect
         _ :> to_undo <- runInvertibleSelection (hunks ps) prim_selection_context
         exitIfNothingSelected to_undo "changes"

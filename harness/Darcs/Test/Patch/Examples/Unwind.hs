@@ -30,7 +30,7 @@ import Darcs.Test.HashedStorage ( unsafeMakeName )
 import Darcs.Test.Patch.Arbitrary.Generic
 import Darcs.Test.Patch.Arbitrary.Named ()
 import Darcs.Test.Patch.Arbitrary.PrimV1 ()
-import Darcs.Test.Patch.Arbitrary.Mergeable
+import Darcs.Test.Patch.Arbitrary.RepoPatch
 import Darcs.Test.Patch.RepoModel
 import Darcs.Test.Patch.V1Model
 import Darcs.Test.Patch.WithState
@@ -46,7 +46,7 @@ import Data.String
 
 examples
   :: forall p
-   . (ArbitraryMergeable p, ArbitraryPrim (OnlyPrim p))
+   . (ArbitraryRepoPatch p, ArbitraryPrim (OnlyPrim p))
    => [Sealed2 (WithStartState2 (MergeableSequence (Named p)))]
 examples =
   case (hasPrimConstruct @(OnlyPrim p), usesV1Model @(PrimOf p), notRepoPatchV1 @p) of
@@ -68,7 +68,7 @@ repo entries =
 
 example1
   :: forall p
-   . (PrimConstruct (OnlyPrim p), ModelOf p ~ V1Model)
+   . (FromPrim p, PrimConstruct (OnlyPrim p), ModelOf p ~ V1Model)
    => Sealed2 (WithStartState2 (MergeableSequence (Named p)))
 example1 =
   Sealed2
@@ -88,7 +88,7 @@ example1 =
 
 example2
   :: forall p
-   . (PrimConstruct (OnlyPrim p), ModelOf p ~ V1Model)
+   . (FromPrim p, PrimConstruct (OnlyPrim p), ModelOf p ~ V1Model)
    => Sealed2 (WithStartState2 (MergeableSequence (Named p)))
 example2 =
   let s3,s4 :: forall s . IsString s => [s]
@@ -119,7 +119,7 @@ example2 =
 
 example3
   :: forall p
-   . (PrimConstruct (OnlyPrim p), ModelOf p ~ V1Model)
+   . (FromPrim p, PrimConstruct (OnlyPrim p), ModelOf p ~ V1Model)
    => Sealed2 (WithStartState2 (MergeableSequence (Named p)))
 example3 =
   let
@@ -198,7 +198,7 @@ example4guts =
 
 example4
   :: forall p
-   . (PrimConstruct (OnlyPrim p), ModelOf p ~ V1Model)
+   . (FromPrim p, PrimConstruct (OnlyPrim p), ModelOf p ~ V1Model)
    => Sealed2 (WithStartState2 (MergeableSequence (Named p)))
 example4 =
   case example4guts @p of

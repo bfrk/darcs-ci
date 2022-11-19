@@ -30,22 +30,25 @@ module Darcs.UI.Commands.Dist
     , doFastZip'
     ) where
 
-import Darcs.Prelude
+import Darcs.Prelude hiding ( writeFile )
 
-import Control.Monad ( forM, unless, when )
+import Data.ByteString.Lazy ( writeFile )
+import Control.Monad ( forM, when )
+import System.Directory ( createDirectory, setCurrentDirectory )
 import System.Process ( system )
 import System.Exit ( ExitCode(..), exitWith )
 import System.FilePath.Posix ( takeFileName, (</>) )
 
 import Darcs.Util.Workaround ( getCurrentDirectory )
-import qualified Codec.Archive.Tar as Tar
-import qualified Codec.Archive.Tar.Entry as Tar
+import Codec.Archive.Tar ( pack, write )
+import Codec.Archive.Tar.Entry ( entryPath )
 import Codec.Compression.GZip ( compress )
 
-import qualified Codec.Archive.Zip as Zip
+import Codec.Archive.Zip ( emptyArchive, fromArchive, addEntryToArchive, toEntry )
 import qualified Data.ByteString.Lazy as BL
-import qualified Data.ByteString.Lazy.Char8 as BLC
+import qualified Data.ByteString as B
 import Darcs.UI.Flags as F ( DarcsFlag, useCache )
+import qualified Darcs.UI.Flags as F ( setScriptsExecutable )
 import Darcs.UI.Options ( oid, parseFlags, (?), (^) )
 import qualified Darcs.UI.Options.All as O
 
@@ -54,18 +57,20 @@ import Darcs.UI.Commands
     , putVerbose, putInfo
     )
 import Darcs.UI.Completion ( noArgs )
-import Darcs.Util.Lock ( withDelayedDir )
+import Darcs.Util.Lock ( withTempDir )
 import Darcs.Patch.Match ( patchSetMatch )
-import Darcs.Repository.Match ( getPristineUpToMatch )
-import Darcs.Repository ( RepoJob(..), withRepository, withRepositoryLocation )
+import Darcs.Repository.Match ( getRecordedUpToMatch )
+import Darcs.Repository ( withRepository, withRepositoryLocation, RepoJob(..),
+                          setScriptsExecutable,
+                          createPristineDirectoryTree )
 import Darcs.Repository.Prefs ( getPrefval )
 import Darcs.Repository.Pristine ( readPristine )
 
 import Darcs.Util.DateTime ( getCurrentTime, toSeconds )
 import Darcs.Util.Path ( AbsolutePath, realPath, toFilePath )
+import Darcs.Util.File ( withCurrentDirectory )
 import Darcs.Util.Printer ( Doc, text, vcat )
 import qualified Darcs.Util.Tree as T
-import Darcs.Util.Tree.Plain ( readPlainTree, writePlainTree )
 
 
 distDescription :: String
@@ -122,44 +127,39 @@ distCmd _ opts _ = withRepository (useCache ? opts) $ RepoJob $ \repository -> d
   let distname = getDistName formerdir (O.distname ? opts)
   predist <- getPrefval "predist"
   let resultfile = formerdir </> distname ++ ".tar.gz"
-  raw_tree <-
-    case patchSetMatch matchFlags of
-      Just psm -> getPristineUpToMatch repository psm
-      Nothing -> readPristine repository
-  tree <- case predist of
-    Nothing -> T.expand raw_tree
-    Just pd -> do
-      withDelayedDir "dist" $ \d -> do
-        writePlainTree raw_tree "."
-        ec <- system pd
-        unless (ec == ExitSuccess) $ do
+  withTempDir "darcsdist" $ \tempdir -> do
+      setCurrentDirectory formerdir
+      let ddir = toFilePath tempdir </> distname
+      createDirectory ddir
+      case patchSetMatch matchFlags of
+        Just psm -> withCurrentDirectory ddir $ getRecordedUpToMatch repository psm
+        Nothing ->
+          createPristineDirectoryTree repository (toFilePath ddir) O.WithWorkingDir
+      ec <- case predist of Nothing -> return ExitSuccess
+                            Just pd -> system pd
+      if ec == ExitSuccess
+        then do
+          withCurrentDirectory ddir $
+            when
+              (F.setScriptsExecutable ? opts == O.YesSetScriptsExecutable)
+              setScriptsExecutable
+          doDist opts tempdir distname resultfile
+        else do
           putStrLn "Dist aborted due to predist failure"
           exitWith ec
-        T.expand =<< readPlainTree (toFilePath d)
-  entries <- createEntries distname tree
-  putVerbose opts $ vcat $ map (text . Tar.entryPath) entries
-  BL.writeFile resultfile $ compress $ Tar.write entries
-  putInfo opts $ text $ "Created dist as " ++ resultfile
-  where
-    createEntries top tree = do
-      topentry <- Tar.directoryEntry <$> either fail return (Tar.toTarPath True top)
-      rest <- forM (T.list tree) go
-      return $ topentry : rest
-      where
-        go (_, T.Stub _ _) = error "impossible"
-        go (path, T.SubTree _) = do
-          tarpath <- either fail return $ Tar.toTarPath True (top </> realPath path)
-          return $ Tar.directoryEntry tarpath
-        go (path, T.File b) = do
-          content <- T.readBlob b
-          tarpath <- either fail return $ Tar.toTarPath False (top </> realPath path)
-          let entry = Tar.fileEntry tarpath content
-          return $
-            if O.yes (O.setScriptsExecutable ? opts) &&
-               executablePrefix `BL.isPrefixOf` content
-              then entry {Tar.entryPermissions = Tar.executableFilePermissions}
-              else entry
-    executablePrefix = BLC.pack "#!"
+
+
+-- | This function performs the actual distribution action itself.
+-- NB - it does /not/ perform the pre-dist, that should already
+-- have completed successfully before this is invoked.
+doDist :: [DarcsFlag] -> AbsolutePath -> String -> FilePath -> IO ()
+doDist opts tempdir name resultfile = do
+    setCurrentDirectory (toFilePath tempdir)
+    entries <- pack "." [name]
+    putVerbose opts $ vcat $ map (text . entryPath) entries
+    writeFile resultfile $ compress $ write entries
+    putInfo opts $ text $ "Created dist as " ++ resultfile
+
 
 getDistName :: FilePath -> Maybe String -> FilePath
 getDistName _ (Just dn) = takeFileName dn
@@ -170,7 +170,7 @@ doFastZip opts = do
   currentdir <- getCurrentDirectory
   let distname = getDistName currentdir (O.distname ? opts)
   let resultfile = currentdir </> distname ++ ".zip"
-  doFastZip' opts currentdir (BL.writeFile resultfile)
+  doFastZip' opts currentdir (writeFile resultfile)
   putInfo opts $ text $ "Created " ++ resultfile
 
 doFastZip' :: [DarcsFlag]              -- ^ Flags/options
@@ -178,23 +178,22 @@ doFastZip' :: [DarcsFlag]              -- ^ Flags/options
            -> (BL.ByteString -> IO a)  -- ^ An action to perform on the archive contents
            -> IO a
 doFastZip' opts path act = withRepositoryLocation (useCache ? opts) path $ RepoJob $ \repo -> do
-  when (O.setScriptsExecutable ? opts == O.YesSetScriptsExecutable) $
+  when (F.setScriptsExecutable ? opts == O.YesSetScriptsExecutable) $
     putStrLn "WARNING: Zip archives cannot store executable flag."  
   let distname = getDistName path (O.distname ? opts)
-  pristine <-
-    T.expand =<<
-    case patchSetMatch (O.matchUpToOne ? opts) of
-      Just psm -> getPristineUpToMatch repo psm
-      Nothing -> readPristine repo
+  pristine <- T.expand =<< readPristine repo
   pathsAndContents <-
     forM (T.list pristine) $ \(p,i) -> do
       case i of
         T.Stub _ _ -> error "tree is not expanded"
-        T.SubTree _ -> return (distname </> realPath p ++ "/", BL.empty)
+        T.SubTree _ -> return (distname </> realPath p ++ "/", B.empty)
         T.File b -> do
           content <- T.readBlob b
-          return (distname </> realPath p, content)
+          return (distname </> realPath p, BL.toStrict content)
   epochtime <- toSeconds `fmap` getCurrentTime
-  let entries = [ Zip.toEntry filepath epochtime contents | (filepath,contents) <- pathsAndContents ]
-  let archive = foldr Zip.addEntryToArchive Zip.emptyArchive entries
-  act (Zip.fromArchive archive)
+  let entries = [ toEntry filepath epochtime (toLazy contents) | (filepath,contents) <- pathsAndContents ]
+  let archive = foldr addEntryToArchive emptyArchive entries
+  act (fromArchive archive)
+
+toLazy :: B.ByteString -> BL.ByteString
+toLazy bs = BL.fromChunks [bs]

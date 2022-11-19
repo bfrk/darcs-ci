@@ -89,10 +89,9 @@ standardApplyPatches :: (RepoPatch p, ApplyState p ~ Tree)
                              (FL (PatchInfoAnd p)) Origin wR wZ
                      -> IO ()
 standardApplyPatches cmdName opts repository patches@(Fork _ _ to_be_applied) = do
-    !no_patches <- return (nullFL to_be_applied)
     applyPatchesStart cmdName opts to_be_applied
     Sealed pw <- mergeAndTest cmdName opts repository patches
-    applyPatchesFinish cmdName opts repository pw no_patches
+    applyPatchesFinish cmdName opts repository pw (nullFL to_be_applied)
 
 mergeAndTest :: (RepoPatch p, ApplyState p ~ Tree)
              => String

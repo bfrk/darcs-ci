@@ -38,8 +38,9 @@ import Darcs.Prelude
 
 import Darcs.Util.Cache ( Cache )
 import Darcs.Repository.Format ( RepoFormat )
+import Darcs.Util.File ( withCurrentDirectory )
 import Darcs.Util.Path ( AbsoluteOrRemotePath, toPath )
-import System.Directory ( withCurrentDirectory )
+import GHC.Stack ( HasCallStack )
 import Unsafe.Coerce ( unsafeCoerce )
 
 data PristineType
@@ -72,7 +73,7 @@ repoLocation (Repo loc _ _ _ _) = loc
 
 -- | Perform an action with the current working directory set to the
 -- 'repoLocation'.
-withRepoDir :: Repository rt p wU wR -> IO a -> IO a
+withRepoDir :: HasCallStack => Repository rt p wU wR -> IO a -> IO a
 withRepoDir repo = withCurrentDirectory (repoLocation repo)
 
 repoFormat :: Repository rt p wU wR -> RepoFormat

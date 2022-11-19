@@ -23,7 +23,7 @@ import Darcs.Patch.PatchInfoAnd ( PatchInfoAnd, patchInfoAndPatch )
 import Darcs.Patch.Info ( rawPatchInfo )
 import Darcs.UI.Options.All
     ( Verbosity(..), WithSummary(..)
-    , SelectDeps(..), MatchFlag(..) )
+    , WithContext(..), SelectDeps(..), MatchFlag(..) )
 
 import Darcs.Test.TestOnly.Instance ()
 
@@ -52,6 +52,7 @@ dontReadContents whch =
            , interactive = False
            , selectDeps = AutoDeps
            , withSummary = NoSummary
+           , withContext = NoContext
            }
        context = selectionConfig whch "select" pso Nothing Nothing
    (unselected :> selected) <- runSelection launchNuclearMissilesPatches context

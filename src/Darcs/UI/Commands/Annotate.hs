@@ -42,7 +42,7 @@ import qualified Data.ByteString.Char8 as BC ( pack, concat, intercalate )
 import Data.ByteString.Lazy ( toChunks )
 import Darcs.Patch.ApplyMonad( withFileNames )
 import Darcs.Patch.Match ( patchSetMatch, rollbackToPatchSetMatch  )
-import Darcs.Patch.Match ( matchOnePatchset )
+import Darcs.Repository.Match ( getOnePatchset )
 import Darcs.Repository.PatchIndex ( getRelevantSubsequence, canUsePatchIndex )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(..), seal )
 import qualified Darcs.Patch.Annotate as A
@@ -104,7 +104,7 @@ annotateCmd' opts fixed_path = withRepository (useCache ? opts) $ RepoJob $ \rep
   (patches, initial, path) <-
     case patchSetMatch matchFlags of
       Just psm -> do
-        Sealed x <- matchOnePatchset r psm
+        Sealed x <- getOnePatchset repository psm
         case withFileNames Nothing [fixed_path] (rollbackToPatchSetMatch psm r) of
           (_, [path'], _) -> do
             initial <- snd `fmap` virtualTreeIO (rollbackToPatchSetMatch psm r) recorded

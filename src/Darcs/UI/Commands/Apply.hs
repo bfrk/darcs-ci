@@ -38,6 +38,7 @@ import Darcs.UI.Flags
     , changesReverse, verbosity, useCache
     , reorder, umask
     , fixUrl
+    , withContext
     )
 import Darcs.UI.Options ( (^), parseFlags, (?) )
 import qualified Darcs.UI.Options.All as O
@@ -288,6 +289,7 @@ patchSelOpts flags = S.PatchSelectionOptions
     , S.interactive = maybeIsInteractive flags
     , S.selectDeps = O.PromptDeps -- option not supported, use default
     , S.withSummary = O.NoSummary -- option not supported, use default
+    , S.withContext = withContext ? flags
     }
 
 maybeIsInteractive :: [DarcsFlag] -> Bool

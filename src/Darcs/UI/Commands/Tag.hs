@@ -196,6 +196,7 @@ askAboutTagDepends flags ps = do
              , S.interactive = True
              , S.selectDeps = O.PromptDeps
              , S.withSummary = O.NoSummary
+             , S.withContext = O.NoContext
              }
   (deps:>_) <- runSelection ps $
                      ((selectionConfig FirstReversed "depend on" opts Nothing Nothing)

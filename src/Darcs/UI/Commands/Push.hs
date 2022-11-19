@@ -38,7 +38,7 @@ import Darcs.UI.Commands.Util ( printDryRunMessageAndExit, checkUnrelatedRepos )
 import Darcs.UI.Completion ( prefArgs )
 import Darcs.UI.Flags
     ( DarcsFlag
-    , isInteractive, verbosity
+    , isInteractive, verbosity, withContext
     , xmlOutput, selectDeps, applyAs
     , changesReverse, dryRun, useCache, remoteRepos, setDefault, fixUrl )
 import Darcs.UI.Options ( parseFlags, (?), (^) )
@@ -251,6 +251,7 @@ pushPatchSelOpts flags = S.PatchSelectionOptions
     , S.interactive = isInteractive True flags
     , S.selectDeps = selectDeps ? flags
     , S.withSummary = O.withSummary ? flags
+    , S.withContext = withContext ? flags
     }
 
 remoteApply :: [DarcsFlag] -> String -> Doc -> IO ExitCode

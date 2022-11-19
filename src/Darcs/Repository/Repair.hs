@@ -7,7 +7,7 @@ import Darcs.Prelude
 
 import Control.Monad ( when, unless )
 import Control.Monad.Trans ( liftIO )
-import Control.Exception ( catch, IOException )
+import Control.Exception ( catch, finally, IOException )
 import Data.List ( sort, (\\) )
 import System.Directory
     ( createDirectoryIfMissing
@@ -34,10 +34,11 @@ import Darcs.Patch ( RepoPatch, PrimOf, isInconsistent )
 import Darcs.Repository.Diff( treeDiff )
 import Darcs.Repository.Flags ( Verbosity(..), Compression, DiffAlgorithm )
 import Darcs.Repository.Hashed ( readPatches, writeAndReadPatch )
-import Darcs.Repository.InternalTypes ( Repository, repoCache )
+import Darcs.Repository.InternalTypes ( Repository, repoCache, repoLocation )
 import Darcs.Repository.Paths ( pristineDirPath )
 import Darcs.Repository.Pending ( readPending )
 import Darcs.Repository.Prefs ( filetypeFunction )
+import Darcs.Repository.Pristine ( cleanPristineDir, readHashedPristineRoot )
 import Darcs.Repository.State
     ( readPristine
     , readIndex
@@ -51,6 +52,7 @@ import Darcs.Util.Progress
     , finishedOneIO
     , tediousSize
     )
+import Darcs.Util.File ( withCurrentDirectory )
 import Darcs.Util.Lock( withDelayedDir )
 import Darcs.Util.Path( anchorPath, toFilePath )
 import Darcs.Util.Printer ( putDocLn, text, renderString )
@@ -94,16 +96,17 @@ applyAndFixPatchSet r compr s = do
         Just err -> liftIO $ putDocLn err
         Nothing -> return ()
       liftIO $ finishedOneIO k $ renderString $ displayPatchInfo $ info p
-      p1 <- liftIO $ writeAndReadPatch (repoCache r) compr p
       (ps', ps_ok) <- applyAndFixPatches ps
       case mp' of
-        Nothing -> return (p1 :>: ps', ps_ok)
+        Nothing -> return (p :>: ps', ps_ok)
         Just (e, p') ->
           liftIO $ do
             putStrLn e
             -- FIXME While this is okay semantically, it means we can't
             -- run darcs check in a read-only repo
-            p'' <- writeAndReadPatch (repoCache r) compr p'
+            p'' <-
+              withCurrentDirectory (repoLocation r) $
+              writeAndReadPatch (repoCache r) compr p'
             return (p'' :>: ps', False)
 
 data RepositoryConsistency p wR = RepositoryConsistency
@@ -174,6 +177,11 @@ replayRepository' dflag cache repo compr verbosity = do
       unless (verbosity == Quiet) $ putStrLn e
       return (x, False)
 
+cleanupRepositoryReplay :: Repository rt p wU wR -> IO ()
+cleanupRepositoryReplay r = do
+  current <- readHashedPristineRoot r
+  cleanPristineDir (repoCache r) [current]
+
 replayRepositoryInTemp
   :: (RepoPatch p, ApplyState p ~ Tree)
   => DiffAlgorithm
@@ -203,10 +211,12 @@ replayRepository
   -> Verbosity
   -> (RepositoryConsistency p wR -> IO a)
   -> IO a
-replayRepository dflag r compr verb job = do
-  createDirectoryIfMissing False pristineDirPath
-  st <- replayRepository' dflag (repoCache r) r compr verb
-  job st
+replayRepository dflag r compr verb f =
+  run `finally` cleanupRepositoryReplay r
+    where run = do
+            createDirectoryIfMissing False pristineDirPath
+            st <- replayRepository' dflag (repoCache r) r compr verb
+            f st
 
 checkIndex
   :: (RepoPatch p, ApplyState p ~ Tree)

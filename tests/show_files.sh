@@ -49,7 +49,7 @@ touch d/3 d/4
 darcs add d/3 d/4
 check_manifest "" "" "--no-pending"
 check_manifest "a b c/1 c/2 d/3 d/4" "c d" "--pending"
-darcs record --all --name "patch 1" --skip-long-comment
+darcs record -A test --all --name "patch 1" --skip-long-comment
 check_manifest "a b c/1 c/2 d/3 d/4" "c d" "--no-pending"
 check_manifest "a b c/1 c/2 d/3 d/4" "c d" "--pending"
 
@@ -65,7 +65,7 @@ check_manifest "a b c/2 e/3 e/4" "c e" "--pending"
 darcs mv c/2 c/1
 check_manifest "a b c/1 c/2 d/3 d/4" "c d" "--no-pending"
 check_manifest "a b c/1 e/3 e/4" "c e" "--pending"
-darcs record --all --name "patch 2" --skip-long-comment
+darcs record -A test --all --name "patch 2" --skip-long-comment
 check_manifest "a b c/1 e/3 e/4" "c e" "--no-pending"
 check_manifest "a b c/1 e/3 e/4" "c e" "--pending"
 
@@ -75,7 +75,7 @@ check_manifest "a b e/3 e/4" "c e" "--pending"
 darcs remove c
 check_manifest "a b c/1 e/3 e/4" "c e" "--no-pending"
 check_manifest "a b e/3 e/4" "e" "--pending"
-darcs record --all --name "patch 3" --skip-long-comment
+darcs record -A test --all --name "patch 3" --skip-long-comment
 check_manifest "a b e/3 e/4" "e" "--no-pending"
 check_manifest "a b e/3 e/4" "e" "--pending"
 
@@ -83,13 +83,13 @@ darcs mv b b2
 darcs mv b2 b3
 check_manifest "a b e/3 e/4" "e" "--no-pending"
 check_manifest "a b3 e/3 e/4" "e" "--pending"
-darcs record --all --name "patch 3" --skip-long-comment
+darcs record -A test --all --name "patch 3" --skip-long-comment
 check_manifest "a b3 e/3 e/4" "e" "--no-pending"
 check_manifest "a b3 e/3 e/4" "e" "--pending"
 
 cd ..
+rm -rf temp
 
-rm -rf R
 darcs init --repo R
 cd R
 
@@ -113,3 +113,4 @@ check_manifest "bar baz quux" "" "--pending"
 not darcs show files --pending --patch "bar"
 
 cd ..
+rm -rf R

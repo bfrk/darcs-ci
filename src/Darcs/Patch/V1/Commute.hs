@@ -32,7 +32,6 @@ import Control.Monad ( MonadPlus, mplus, msum, mzero, guard )
 import Control.Applicative ( Alternative(..) )
 import Data.Maybe ( fromMaybe )
 
-import Darcs.Patch.Apply ( ApplyState )
 import Darcs.Patch.Commute ( selfCommuter )
 import Darcs.Patch.CommuteFn ( commuterIdFL, commuterFLId )
 import Darcs.Patch.Invert ( invertRL )
@@ -421,12 +420,9 @@ instance PrimPatch prim => Effect (RepoPatchV1 prim) where
     effect p@(Regrem{}) = invert $ effect $ invert p
     effect (PP p) = p :>: NilFL
 
-instance (ApplyState prim ~ ApplyState (RepoPatchV1 prim), IsHunk prim) =>
-         IsHunk (RepoPatchV1 prim) where
-    type ExtraData (RepoPatchV1 prim) = ExtraData prim
-    isHunk (PP p) = isHunk p
-    isHunk _ = Nothing
-    fromHunk = PP . fromHunk
+instance IsHunk prim => IsHunk (RepoPatchV1 prim) where
+    isHunk p = do PP p' <- return p
+                  isHunk p'
 
 newUr :: PrimPatch prim
     => RepoPatchV1 prim wA wB -> RL (RepoPatchV1 prim) wX wY -> [Sealed (RL (RepoPatchV1 prim) wX)]

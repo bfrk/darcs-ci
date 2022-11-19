@@ -53,7 +53,7 @@ FOO
 # is important to make a different line from the top
 # "foo(foobar);" -> "foo(foovar2);" because if not it will only be an deleted
 # line and the algorithm will skip the check of boring lines.
-darcs wh >log
+darcs wh >log 2>&1
 cat > log.expected <<EOF
 hunk ./file 2
 -    foo(foovar);

@@ -22,7 +22,6 @@ module Darcs.Util.Parser
     , take
     , takeTill
     , takeTillChar
-    , unsigned
     , withPath
     , (<|>)
     ) where
@@ -90,10 +89,6 @@ string = skip . AC.string
 {-# INLINE int #-}
 int :: Parser Int
 int = lex (signed decimal)
-
-{-# INLINE unsigned #-}
-unsigned :: Integral a => Parser a
-unsigned = lex decimal
 
 {-# INLINE takeTillChar #-}
 takeTillChar :: Char -> Parser B.ByteString

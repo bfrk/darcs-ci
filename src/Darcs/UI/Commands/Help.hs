@@ -27,7 +27,6 @@ import Darcs.Prelude
 
 import Control.Arrow ( (***) )
 import Data.Char ( isAlphaNum, toLower, toUpper )
-import System.Directory ( withCurrentDirectory )
 import Data.Either ( partitionEithers )
 import Data.List ( groupBy, intercalate, lookup, nub )
 import System.Exit ( exitSuccess )
@@ -57,6 +56,7 @@ import qualified Darcs.UI.TheCommands as TheCommands
 import Darcs.UI.Usage ( getCommandHelp, getSuperCommandHelp, subusage, usage )
 
 import Darcs.Util.English ( andClauses )
+import Darcs.Util.File ( withCurrentDirectory )
 import Darcs.Util.Lock
     ( environmentHelpKeepTmpdir
     , environmentHelpLocks

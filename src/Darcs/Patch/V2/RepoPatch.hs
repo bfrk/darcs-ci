@@ -861,11 +861,11 @@ instance PrimPatch prim => ShowPatchBasic (RepoPatchV2 prim) where
 
 instance PrimPatch prim => ShowContextPatch (RepoPatchV2 prim) where
     showContextPatch f (Normal p) = showContextPatch f p
-    showContextPatch f p = apply p >> return (showPatch f p)
+    showContextPatch f p = return $ showPatch f p
 
 instance PrimPatch prim => ShowPatch (RepoPatchV2 prim) where
     summary = plainSummary
-    summaryFL = plainSummary -- FIXME shouldn't this be plainSummaryFL ?
+    summaryFL = plainSummary
     thing _ = "change"
 
 instance PrimPatch prim => ReadPatch (RepoPatchV2 prim) where
@@ -934,10 +934,8 @@ instance PrimPatch prim => Effect (RepoPatchV2 prim) where
     effect (InvConflictor _ e _) = e
 
 instance IsHunk prim => IsHunk (RepoPatchV2 prim) where
-    type ExtraData (RepoPatchV2 prim) = ExtraData prim
-    isHunk (Normal p) = isHunk p
-    isHunk _ = Nothing
-    fromHunk = Normal . fromHunk
+    isHunk rp = do Normal p <- return rp
+                   isHunk p
 
 displayNons :: (PatchListFormat p, ShowPatchBasic p, PrimPatchBase p) =>
                [Non p wX] -> Doc

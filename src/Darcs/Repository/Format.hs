@@ -97,6 +97,7 @@ import Darcs.Util.SignalHandler ( catchNonSignal )
 import Darcs.Util.Exception ( catchall, prettyException )
 
 import Darcs.Util.ByteString ( linesPS )
+import Darcs.Util.Progress ( beginTedious, endTedious, finishedOneIO )
 
 data RepoProperty = Darcs1
                   | Darcs2
@@ -179,17 +180,22 @@ identifyRepoFormat = either fail return <=< tryIdentifyRepoFormat
 -- resulting 'RepoFormat'.
 tryIdentifyRepoFormat :: String -> IO (Either String RepoFormat)
 tryIdentifyRepoFormat repo = do
+    let k = "Identifying repository " ++ repo
+    beginTedious k
+    finishedOneIO k "format"
     formatInfo <- (fetchFilePS (repo </> formatPath) Cachable)
                   `catchall` (return B.empty)
     -- We use a workaround for servers that don't return a 404 on nonexistent
     -- files (we trivially check for something that looks like a HTML/XML tag).
     format <-
       if B.null formatInfo || BC.elem '<' formatInfo then do
+        finishedOneIO k "inventory"
         missingInvErr <- checkFile (repo </> oldInventoryPath)
         case missingInvErr of
           Nothing -> return . Right $ RF [[Darcs1]]
           Just e -> return . Left $ makeErrorMsg e
       else return . Right $ readFormat formatInfo
+    endTedious k
     return format
   where
     readFormat =

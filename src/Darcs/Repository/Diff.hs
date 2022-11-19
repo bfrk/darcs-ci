@@ -63,7 +63,7 @@ import Darcs.Patch  ( PrimPatch
                     , invert
                     )
 import Darcs.Repository.Prefs ( FileType(..) )
-import Darcs.Patch.Witnesses.Ordered ( FL(..), (+>+), concatGapsFL, consGapFL )
+import Darcs.Patch.Witnesses.Ordered ( FL(..), (+>+) )
 import Darcs.Patch.Witnesses.Sealed ( Gap(..) )
 import Darcs.Repository.Flags ( DiffAlgorithm(..) )
 
@@ -91,7 +91,7 @@ treeDiff :: forall m w prim . (Monad m, Gap w, PrimPatch prim)
 treeDiff da ft t1 t2 = do
     (from, to) <- diffTrees t1 t2
     diffs <- mapM (uncurry diff) $ sortBy organise $ zipTrees getDiff from to
-    return $ concatGapsFL diffs
+    return $ foldr (joinGap (+>+)) (emptyGap NilFL) diffs
   where
     -- sort into removes, changes, adds, with removes in reverse-path order
     -- and everything else in forward order
@@ -117,7 +117,7 @@ treeDiff da ft t1 t2 = do
         return $ freeGap (adddir p :>: NilFL)
     diff p (Added b'@(File _)) =
         do diff' <- diff p (Changed (File emptyBlob) b')
-           return $ consGapFL (addfile p) diff'
+           return $ joinGap (:>:) (freeGap (addfile p)) diff'
     diff p (Removed a'@(File _)) =
         do diff' <- diff p (Changed a' (File emptyBlob))
            return $ joinGap (+>+) diff' (freeGap (rmfile p :>: NilFL))

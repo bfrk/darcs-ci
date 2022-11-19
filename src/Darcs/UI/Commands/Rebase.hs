@@ -36,7 +36,6 @@ import Darcs.UI.PatchHeader
     ( AskAboutDeps(..)
     , HijackOptions(..)
     , HijackT
-    , editLog
     , getAuthor
     , patchHeaderConfig
     , runHijackT
@@ -65,10 +64,10 @@ import Darcs.Repository.Resolution
 import Darcs.Patch ( invert, effect, commute, RepoPatch, displayPatch )
 import Darcs.Patch.Apply ( ApplyState )
 import Darcs.Patch.CommuteFn ( commuterIdFL )
-import Darcs.Patch.Info ( displayPatchInfo, piName )
+import Darcs.Patch.Info ( displayPatchInfo )
 import Darcs.Patch.Match ( secondMatch, splitSecondFL )
 import Darcs.Patch.Merge ( cleanMerge )
-import Darcs.Patch.Named ( fmapFL_Named, patchcontents, patch2patchinfo )
+import Darcs.Patch.Named ( Named, fmapFL_Named, patchcontents, patch2patchinfo )
 import Darcs.Patch.PatchInfoAnd ( PatchInfoAnd, hopefully, info, n2pia )
 import Darcs.Patch.Prim ( canonizeFL, PrimPatch )
 import Darcs.Patch.Rebase.Change
@@ -78,11 +77,7 @@ import Darcs.Patch.Rebase.Change
     , WithDroppedDeps(..), WDDNamed, commuterIdWDD
     , simplifyPush, simplifyPushes
     )
-import Darcs.Patch.Rebase.Fixup
-    ( RebaseFixup(..)
-    , commuteNamedFixup
-    , flToNamesPrims
-    )
+import Darcs.Patch.Rebase.Fixup ( RebaseFixup(..), flToNamesPrims )
 import Darcs.Patch.Rebase.Name ( RebaseName(..), commuteNameNamed )
 import Darcs.Patch.Rebase.Suspended ( Suspended(..), addToEditsToSuspended )
 import qualified Darcs.Patch.Rebase.Suspended as S ( simplifyPush )
@@ -97,13 +92,6 @@ import Darcs.UI.ApplyPatches
     , applyPatchesFinish
     )
 import Darcs.UI.External ( viewDocWith )
-import Darcs.UI.PrintPatch
-    ( printContent
-    , printContentWithPager
-    , printFriendly
-    , printSummary
-    )
-import Darcs.UI.Prompt ( PromptChoice(..), PromptConfig(..), runPrompt )
 import Darcs.UI.SelectChanges
     ( runSelection, runInvertibleSelection
     , selectionConfig, selectionConfigGeneric, selectionConfigPrim
@@ -119,7 +107,6 @@ import Darcs.Patch.Witnesses.Ordered
     , (:/\:)(..)
     , RL(..), reverseRL, mapRL_RL
     , Fork(..)
-    , (+>>+)
     )
 import Darcs.Patch.Witnesses.Sealed
     ( Sealed(..), seal, unseal
@@ -143,10 +130,9 @@ import Darcs.Util.Path ( AbsolutePath )
 import Darcs.Util.SignalHandler ( withSignalsBlocked )
 import Darcs.Util.Tree ( Tree )
 
-import Control.Exception ( throwIO, try )
 import Control.Monad ( unless, when, void )
 import Control.Monad.Trans ( liftIO )
-import System.Exit ( ExitCode(ExitSuccess), exitSuccess )
+import System.Exit ( exitSuccess )
 
 rebase :: DarcsCommand
 rebase = SuperCommand
@@ -160,7 +146,6 @@ rebase = SuperCommand
         , normalCommand apply
         , normalCommand suspend
         , normalCommand unsuspend
-        , normalCommand edit
         , hiddenCommand reify
         , hiddenCommand inject
         , normalCommand obliterate
@@ -477,8 +462,6 @@ unsuspendCmd cmd reifyFixups _ opts _args =
 
               -- TODO should catch logfiles (fst value from updatePatchHeader)
               -- and clean them up as in AmendRecord
-              -- TODO should also ask user to supply explicit dependencies as
-              -- replacements for those that have been lost (if any, see above)
               p' <- snd <$> updatePatchHeader cmd
                       NoAskAboutDeps
                       (patchSelOpts True opts)
@@ -511,7 +494,7 @@ inject = DarcsCommand
     , commandOptions = injectOpts
     }
   where
-    injectBasicOpts = O.keepDate ^ O.author ^ O.diffAlgorithm ^ O.withSummary
+    injectBasicOpts = O.keepDate ^ O.author ^ O.diffAlgorithm
     injectOpts = injectBasicOpts `withStdOpts` O.umask
     injectDescription =
       "Merge a change from the fixups of a patch into the patch itself."
@@ -527,52 +510,38 @@ injectCmd _ opts _args =
     -- TODO we only want to select one patch: generalise withSelectedPatchFromList
     let selection_config =
           selectionConfigGeneric rcToPia First "inject into" (patchSelOpts True opts) Nothing
-    (to_inject :> keep) <- runSelection selects selection_config
+    (chosens :> rest_selects) <- runSelection selects selection_config
 
-    let extractSingle :: FL (RebaseChange prim) wX wY -> RebaseChange prim wX wY
-        extractSingle (rc :>: NilFL) = rc
+    let extractSingle :: FL (RebaseChange prim) wX wY -> (FL (RebaseFixup prim) :> Named prim) wX wY
+        extractSingle (RC fixups toedit :>: NilFL) = fixups :> toedit
         extractSingle _ = error "You must select precisely one patch!"
 
-    rc <- return $ extractSingle to_inject
-    Sealed new <- injectOne opts rc keep
+    fixups :> toedit <- return $ extractSingle chosens
 
-    writeTentativeRebase _repository $ Items new
+    name_fixups :> prim_fixups <- return $ flToNamesPrims fixups
+
+    let prim_selection_config =
+          selectionConfigPrim
+              Last "inject" (patchSelOpts True opts)
+              (Just (primSplitter (diffAlgorithm ? opts))) Nothing Nothing
+    (rest_fixups :> injects) <- runInvertibleSelection prim_fixups prim_selection_config
+
+    when (nullFL injects) $ do
+        putStrLn "No changes selected!"
+        exitSuccess
+
+    -- Don't bother to update patch header since unsuspend will do that later
+    let da = diffAlgorithm ? opts
+        toeditNew = fmapFL_Named (canonizeFL da . (injects +>+)) toedit
+    writeTentativeRebase _repository $
+      unseal Items $
+      unseal (simplifyPushes da (mapFL_FL NameFixup name_fixups)) $
+      simplifyPushes da (mapFL_FL PrimFixup rest_fixups) $
+      RC NilFL toeditNew :>: rest_selects
     _repository <-
       finalizeRepositoryChanges _repository YesUpdatePending
         (compress ? opts) (O.dryRun ? opts)
     return ()
-
--- | Inject fixups into a 'RebaseChange' and update the remainder of the rebase
--- state. This is in 'IO' because it involves interactive selection of the
--- fixups to inject.
--- TODO: We currently offer only prim fixups, not name fixups, for injection. I
--- think it would make sense to extend this to name fixups, so the user can
--- explicitly resolve a lost dependency in cases where is clear that it won't
--- re-appear.
-injectOne
-  :: (PrimPatch prim, ApplyState prim ~ Tree)
-  => [DarcsFlag]
-  -> RebaseChange prim wX wY
-  -> FL (RebaseChange prim) wY wZ
-  -> IO (Sealed (FL (RebaseChange prim) wX))
-injectOne opts (RC fixups toedit) rest_suspended = do
-  name_fixups :> prim_fixups <- return $ flToNamesPrims fixups
-  let prim_selection_config =
-        selectionConfigPrim
-          Last
-          "inject"
-          (patchSelOpts True opts)
-          (Just (primSplitter (diffAlgorithm ? opts)))
-          Nothing
-  (rest_fixups :> injects) <-
-    runInvertibleSelection prim_fixups prim_selection_config
-  let da = diffAlgorithm ? opts
-      toeditNew = fmapFL_Named (canonizeFL da . (injects +>+)) toedit
-  return $
-    unseal (simplifyPushes da (mapFL_FL NameFixup name_fixups)) $
-    simplifyPushes da (mapFL_FL PrimFixup rest_fixups) $
-    RC NilFL toeditNew :>: rest_suspended
-
 
 obliterate :: DarcsCommand
 obliterate = DarcsCommand
@@ -589,14 +558,16 @@ obliterate = DarcsCommand
     , commandOptions = obliterateOpts
     }
   where
-    obliterateBasicOpts = O.diffAlgorithm ^ O.withSummary
+    obliterateBasicOpts = O.diffAlgorithm
     obliterateOpts = obliterateBasicOpts `withStdOpts` O.umask
     obliterateDescription =
       "Obliterate a patch that is currently suspended."
 
 obliterateCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 obliterateCmd _ opts _args =
-  withRepoLock (useCache ? opts) (umask ? opts) $ RebaseJob $ \_repository -> do
+    withRepoLock (useCache ? opts) (umask ? opts) $
+    RebaseJob $
+    \(_repository :: Repository 'RW p wU wR) -> (do
     Items selects <- readTentativeRebase _repository
 
     -- TODO this selection doesn't need to respect dependencies
@@ -605,271 +576,30 @@ obliterateCmd _ opts _args =
     when (nullFL chosen) $ do putStrLn "No patches selected!"
                               exitSuccess
 
-    let ps_to_keep =
-          foldSealedFL (obliterateOne (diffAlgorithm ? opts)) chosen (Sealed keep)
+    let da = diffAlgorithm ? opts
+        do_obliterate
+          :: PrimPatch prim
+          => FL (RebaseChange prim) wX wY
+          -> FL (RebaseChange prim) wY wZ
+          -> Sealed (FL (RebaseChange prim) wX)
+        do_obliterate NilFL = Sealed
+        do_obliterate (RC fs e :>: qs) =
+          unseal (simplifyPushes da fs) .
+          -- since Named doesn't have any witness context for the
+          -- patch names, the AddName here will be inferred to be wX wX
+          unseal (simplifyPush da (NameFixup (AddName (patch2patchinfo e)))) .
+          unseal (simplifyPushes da (mapFL_FL PrimFixup (patchcontents e))) .
+          do_obliterate qs
+
+    let ps_to_keep = do_obliterate chosen keep
     writeTentativeRebase _repository (unseal Items ps_to_keep)
 
-    void $ finalizeRepositoryChanges _repository YesUpdatePending
+    _repository <-
+      finalizeRepositoryChanges _repository YesUpdatePending
         (compress ? opts) (O.dryRun ? opts)
+    return ()
+   ) :: IO ()
 
--- TODO: move to Darcs.Patch.Witnesses.Ordered ?
--- | Map a cons-like operation that may change the end state over an 'FL'.
--- Unfortunately this can't be generalized to 'foldrwFL', even though it has
--- exactly the same definition, because 'Sealed' doesn't have the right kind.
--- We could play with a newtype wrapper to fix this but the ensuing wrapping
--- and unwrapping would hardly make it clearer what's going on.
-foldSealedFL
-  :: (forall wA wB . p wA wB -> Sealed (q wB) -> Sealed (q wA))
-  -> FL p wX wY -> Sealed (q wY) -> Sealed (q wX)
--- kind error: foldSealedFL = foldrwFL
-foldSealedFL _ NilFL acc = acc
-foldSealedFL f (p :>: ps) acc = f p (foldSealedFL f ps acc)
-
-obliterateOne
-  :: PrimPatch prim
-  => O.DiffAlgorithm
-  -> RebaseChange prim wX wY
-  -> Sealed (FL (RebaseChange prim) wY)
-  -> Sealed (FL (RebaseChange prim) wX)
-obliterateOne da (RC fs e) =
-  unseal (simplifyPushes da fs) .
-  -- since Named doesn't have any witness context for the
-  -- patch names, the AddName here will be inferred to be wX wX
-  unseal (simplifyPush da (NameFixup (AddName (patch2patchinfo e)))) .
-  unseal (simplifyPushes da (mapFL_FL PrimFixup (patchcontents e)))
-
-edit :: DarcsCommand
-edit = DarcsCommand
-    { commandProgramName = "darcs"
-    , commandName = "edit"
-    , commandHelp = text description
-    , commandDescription = description
-    , commandPrereq = amInHashedRepository
-    , commandExtraArgs = 0
-    , commandExtraArgHelp = []
-    , commandCommand = editCmd
-    , commandCompleteArgs = noArgs
-    , commandArgdefaults = nodefaults
-    , commandOptions = opts
-    }
-  where
-    basicOpts = O.diffAlgorithm ^ O.withSummary
-    opts = basicOpts `withStdOpts` O.umask
-    description = "Edit suspended patches."
-
-data EditState prim wX = EditState
-  { count :: Int
-  , index :: Int
-  , patches :: Sealed ((RL (RebaseChange prim) :> FL (RebaseChange prim)) wX)
-  }
-
-data Edit prim wX = Edit
-  { eWhat :: String
-  , eState :: EditState prim wX
-  }
-
-editCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
-editCmd _ opts _args =
-  withRepoLock (useCache ? opts) (umask ? opts) $
-  RebaseJob $ \_repository -> do
-    Items items <- readTentativeRebase _repository
-    let initial_state =
-          EditState
-            { count = lengthFL items
-            , index = 0
-            , patches = Sealed (NilRL :> items)
-            }
-    Sealed items' <- interactiveEdit opts [] initial_state []
-    writeTentativeRebase _repository (Items items')
-    void $ finalizeRepositoryChanges _repository YesUpdatePending
-      (compress ? opts) (O.dryRun ? opts)
-
-interactiveEdit
-  :: (PrimPatch prim, ApplyState prim ~ Tree)
-  => [DarcsFlag]
-  -> [Edit prim wR]     -- ^ stack of undone edits, for redo
-  -> EditState prim wR  -- ^ current state
-  -> [Edit prim wR]     -- ^ stack of past edits, for undo
-  -> IO (Sealed (FL (RebaseChange prim) wR))
-interactiveEdit opts redos s@EditState{..} undos =
-  -- invariants:
-  --  * the "todo" patches are empty only if the "done" patches are; formally:
-  --      case patches of Sealed (done :> todo) -> nullFL todo ==> nullRL done
-  case patches of
-    Sealed (_ :> NilFL) -> prompt
-    Sealed (_ :> p :>: _) -> defaultPrintFriendly p >> prompt
-  where
-    da = diffAlgorithm ? opts
-
-    -- helper functions
-    defaultPrintFriendly =
-      liftIO . printFriendly (O.verbosity ? opts) (O.withSummary ? opts)
-
-    -- common actions
-    undo =
-      case undos of
-        [] -> error "impossible"
-        e : undos' ->
-          -- pop last state from undos, push current state onto redos
-          interactiveEdit opts (Edit (eWhat e) s : redos) (eState e) undos'
-    redo =
-      case redos of
-        [] -> error "impossible"
-        e : redos' ->
-          -- pop last state from redos, push current state onto undos
-          interactiveEdit opts redos' (eState e) (Edit (eWhat e) s : undos)
-    quit = do
-      putInfo opts $ text "Okay, rebase edit cancelled."
-      exitSuccess
-    commit =
-      case patches of
-        Sealed (done :> todo) -> return $ Sealed (done +>>+ todo)
-    list = mapM_ (putStrLn . eWhat) (reverse undos) >> prompt
-    choicesCommon =
-      [ PromptChoice 'q' True quit "quit, discard all edits"
-      , PromptChoice 'd' True commit "done editing, commit"
-      , PromptChoice 'l' True list "list edits made so far"
-      , PromptChoice 'u' (not (null undos)) undo "undo previous edit"
-      , PromptChoice 'r' (not (null redos)) redo "redo previously undone edit"
-      ]
-
-    prompt =
-      case patches of
-        Sealed (_ :> NilFL) -> -- empty rebase state
-          runPrompt PromptConfig
-            { pPrompt = "No more suspended patches. What shall I do?"
-            , pVerb = "rebase edit"
-            , pChoices = [choicesCommon]
-            , pDefault = Nothing
-            }
-        Sealed (done :> todo@(p :>: todo')) -> -- non-empty rebase state
-          runPrompt PromptConfig
-            { pPrompt = "What shall I do with this patch? " ++
-                  "(" ++ show (index + 1) ++ "/" ++ show count ++ ")"
-            , pVerb = "rebase edit"
-            , pChoices = [choicesEdit, choicesCommon, choicesView, choicesNav]
-            , pDefault = Nothing
-            }
-          where
-
-            choicesEdit =
-              [ PromptChoice 'o' True dropit "drop (obliterate, dissolve into fixups)"
-              , PromptChoice 'e' True reword "edit name and/or long comment (log)"
-              , PromptChoice 's' (index > 0) squash "squash with previous patch"
-              , PromptChoice 'i' can_inject inject' "inject fixups"
-              -- TODO
-              -- , PromptChoice 'c' True ??? "select individual changes for editing"
-              ]
-            choicesView =
-              [ PromptChoice 'v' True view "view this patch in full"
-              , PromptChoice 'p' True pager "view this patch in full with pager"
-              , PromptChoice 'y' True display "view this patch"
-              , PromptChoice 'x' can_summarize summary
-                "view a summary of this patch"
-              ]
-            choicesNav =
-              [ PromptChoice 'n' (index + 1 < count) next "skip to next patch"
-              , PromptChoice 'k' (index > 0) prev "back up to previous patch"
-              , PromptChoice 'g' (index > 0) first "start over from the first patch"
-              ]
-
-            -- helper functions
-            edit' op s' = do
-              let what =
-                    case p of RC _ np -> op ++ " " ++ piName (patch2patchinfo np)
-              -- set new state s' and push the current one onto the undo stack
-              -- discarding the redo stack
-              interactiveEdit opts [] s' (Edit what s : undos)
-            navigate s' =
-              -- set new state s' with no undo or redo stack modification
-              interactiveEdit opts redos s' undos
-
-            can_summarize = not (O.yes (O.withSummary ? opts))
-            can_inject = case p of (RC NilFL _) -> False; _ -> True
-
-            -- editing
-            dropit = do
-              Sealed todo'' <- return $ obliterateOne da p (Sealed todo')
-              edit' "drop  " s { count = count - 1 , patches = Sealed (done :> todo'') }
-            inject' = do
-              result <- try $ injectOne opts p todo'
-              case result of
-                Left ExitSuccess -> prompt
-                Left e -> throwIO e
-                Right (Sealed todo'') ->
-                  edit' "inject" s { patches = Sealed (done :> todo'') }
-            reword = do
-              Sealed todo'' <- rewordOne da p todo'
-              edit' "reword" s { patches = Sealed (done :> todo'') }
-            squash =
-              case done of
-                NilRL -> error "impossible"
-                done' :<: q ->
-                  case squashOne da q p todo' of
-                    Just (Sealed todo'') ->
-                      -- this moves back by one so the new squashed patch is
-                      -- selected; useful in case you now want to edit the
-                      -- comment or look at the result
-                      edit' "squash" s
-                        { count = count - 1
-                        , index = index - 1
-                        , patches = Sealed (done' :> todo'')
-                        }
-                    Nothing -> do
-                      putStrLn "Failed to commute fixups backward, try inject first."
-                      prompt
-
-            -- viewing
-            view = printContent p >> prompt
-            pager = printContentWithPager p >> prompt
-            display = defaultPrintFriendly p >> prompt
-            summary = printSummary p >> prompt
-
-            -- navigation
-            next =
-              case todo' of
-                NilFL -> error "impossible"
-                _ ->
-                  navigate
-                    s { index = index + 1, patches = Sealed (done :<: p :> todo') }
-            prev =
-              case done of
-                NilRL -> error "impossible"
-                done' :<: p' ->
-                  navigate
-                    s { index = index - 1, patches = Sealed (done' :> p' :>: todo) }
-            first =
-              navigate s { index = 0, patches = Sealed (NilRL :> done +>>+ todo) }
-
--- | Squash second patch with first, updating the rest of the rebase state.
--- This can fail if the second patch has fixups that don't commute with the
--- contents of the first patch.
-squashOne
-  :: PrimPatch prim
-  => O.DiffAlgorithm
-  -> RebaseChange prim wX wY
-  -> RebaseChange prim wY wZ
-  -> FL (RebaseChange prim) wZ wW
-  -> Maybe (Sealed (FL (RebaseChange prim) wX))
-squashOne da (RC fs1 e1) (RC fs2 e2) rest = do
-  fs2' :> e1' <- commuterIdFL commuteNamedFixup (e1 :> fs2)
-  let e1'' = fmapFL_Named (canonizeFL da . (+>+ patchcontents e2)) e1'
-      e2_name_fixup = NameFixup (AddName (patch2patchinfo e2))
-  return $
-    case simplifyPush da e2_name_fixup rest of
-      Sealed rest' -> simplifyPushes da (fs1 +>+ fs2') (RC NilFL e1'' :>: rest')
-
-rewordOne
-  :: (PrimPatch prim, ApplyState prim ~ Tree)
-  => O.DiffAlgorithm
-  -> RebaseChange prim wX wY
-  -> FL (RebaseChange prim) wY wZ
-  -> IO (Sealed (FL (RebaseChange prim) wX))
-rewordOne da (RC fs e) rest = do
-  e' <- editLog e
-  let rename = NameFixup $ Rename (patch2patchinfo e') (patch2patchinfo e)
-  case simplifyPush da rename rest of
-    Sealed rest' -> return $ Sealed $ RC fs e' :>: rest'
 
 pull :: DarcsCommand
 pull = DarcsCommand
@@ -1001,6 +731,7 @@ applyPatchesForRebaseCmd cmdName opts _repository (Fork common us' to_be_applied
 
     applyPatchesFinish cmdName opts _repository pw (nullFL to_be_applied)
 
+-- TODO I doubt this is right, e.g. withContext should be inherited
 applyPatchSelOpts :: S.PatchSelectionOptions
 applyPatchSelOpts = S.PatchSelectionOptions
     { S.verbosity = O.NormalVerbosity
@@ -1008,6 +739,7 @@ applyPatchSelOpts = S.PatchSelectionOptions
     , S.interactive = True
     , S.selectDeps = O.PromptDeps -- option not supported, use default
     , S.withSummary = O.NoSummary
+    , S.withContext = O.NoContext
     }
 
 obliteratePatchSelOpts :: [DarcsFlag] -> S.PatchSelectionOptions
@@ -1022,6 +754,7 @@ patchSelOpts defInteractive flags = S.PatchSelectionOptions
     , S.interactive = isInteractive defInteractive flags
     , S.selectDeps = selectDeps ? flags
     , S.withSummary = O.withSummary ? flags
+    , S.withContext = O.NoContext
     }
 
 log :: DarcsCommand

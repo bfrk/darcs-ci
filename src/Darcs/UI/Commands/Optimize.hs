@@ -33,7 +33,6 @@ import System.Directory
     , removeFile
     , getHomeDirectory
     , removeDirectoryRecursive
-    , withCurrentDirectory
     )
 import Darcs.UI.Commands ( DarcsCommand(..), nodefaults
                          , amInHashedRepository, amInRepository, putInfo
@@ -99,7 +98,11 @@ import Darcs.Util.Lock
     , removeFileMayNotExist
     , writeBinFile
     )
-import Darcs.Util.File ( doesDirectoryReallyExist, getRecursiveContents )
+import Darcs.Util.File
+    ( withCurrentDirectory
+    , getRecursiveContents
+    , doesDirectoryReallyExist
+    )
 import Darcs.Util.Exception ( catchall )
 import Darcs.Util.Progress
     ( beginTedious

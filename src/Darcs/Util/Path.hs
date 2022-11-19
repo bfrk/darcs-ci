@@ -53,6 +53,7 @@ module Darcs.Util.Path
     , getCurrentDirectory
     , setCurrentDirectory
     , getUniquePathName
+    , doesPathExist
     -- * Tree filtering.
     , filterPaths
     -- * AnchoredPaths: relative paths within a Tree. All paths are
@@ -96,7 +97,7 @@ import Data.Char ( chr, isSpace, ord, toLower )
 import Data.List ( inits, isPrefixOf, isSuffixOf, stripPrefix )
 import GHC.Stack ( HasCallStack )
 import qualified System.Directory ( setCurrentDirectory )
-import System.Directory ( doesDirectoryExist, doesPathExist )
+import System.Directory ( doesDirectoryExist, doesFileExist )
 import qualified System.FilePath as NativeFilePath
 import qualified System.FilePath.Posix as FilePath
 import System.Posix.Files ( fileID, getFileStatus, isDirectory )
@@ -202,6 +203,12 @@ simpleSubPath :: HasCallStack => FilePath -> Maybe SubPath
 simpleSubPath x | null x = error "simpleSubPath called with empty path"
                 | isRelative x = Just $ SubPath $ FilePath.normalise $ pathToPosix x
                 | otherwise = Nothing
+
+doesPathExist :: FilePath -> IO Bool
+doesPathExist p = do
+   dir_exists <- doesDirectoryExist p
+   file_exists <- doesFileExist p
+   return $ dir_exists || file_exists
 
 -- | Interpret a possibly relative path wrt the current working directory.
 -- This also canonicalizes the path, resolving symbolic links etc.
@@ -414,7 +421,7 @@ parent :: AnchoredPath -> Maybe AnchoredPath
 parent (AnchoredPath []) = Nothing
 parent (AnchoredPath x) = Just (AnchoredPath (init x))
 
--- | List all (proper) parents of a given path. foo/bar/baz -> [.,foo, foo/bar]
+-- | List all parents of a given path. foo/bar/baz -> [.,foo, foo/bar]
 parents :: AnchoredPath -> [AnchoredPath]
 parents (AnchoredPath []) = [] -- root has no parents
 parents (AnchoredPath xs) = map AnchoredPath $ inits $ init xs
