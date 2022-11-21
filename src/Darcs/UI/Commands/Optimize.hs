@@ -349,25 +349,17 @@ optimizeReorder = common
         , "remote command needs to download.  It should also reduce the CPU time"
         , "needed for some operations."
         ]
-        $+$ formatWords
-        [ "With the --deep option it also optimizes all clean tags in the whole"
-        , "repository. This breaks the history of patches into smaller"
-        , "bunches, which can further improve efficiency, but requires all"
-        , "patches to be present. It is therefore less suitable for lazy clones."
-        ]
     , commandDescription = "reorder the patches in the repository"
     , commandCommand = optimizeReorderCmd
     , commandOptions =
-        withStdOpts basicOpts (commonAdvancedOpts ^ O.compress)
+        withStdOpts commonBasicOpts (commonAdvancedOpts ^ O.compress)
     }
-  where
-    basicOpts = commonBasicOpts ^ O.optimizeDeep
 
 optimizeReorderCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 optimizeReorderCmd _ opts _ =
     withRepoLock (useCache ? opts) (umask ? opts) $
     RepoJob $ \repository -> do
-      reorderInventory repository (O.compress ? opts) (O.optimizeDeep ? opts)
+      reorderInventory repository (O.compress ? opts)
       putInfo opts "Done reordering!"
 
 optimizeRelink :: DarcsCommand

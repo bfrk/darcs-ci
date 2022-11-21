@@ -30,7 +30,6 @@ module Darcs.Repository.Flags
     , ForgetParent (..)
     , PatchFormat (..)
     , WithPrefsTemplates (..)
-    , OptimizeDeep (..)
     ) where
 
 import Darcs.Prelude
@@ -134,7 +133,4 @@ data PatchFormat = PatchFormat1 | PatchFormat2 | PatchFormat3
     deriving ( Eq, Show )
 
 data WithPrefsTemplates =  WithPrefsTemplates | NoPrefsTemplates
-    deriving ( Eq, Show )
-
-data OptimizeDeep = OptimizeShallow | OptimizeDeep
     deriving ( Eq, Show )

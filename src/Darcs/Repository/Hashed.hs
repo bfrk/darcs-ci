@@ -59,7 +59,6 @@ import Darcs.Patch.Depends
     ( cleanLatestTag
     , removeFromPatchSet
     , slightlyOptimizePatchset
-    , fullyOptimizePatchSet
     )
 import Darcs.Patch.Format ( PatchListFormat )
 import Darcs.Patch.Info ( displayPatchInfo, makePatchname, piName )
@@ -96,7 +95,6 @@ import Darcs.Patch.Witnesses.Unsafe ( unsafeCoerceP )
 import Darcs.Repository.Flags
     ( Compression
     , DryRun(..)
-    , OptimizeDeep(..)
     , RemoteDarcs
     , UpdatePending(..)
     , Verbosity(..)
@@ -161,7 +159,6 @@ import Darcs.Repository.Rebase
     , writeTentativeRebase
     )
 import Darcs.Repository.State ( updateIndex )
-import Darcs.Repository.Traverse ( cleanRepository )
 import Darcs.Repository.Unrevert
     ( finalizeTentativeUnrevert
     , removeFromUnrevertContext
@@ -488,23 +485,14 @@ checkIndexIsWritable = do
 -- to a given tag are included in that tag, so less commutation and
 -- history traversal is needed.  This latter issue can become very
 -- important in large repositories.
---
--- In addition, if 'YesOptimizeDeep' is passed, then we first create
--- a 'Tagged' section for every clean tag.
 reorderInventory :: (RepoPatch p, ApplyState p ~ Tree)
                  => Repository 'RW p wU wR
                  -> Compression
-                 -> OptimizeDeep
                  -> IO ()
-reorderInventory r compr deep
+reorderInventory r compr
   | formatHas HashedInventory (repoFormat r) = do
-      let prepare =
-            case deep of
-              OptimizeDeep -> fullyOptimizePatchSet
-              OptimizeShallow -> id
-      (cleanLatestTag . prepare) `fmap` readPatches r >>=
+      cleanLatestTag `fmap` readPatches r >>=
         writeTentativeInventory r compr
-      cleanRepository r
       withSignalsBlocked $ finalizeTentativeChanges r compr
   | otherwise = fail Old.oldRepoFailMsg
 
