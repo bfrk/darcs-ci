@@ -54,13 +54,13 @@ jobs:
         ghc-version: ${{ matrix.ghc }}
         cabal-version: ${{ matrix.cabal }}
 
-    - name: Cache cabal packages and store
+    - name: Cache cabal store
       uses: actions/cache@v3
       with:
         path: ${{ steps.setup-haskell-cabal.outputs.cabal-store }}
         key: cabal-store-${{ matrix.os }}-ghc-${{ matrix.ghc }}-${{ hashFiles('darcs.cabal', 'cabal.project') }}
-        # restore-keys: |
-        #   cabal-store-${{ matrix.os }}-ghc-${{ matrix.ghc }}-
+        restore-keys: |
+          cabal-store-${{ matrix.os }}-ghc-${{ matrix.ghc }}-
 
     - name: Configure
       run: cabal configure --enable-tests -fwarn-as-error
