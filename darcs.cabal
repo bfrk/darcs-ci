@@ -121,7 +121,7 @@ flag warn-as-error
 -- ----------------------------------------------------------------------
 
 custom-setup
-    setup-depends: base      >= 4.10 && < 4.17,
+    setup-depends: base      >= 4.10 && < 4.18,
                    Cabal     >= 2.4 && < 3.7,
                    process   >= 1.2.3.0 && < 1.7,
                    filepath  >= 1.4.1 && < 1.5.0.0,
@@ -406,7 +406,7 @@ Library
     else
       build-depends:  unix >= 2.7.1.0 && < 2.8
 
-    build-depends:    base              >= 4.10 && < 4.17,
+    build-depends:    base              >= 4.10 && < 4.18,
                       stm               >= 2.1 && < 2.6,
                       binary            >= 0.5 && < 0.11,
                       containers        >= 0.5.6.2 && < 0.7,
