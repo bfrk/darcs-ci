@@ -184,7 +184,7 @@ tryIdentifyRepoFormat repo = do
     beginTedious k
     finishedOneIO k "format"
     formatInfo <- (fetchFilePS (repo </> formatPath) Cachable)
-                  `catchall` (return B.empty)
+                  -- `catchall` (return B.empty)
     -- We use a workaround for servers that don't return a 404 on nonexistent
     -- files (we trivially check for something that looks like a HTML/XML tag).
     format <-
