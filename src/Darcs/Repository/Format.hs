@@ -79,7 +79,7 @@ import Darcs.Prelude
 
 import Control.Monad ( mplus, (<=<) )
 import qualified Data.ByteString.Char8 as BC ( split, pack, unpack, elem )
-import qualified Data.ByteString  as B ( ByteString, null, empty, stripPrefix )
+import qualified Data.ByteString  as B ( ByteString, null, stripPrefix )
 import Data.List ( partition, intercalate, (\\) )
 import Data.Maybe ( mapMaybe )
 import Data.String ( IsString )
@@ -94,7 +94,7 @@ import qualified Darcs.Repository.Flags as F
     ( WithWorkingDir (..), PatchFormat (..)  )
 import Darcs.Repository.Paths ( formatPath, oldInventoryPath )
 import Darcs.Util.SignalHandler ( catchNonSignal )
-import Darcs.Util.Exception ( catchall, prettyException )
+import Darcs.Util.Exception ( prettyException )
 
 import Darcs.Util.ByteString ( linesPS )
 import Darcs.Util.Progress ( beginTedious, endTedious, finishedOneIO )
