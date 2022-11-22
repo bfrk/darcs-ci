@@ -77,7 +77,7 @@ module Darcs.Repository.Format
 
 import Darcs.Prelude
 
-import Control.Exception ( try, SomeException )
+import Control.Exception ( try )
 import Control.Monad ( mplus, (<=<) )
 import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString  as B
@@ -186,7 +186,8 @@ tryIdentifyRepoFormat repo = do
       Right content | BC.elem '<' content ->
         -- We use a workaround for servers that don't return a 404 on nonexistent
         -- files (we trivially check for something that looks like a HTML/XML tag).
-        return $ Left $ "invalid file content: (repo </> formatPath)"
+        return $ Left $ "invalid file content of " ++ (repo </> formatPath) ++ ":\n"
+          ++ BC.unpack content
       Right content ->
         return $ Right $ readFormat content
   case formatResult of
@@ -195,9 +196,10 @@ tryIdentifyRepoFormat repo = do
       fetchFile oldInventoryPath >>= \case
         Right _ ->
           return $ Right $ RF [[Darcs1]]
-        Left (_ :: SomeException) ->
+        Left inventoryError ->
           -- report only the formatError
-          return $ Left $ makeErrorMsg formatError
+          return $ Left $ makeErrorMsg $
+            formatError ++ "\nAnd also:\n" ++ prettyException inventoryError
   where
     readFormat =
       RF . map (map (readRepoProperty . fixupUnknownFormat)) . splitFormat

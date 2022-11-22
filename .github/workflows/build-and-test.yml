@@ -14,11 +14,11 @@ jobs:
           - ubuntu-18.04
           - ubuntu-20.04
           - ubuntu-22.04
-#           - macOS-10.15
-#           - macOS-11
-#           - macOS-12
-#           - windows-2019
-#           - windows-2022
+          - macOS-10.15
+          - macOS-11
+          - macOS-12
+          - windows-2019
+          - windows-2022
         ghc:
           - 8.2.2
 #           - 8.4.4
@@ -34,7 +34,7 @@ jobs:
           # can't build basement (indirect dependency)
           - os: ubuntu-18.04
             ghc: 8.4.4
-          # ghc-8.2.2 is no longer available
+          # ghc-8.2.2 fails to install
           - os: ubuntu-22.04
             ghc: 8.2.2
     env:
@@ -43,7 +43,7 @@ jobs:
       testcmd: cabal run -- darcs-test -j=6 -f=123 -i=yn -c=yn --hide
       ACTIONS_ALLOW_UNSECURE_COMMANDS: true
       # avoid occasional timeouts in test scripts that access darcs.net:
-      DARCS_CONNECTION_TIMEOUT: 30
+      DARCS_CONNECTION_TIMEOUT: 5
 
     steps:
     - name: Configure git
