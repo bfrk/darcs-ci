@@ -21,12 +21,12 @@ jobs:
           - windows-2022
         ghc:
           - 8.2.2
-#           - 8.4.4
-#           - 8.6.5
-#           - 8.8.2
-#           - 8.10.7
-#           - 9.0.2
-#           - 9.2.4
+          - 8.4.4
+          - 8.6.5
+          - 8.8.2
+          - 8.10.7
+          - 9.0.2
+          - 9.2.4
           - 9.4.2
         cabal:
           - latest
@@ -39,11 +39,11 @@ jobs:
             ghc: 8.2.2
     env:
       runtests: ${{ matrix.ghc == '8.2.2' || matrix.ghc == '9.4.2' }}
-      tests-to-run: -t=network/log
+      tests-to-run: # e.g. -t=EXAMPLE
       testcmd: cabal run -- darcs-test -j=6 -f=123 -i=yn -c=yn --hide
       ACTIONS_ALLOW_UNSECURE_COMMANDS: true
       # avoid occasional timeouts in test scripts that access darcs.net:
-      DARCS_CONNECTION_TIMEOUT: 5
+      DARCS_CONNECTION_TIMEOUT: 30
 
     steps:
     - name: Configure git
