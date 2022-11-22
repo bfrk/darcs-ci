@@ -77,7 +77,7 @@ module Darcs.Repository.Format
 
 import Darcs.Prelude
 
-import Control.Exception ( try )
+import Control.Exception ( try, SomeException )
 import Control.Monad ( mplus, (<=<) )
 import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString  as B
@@ -195,9 +195,9 @@ tryIdentifyRepoFormat repo = do
       fetchFile oldInventoryPath >>= \case
         Right _ ->
           return $ Right $ RF [[Darcs1]]
-        Left inventoryError ->
-          return $ Left $ makeErrorMsg $
-            formatError ++ "; and also: " ++ prettyException inventoryError
+        Left (_ :: SomeException) ->
+          -- report only the formatError
+          return $ Left $ makeErrorMsg formatError
   where
     readFormat =
       RF . map (map (readRepoProperty . fixupUnknownFormat)) . splitFormat
@@ -213,7 +213,7 @@ tryIdentifyRepoFormat repo = do
 
     fetchFile path = try (fetchFilePS (repo </> path) Cachable)
 
-    makeErrorMsg e =  "Not a repository: " ++ repo ++ " (" ++ e ++ ")"
+    makeErrorMsg e =  "Not a repository: " ++ repo ++ ":\n" ++ e
 
 -- | Write the repo format to the given file.
 writeRepoFormat :: RepoFormat -> FilePath -> IO ()
