@@ -34,9 +34,12 @@ jobs:
           # can't build basement (indirect dependency)
           - os: ubuntu-18.04
             ghc: 8.4.4
+          # ghc-8.2.2 is no longer available
+          - os: ubuntu-22.04
+            ghc: 8.2.2
     env:
       runtests: ${{ matrix.ghc == '8.2.2' || matrix.ghc == '9.4.2' }}
-      tests-to-run: # e.g. -t=EXAMPLE
+      tests-to-run: -t=network/log
       testcmd: cabal run -- darcs-test -j=6 -f=123 -i=yn -c=yn --hide
       ACTIONS_ALLOW_UNSECURE_COMMANDS: true
       # avoid occasional timeouts in test scripts that access darcs.net:

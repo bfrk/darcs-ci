@@ -77,9 +77,10 @@ module Darcs.Repository.Format
 
 import Darcs.Prelude
 
+import Control.Exception ( try )
 import Control.Monad ( mplus, (<=<) )
-import qualified Data.ByteString.Char8 as BC ( split, pack, unpack, elem )
-import qualified Data.ByteString  as B ( ByteString, null, stripPrefix )
+import qualified Data.ByteString.Char8 as BC
+import qualified Data.ByteString  as B
 import Data.List ( partition, intercalate, (\\) )
 import Data.Maybe ( mapMaybe )
 import Data.String ( IsString )
@@ -93,11 +94,9 @@ import Darcs.Util.Lock ( writeBinFile )
 import qualified Darcs.Repository.Flags as F
     ( WithWorkingDir (..), PatchFormat (..)  )
 import Darcs.Repository.Paths ( formatPath, oldInventoryPath )
-import Darcs.Util.SignalHandler ( catchNonSignal )
 import Darcs.Util.Exception ( prettyException )
 
 import Darcs.Util.ByteString ( linesPS )
-import Darcs.Util.Progress ( beginTedious, endTedious, finishedOneIO )
 
 data RepoProperty = Darcs1
                   | Darcs2
@@ -180,23 +179,25 @@ identifyRepoFormat = either fail return <=< tryIdentifyRepoFormat
 -- resulting 'RepoFormat'.
 tryIdentifyRepoFormat :: String -> IO (Either String RepoFormat)
 tryIdentifyRepoFormat repo = do
-    let k = "Identifying repository " ++ repo
-    beginTedious k
-    finishedOneIO k "format"
-    formatInfo <- (fetchFilePS (repo </> formatPath) Cachable)
-                  -- `catchall` (return B.empty)
-    -- We use a workaround for servers that don't return a 404 on nonexistent
-    -- files (we trivially check for something that looks like a HTML/XML tag).
-    format <-
-      if B.null formatInfo || BC.elem '<' formatInfo then do
-        finishedOneIO k "inventory"
-        missingInvErr <- checkFile (repo </> oldInventoryPath)
-        case missingInvErr of
-          Nothing -> return . Right $ RF [[Darcs1]]
-          Just e -> return . Left $ makeErrorMsg e
-      else return . Right $ readFormat formatInfo
-    endTedious k
-    return format
+  formatResult <-
+    fetchFile formatPath >>= \case
+      Left e ->
+        return $ Left $ prettyException e
+      Right content | BC.elem '<' content ->
+        -- We use a workaround for servers that don't return a 404 on nonexistent
+        -- files (we trivially check for something that looks like a HTML/XML tag).
+        return $ Left $ "invalid file content: (repo </> formatPath)"
+      Right content ->
+        return $ Right $ readFormat content
+  case formatResult of
+    Right _ -> return formatResult
+    Left formatError ->
+      fetchFile oldInventoryPath >>= \case
+        Right _ ->
+          return $ Right $ RF [[Darcs1]]
+        Left inventoryError ->
+          return $ Left $ makeErrorMsg $
+            formatError ++ "; and also: " ++ prettyException inventoryError
   where
     readFormat =
       RF . map (map (readRepoProperty . fixupUnknownFormat)) . splitFormat
@@ -210,9 +211,7 @@ tryIdentifyRepoFormat repo = do
     -- split into lines, then split each non-empty line on '|'
     splitFormat = map (BC.split '|') . filter (not . B.null) . linesPS
 
-    checkFile path = (fetchFilePS path Cachable >> return Nothing)
-                     `catchNonSignal`
-                     (return . Just . prettyException)
+    fetchFile path = try (fetchFilePS (repo </> path) Cachable)
 
     makeErrorMsg e =  "Not a repository: " ++ repo ++ " (" ++ e ++ ")"
 
