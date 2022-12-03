@@ -5,7 +5,7 @@ module Darcs.Util.IndexedMonad
   , MonadReader(..), ReaderT(..), asks
   ) where
 
-import Darcs.Prelude hiding ( Monad(..) )
+import Darcs.Prelude hiding ( Monad(..), when )
 
 -- This is required to implement the "if then else" syntax
 -- because we are using RebindableSyntax.

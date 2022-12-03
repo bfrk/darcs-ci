@@ -1,5 +1,5 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, UndecidableInstances #-}
 module Darcs.Patch.Prim.FileUUID.Show
     ( displayHunk )
     where
@@ -8,15 +8,18 @@ import Darcs.Prelude
 
 import qualified Data.ByteString as B
 
+import Darcs.Patch.Apply ( Apply(..), ObjectIdOfPatch )
 import Darcs.Patch.Format ( PatchListFormat, FileNameFormat(..) )
+import Darcs.Patch.Object ( ObjectId(..) )
 import Darcs.Patch.Show
     ( ShowPatchBasic(..), ShowPatch(..)
     , ShowContextPatch(..), ShowPatchFor(..) )
-import Darcs.Patch.Summary ( plainSummaryPrim )
-import Darcs.Patch.Prim.Class ( PrimShow(..) )
+import Darcs.Patch.Summary ( plainSummaryPrim, plainSummaryPrims )
+import Darcs.Patch.Prim.Class ( PrimShow(..), showPrimCtx )
 import Darcs.Patch.Prim.FileUUID.Core
     ( Prim(..), Hunk(..), HunkMove(..), UUID(..), Location(..), FileContent )
 import Darcs.Patch.Prim.FileUUID.Details ()
+import Darcs.Patch.Prim.FileUUID.ObjectMap ()
 import Darcs.Util.ByteString ( linesPS )
 import Darcs.Util.Path ( Name, encodeWhiteName )
 import Darcs.Util.Printer
@@ -31,17 +34,18 @@ fileNameFormat :: ShowPatchFor -> FileNameFormat
 fileNameFormat ForDisplay = FileNameFormatDisplay
 fileNameFormat ForStorage = FileNameFormatV2
 
+instance ObjectId UUID where
+  formatObjectId _ = formatUUID
+
 instance ShowPatchBasic Prim where
   showPatch fmt = showPrim (fileNameFormat fmt)
 
--- dummy instance, does not actually show any context
-instance ShowContextPatch Prim where
-  -- showContextPatch f = showPrimCtx (fileNameFormat f)
-  showContextPatch f p = return $ showPatch f p
+instance (Apply Prim, ObjectIdOfPatch Prim ~ UUID) => ShowContextPatch Prim where
+  showContextPatch f = showPrimCtx (fileNameFormat f)
 
 instance ShowPatch Prim where
   summary = plainSummaryPrim
-  -- summaryFL = plainSummaryPrims False
+  summaryFL = plainSummaryPrims False
   thing _ = "change"
 
 instance PrimShow Prim where
@@ -52,7 +56,6 @@ instance PrimShow Prim where
   showPrim _ (Manifest f (L d p)) = showManifest "manifest" d f p
   showPrim _ (Demanifest f (L d p)) = showManifest "demanifest" d f p
   showPrim _ Identity = blueText "identity"
-  showPrimCtx _ _ = error "show with context not implemented"
 
 showManifest :: String -> UUID -> UUID -> Name -> Doc
 showManifest txt dir file name =
@@ -114,4 +117,5 @@ storeFileContent c =
   text "content" <+> text (show (B.length c)) $$ packedString c
 
 formatUUID :: UUID -> Doc
-formatUUID (UUID x) = packedString x
+formatUUID (Recorded x) = "r" <+> packedString x
+formatUUID (Unrecorded x) = "u" <+> text (show x)

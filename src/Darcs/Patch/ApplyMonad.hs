@@ -1,6 +1,8 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE UndecidableInstances, UndecidableSuperClasses #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE UndecidableSuperClasses #-}
 -- Copyright (C) 2010, 2011 Petr Rockai
 --
 -- Permission is hereby granted, free of charge, to any person
@@ -24,7 +26,7 @@
 -- SOFTWARE.
 module Darcs.Patch.ApplyMonad
   ( ApplyMonad(..), ApplyMonadTrans(..), ApplyMonadOperations
-  , withFileNames, ToTree(..)
+  , withFileNames
   , ApplyMonadTree(..)
   ) where
 
@@ -33,6 +35,7 @@ import Darcs.Prelude
 import qualified Data.ByteString      as B
 import qualified Data.ByteString.Lazy as BL
 import qualified Darcs.Util.Tree.Monad as TM
+import Darcs.Patch.Object ( ObjectIdOf )
 import Darcs.Util.Tree ( Tree )
 import Data.Functor.Identity (Identity(..) )
 import Data.Maybe ( fromMaybe )
@@ -42,14 +45,8 @@ import Control.Monad.State.Strict
 
 import GHC.Exts ( Constraint )
 
-class ToTree s where
-  toTree :: s m -> Tree m
-
-instance ToTree Tree where
-  toTree = id
-
 class (Monad m, ApplyMonad state (ApplyMonadOver state m))
-      => ApplyMonadTrans (state :: (* -> *) -> *) m where
+      => ApplyMonadTrans state m where
   type ApplyMonadOver state m :: * -> *
   runApplyMonad :: (ApplyMonadOver state m) x -> state m -> m (x, state m)
 
@@ -76,24 +73,17 @@ class MonadThrow m => ApplyMonadTree m where
 type instance ApplyMonadOperations Tree = ApplyMonadTree
 
 class ( Monad m, MonadThrow (ApplyMonadBase m)
-      , ApplyMonadOperations state m, ToTree state
+      , ApplyMonadOperations state m
       )
-       -- ApplyMonadOver (ApplyMonadBase m) ~ m is *not* required in general,
-       -- since ApplyMonadBase is not injective
-       => ApplyMonad (state :: (* -> *) -> *) m where
+      -- ApplyMonadOver (ApplyMonadBase m) ~ m is *not* required in general,
+      -- since ApplyMonadBase is not injective
+      => ApplyMonad (state :: (* -> *) -> *) m | m -> state where
     type ApplyMonadBase m :: * -> *
-
-    nestedApply :: m x -> state (ApplyMonadBase m) -> m (x, state (ApplyMonadBase m))
-    liftApply :: (state (ApplyMonadBase m) -> (ApplyMonadBase m) x) -> state (ApplyMonadBase m)
-                 -> m (x, state (ApplyMonadBase m))
-    getApplyState :: m (state (ApplyMonadBase m))
+    readFilePS :: ObjectIdOf state -> m B.ByteString
 
 instance MonadThrow m => ApplyMonad Tree (TM.TreeMonad m) where
     type ApplyMonadBase (TM.TreeMonad m) = m
-    getApplyState = gets TM.tree
-    nestedApply a start = lift $ runApplyMonad a start
-    liftApply a start = do x <- gets TM.tree
-                           lift $ runApplyMonad (lift $ a x) start
+    readFilePS path = mReadFilePS path
 
 instance MonadThrow m => ApplyMonadTree (TM.TreeMonad m) where
     mDoesDirectoryExist p = TM.directoryExists p
@@ -144,9 +134,7 @@ withFileNames mbofnos fps x = runPure $ execStateT x ([], fps, ofnos)
 
 instance ApplyMonad Tree FilePathMonad where
     type ApplyMonadBase FilePathMonad = Pure
-    getApplyState = error "getApplyState not defined for FilePathMonad"
-    nestedApply = error "nestedApply not defined for FilePathMonad"
-    liftApply = error "liftApply not defined for FilePathMonad"
+    readFilePS = error "readFilePS not defined for FilePathMonad"
 
 instance ApplyMonadTree FilePathMonad where
     -- We can't check it actually is a directory here

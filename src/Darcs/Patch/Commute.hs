@@ -4,6 +4,8 @@ module Darcs.Patch.Commute
     , commuteRL
     , commuteRLFL
     , selfCommuter
+    , invertCommute
+    , trivialCommute
     ) where
 
 import Darcs.Prelude
@@ -14,9 +16,11 @@ import Darcs.Patch.CommuteFn
     , commuterRLId
     , commuterRLFL
     )
+import Darcs.Patch.Invert ( Invert(..) )
 import Darcs.Patch.Witnesses.Ordered
     ( FL(..), RL(..), reverseFL, reverseRL,
     (:>)(..) )
+import Darcs.Patch.Witnesses.Unsafe ( unsafeCoerceP )
 
 -- | Commute represents things that can be (possibly) commuted.
 --
@@ -73,3 +77,14 @@ commuteFL = commuterIdFL commute
 -- |Build a commuter between a patch and itself using the operation from the type class.
 selfCommuter :: Commute p => CommuteFn p p
 selfCommuter = commute
+
+-- | Helper function to define commute when there are no changes to be made
+-- to the patch content.
+trivialCommute :: CommuteFn p q
+trivialCommute (p1 :> p2) = return (unsafeCoerceP p2 :> unsafeCoerceP p1)
+
+-- | Use the invert-commute law.
+invertCommute :: (Invert p, Invert q) => CommuteFn p q -> CommuteFn q p
+invertCommute c (p1:>p2) = do
+  ip1' :> ip2' <- c (invert p2 :> invert p1)
+  return (invert ip2' :> invert ip1')

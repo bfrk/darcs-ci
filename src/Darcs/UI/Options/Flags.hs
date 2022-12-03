@@ -49,7 +49,7 @@ data DarcsFlag = Version | ExactVersion | ListCommands
                | EditLongComment | NoEditLongComment | PromptLongComment
                | KeepDate | NoKeepDate
                | AllowConflicts | MarkConflicts | NoAllowConflicts
-               | SkipConflicts
+               | SkipConflicts | Conflicts String
                | Boring | SkipBoring
                | AllowCaseOnly | DontAllowCaseOnly
                | AllowWindowsReserved | DontAllowWindowsReserved
@@ -100,4 +100,5 @@ data DarcsFlag = Version | ExactVersion | ListCommands
                | NoPatchIndexFlag
                | EnumPatches | NoEnumPatches
                | WithPrefsTemplates | NoPrefsTemplates
+               | OptimizeDeep | OptimizeShallow
                  deriving ( Eq, Show )

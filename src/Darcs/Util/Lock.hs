@@ -28,8 +28,6 @@ module Darcs.Util.Lock
     , writeBinFile
     , writeTextFile
     , writeDocBinFile
-    , appendBinFile
-    , appendTextFile
     , appendDocBinFile
     , readBinFile
     , readTextFile
@@ -45,6 +43,7 @@ module Darcs.Util.Lock
     , environmentHelpKeepTmpdir
     , addToErrorLoc
     , withNewDirectory
+    , checkValidFileName
     ) where
 
 import Darcs.Prelude
@@ -80,8 +79,9 @@ import System.Directory
     , renameDirectory
     )
 import System.FilePath.Posix ( splitDirectories, splitFileName )
+import System.Directory ( withCurrentDirectory )
 import System.Environment ( lookupEnv )
-import System.IO.Temp ( createTempDirectory )
+import System.IO.Temp ( createTempDirectory, emptyTempFile )
 
 import Control.Concurrent ( threadDelay )
 import Control.Monad ( unless, when )
@@ -95,8 +95,7 @@ import Darcs.Util.Exception
     ( firstJustIO
     , catchall
     )
-import Darcs.Util.File ( withCurrentDirectory
-                       , removeFileMayNotExist )
+import Darcs.Util.File ( removeFileMayNotExist )
 import Darcs.Util.Path ( AbsolutePath, FilePathLike, toFilePath,
                         getCurrentDirectory, setCurrentDirectory )
 
@@ -304,12 +303,6 @@ readDocBinFile :: FilePathLike p => p -> IO Doc
 readDocBinFile fp = do ps <- B.readFile $ toFilePath fp
                        return $ if B.null ps then empty else packedString ps
 
-appendBinFile :: FilePathLike p => p -> B.ByteString -> IO ()
-appendBinFile f s = appendToFile Binary f $ \h -> B.hPut h s
-
-appendTextFile :: FilePathLike p => p -> String -> IO ()
-appendTextFile f s = appendToFile Text f $ \h -> hPutStr h s
-
 appendDocBinFile :: FilePathLike p => p -> Doc -> IO ()
 appendDocBinFile f d = appendToFile Binary f $ \h -> hPutDoc h d
 
@@ -378,3 +371,8 @@ withNewDirectory name action = do
   withCurrentDirectory name action `catch` \e -> do
     removePathForcibly name `catchIOError` const (return ())
     throwIO (e :: SomeException)
+
+checkValidFileName :: String -> IO Bool
+checkValidFileName name =
+  withTempDir "darcs.temp" $ \dir ->
+    (emptyTempFile (toFilePath dir) name >> return True) `catchall` return False

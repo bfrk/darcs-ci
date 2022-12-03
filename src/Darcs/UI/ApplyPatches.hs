@@ -19,7 +19,7 @@ import Darcs.UI.Commands
     )
 import Darcs.UI.Commands.Util ( printDryRunMessageAndExit )
 import Darcs.UI.Flags
-    ( DarcsFlag, verbosity, compress, reorder, allowConflicts, externalMerge
+    ( DarcsFlag, verbosity, reorder, allowConflicts, externalMerge
     , wantGuiPause, diffingOpts, setScriptsExecutable, isInteractive
     , xmlOutput, dryRun
     )
@@ -89,9 +89,10 @@ standardApplyPatches :: (RepoPatch p, ApplyState p ~ Tree)
                              (FL (PatchInfoAnd p)) Origin wR wZ
                      -> IO ()
 standardApplyPatches cmdName opts repository patches@(Fork _ _ to_be_applied) = do
+    !no_patches <- return (nullFL to_be_applied)
     applyPatchesStart cmdName opts to_be_applied
     Sealed pw <- mergeAndTest cmdName opts repository patches
-    applyPatchesFinish cmdName opts repository pw (nullFL to_be_applied)
+    applyPatchesFinish cmdName opts repository pw no_patches
 
 mergeAndTest :: (RepoPatch p, ApplyState p ~ Tree)
              => String
@@ -105,7 +106,7 @@ mergeAndTest cmdName opts repository patches = do
     pw <- tentativelyMergePatches repository cmdName
                          (allowConflicts opts)
                          (externalMerge ? opts) (wantGuiPause opts)
-                         (compress ? opts) (verbosity ? opts)
+                         (verbosity ? opts)
                          (reorder ? opts) (diffingOpts opts)
                          patches
     tree <- readPristine repository
@@ -140,8 +141,7 @@ applyPatchesFinish :: (RepoPatch p, ApplyState p ~ Tree)
 applyPatchesFinish cmdName opts _repository pw any_applied = do
     withSignalsBlocked $ do
         _repository <-
-            finalizeRepositoryChanges _repository YesUpdatePending (compress ? opts)
-                (O.dryRun ? opts)
+            finalizeRepositoryChanges _repository YesUpdatePending (O.dryRun ? opts)
         void $ applyToWorking _repository (verbosity ? opts) pw
         when (setScriptsExecutable ? opts == O.YesSetScriptsExecutable) $
             setScriptsExecutablePatches pw

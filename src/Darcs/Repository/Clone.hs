@@ -28,13 +28,13 @@ import Darcs.Repository.Pristine
     )
 import Darcs.Repository.Hashed
     ( copyHashedInventory
-    , finalizeRepositoryChanges
-    , finalizeTentativeChanges
     , readPatches
-    , revertRepositoryChanges
-    , revertTentativeChanges
     , tentativelyRemovePatches
     , writeTentativeInventory
+    )
+import Darcs.Repository.Transaction
+    ( finalizeRepositoryChanges
+    , revertRepositoryChanges
     )
 import Darcs.Repository.Working
     ( setScriptsExecutable
@@ -46,8 +46,6 @@ import Darcs.Repository.InternalTypes
     , repoFormat
     , repoCache
     , modifyCache
-    , unsafeStartTransaction
-    , unsafeEndTransaction
     )
 import Darcs.Repository.Job ( withUMaskFlag )
 import Darcs.Util.Cache
@@ -69,7 +67,6 @@ import Darcs.Repository.Format
     , formatHas
     )
 import Darcs.Repository.Prefs ( addRepoSource, deleteSources )
-import Darcs.Repository.Match ( getOnePatchset )
 import Darcs.Util.File
     ( copyFileOrUrl
     , Cachable(..)
@@ -97,7 +94,6 @@ import Darcs.Repository.Flags
     , UseCache(..)
     , RemoteDarcs (..)
     , remoteDarcs
-    , Compression (..)
     , CloneKind (..)
     , Verbosity (..)
     , DryRun (..)
@@ -117,12 +113,13 @@ import Darcs.Repository.Flags
 import Darcs.Patch ( RepoPatch, description )
 import Darcs.Patch.Depends ( findCommon )
 import Darcs.Patch.Set
-    ( patchSet2FL
+    ( Origin
+    , patchSet2FL
     , patchSet2RL
     , patchSetInventoryHashes
     , progressPatchSet
     )
-import Darcs.Patch.Match ( MatchFlag(..), patchSetMatch )
+import Darcs.Patch.Match ( MatchFlag(..), patchSetMatch, matchOnePatchset )
 import Darcs.Patch.Progress ( progressRLShowTags, progressFL )
 import Darcs.Patch.Apply ( Apply(..) )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(..) )
@@ -232,7 +229,7 @@ cloneRepository repourl mysimplename v useCache cloneKind um rdarcs sse remoteRe
         -- the following is necessary to be able to read _toRepo's patches
         _toRepo <- revertRepositoryChanges _toRepo NoUpdatePending
         patches <- readPatches _toRepo
-        Sealed context <- getOnePatchset _toRepo psm
+        Sealed context <- matchOnePatchset patches psm
         Fork _ to_remove only_in_context <- return $ findCommon patches context
         case only_in_context of
           NilFL -> do
@@ -243,9 +240,9 @@ cloneRepository repourl mysimplename v useCache cloneKind um rdarcs sse remoteRe
               , englishNum num_to_remove (Noun "patch") ""
               ]
             _toRepo <-
-              tentativelyRemovePatches _toRepo GzipCompression NoUpdatePending to_remove
+              tentativelyRemovePatches _toRepo NoUpdatePending to_remove
             _toRepo <-
-              finalizeRepositoryChanges _toRepo NoUpdatePending GzipCompression NoDryRun
+              finalizeRepositoryChanges _toRepo NoUpdatePending NoDryRun
             runDefault (unapply to_remove) `catch` \(e :: SomeException) ->
                 fail ("Couldn't undo patch in working tree.\n" ++ show e)
             when (sse == YesSetScriptsExecutable) $ setScriptsExecutablePatches to_remove
@@ -387,33 +384,27 @@ cleanDir d = mapM_ (\x -> removeFile $ d </> x) =<< listDirectory d
 
 copyRepoOldFashioned :: forall p wU wR. (RepoPatch p, ApplyState p ~ Tree)
                         => Repository 'RO p wU wR  -- remote repo
-                        -> Repository 'RO p wU wR  -- local empty repo
+                        -> Repository 'RO p Origin Origin -- local empty repo
                         -> Verbosity
                         -> WithWorkingDir
                         -> IO ()
-copyRepoOldFashioned fromrepository _toRepo verb withWorkingDir = do
-  revertTentativeChanges _toRepo
-  _toRepo <- return $ unsafeStartTransaction _toRepo
-  patches <- readPatches fromrepository
+copyRepoOldFashioned fromRepo _toRepo verb withWorkingDir = do
+  _toRepo <- revertRepositoryChanges _toRepo NoUpdatePending
+  _ <- writePristine _toRepo emptyTree
+  patches <- readPatches fromRepo
   let k = "Copying patch"
   beginTedious k
   tediousSize k (lengthRL $ patchSet2RL patches)
   let patches' = progressPatchSet k patches
-  writeTentativeInventory _toRepo GzipCompression patches'
+  writeTentativeInventory _toRepo patches'
   endTedious k
-  finalizeTentativeChanges _toRepo GzipCompression
-  _toRepo <- return $ unsafeEndTransaction _toRepo
-  -- apply all patches into current hashed repository
-  _toRepo <- revertRepositoryChanges _toRepo NoUpdatePending
   local_patches <- readPatches _toRepo
-  _ <- writePristine _toRepo emptyTree
   let patchesToApply = progressFL "Applying patch" $ patchSet2FL local_patches
   sequence_ $
     mapFL (applyToTentativePristineCwd (repoCache _toRepo) ApplyNormal) $
     bunchFL 100 patchesToApply
-  _toRepo <-
-    finalizeRepositoryChanges _toRepo NoUpdatePending GzipCompression NoDryRun
-  putVerbose verb $ text "Writing pristine and working tree contents..."
+  _toRepo <- finalizeRepositoryChanges _toRepo NoUpdatePending NoDryRun
+  putVerbose verb $ text "Writing the working tree..."
   createPristineDirectoryTree _toRepo "." withWorkingDir
 
 -- | This function fetches all patches that the given repository has

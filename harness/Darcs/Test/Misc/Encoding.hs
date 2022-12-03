@@ -3,7 +3,6 @@ module Darcs.Test.Misc.Encoding ( testSuite ) where
 import Darcs.Prelude
 
 import qualified Data.ByteString as B
-import Control.Monad
 import Data.Word
 import System.IO.Unsafe
 

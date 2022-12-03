@@ -53,11 +53,8 @@ import Darcs.Repository.Prefs ( changePrefval )
 import Darcs.Util.Exception ( prettyException )
 import Darcs.Util.File ( backupByCopying, backupByRenaming )
 import Darcs.Util.Lock ( writeAtomicFilePS )
-import Darcs.Util.Path ( AnchoredPath, anchorPath )
+import Darcs.Util.Path ( AnchoredPath, realPath )
 import Darcs.Util.Tree ( Tree )
-
-ap2fp :: AnchoredPath -> FilePath
-ap2fp = anchorPath ""
 
 newtype DefaultIO a = DefaultIO { runDefaultIO :: IO a }
     deriving (Functor, Applicative, Monad, MonadThrow)
@@ -66,26 +63,26 @@ instance ApplyMonad Tree DefaultIO where
     type ApplyMonadBase DefaultIO = IO
 
 instance ApplyMonadTree DefaultIO where
-    mDoesDirectoryExist = DefaultIO . doesDirectoryExist . ap2fp
+    mDoesDirectoryExist = DefaultIO . doesDirectoryExist . realPath
     mChangePref a b c = DefaultIO $ changePrefval a b c
-    mModifyFilePS f j = DefaultIO $ B.readFile (ap2fp f) >>= runDefaultIO . j >>= writeAtomicFilePS (ap2fp f)
-    mCreateDirectory = DefaultIO . createDirectory . ap2fp
+    mModifyFilePS f j = DefaultIO $ B.readFile (realPath f) >>= runDefaultIO . j >>= writeAtomicFilePS (realPath f)
+    mCreateDirectory = DefaultIO . createDirectory . realPath
     mCreateFile f = DefaultIO $
-                    do exf <- doesFileExist (ap2fp f)
-                       if exf then fail $ "File '"++ap2fp f++"' already exists!"
-                              else do exd <- doesDirectoryExist $ ap2fp f
-                                      if exd then fail $ "File '"++ap2fp f++"' already exists!"
-                                             else writeAtomicFilePS (ap2fp f) B.empty
+                    do exf <- doesFileExist (realPath f)
+                       if exf then fail $ "File '"++realPath f++"' already exists!"
+                              else do exd <- doesDirectoryExist $ realPath f
+                                      if exd then fail $ "File '"++realPath f++"' already exists!"
+                                             else writeAtomicFilePS (realPath f) B.empty
     mRemoveFile f = DefaultIO $
-                    do let fp = ap2fp f
+                    do let fp = realPath f
                        x <- B.readFile fp
                        unless (B.null x) $
                             fail $ "Cannot remove non-empty file "++fp
                        removeFile fp
-    mRemoveDirectory = DefaultIO . removeDirectory . ap2fp
+    mRemoveDirectory = DefaultIO . removeDirectory . realPath
     mRename a b = DefaultIO $ renamePath x y
-      where x = ap2fp a
-            y = ap2fp b
+      where x = realPath a
+            y = realPath b
 
 class (Functor m, MonadThrow m) => TolerantMonad m where
     warning :: IO () -> m ()
@@ -146,13 +143,13 @@ instance TolerantMonad m => ApplyMonadTree (TolerantWrapper m) where
                                  (\(e :: IOException) ->
                                    if "(Directory not empty)" `isSuffixOf` show e
                                    then ioError $ userError $
-                                            "Not deleting " ++ ap2fp d ++ " because it is not empty."
+                                            "Not deleting " ++ realPath d ++ " because it is not empty."
                                    else ioError $ userError $
-                                            "Not deleting " ++ ap2fp d ++ " because:\n" ++ show e)
+                                            "Not deleting " ++ realPath d ++ " because:\n" ++ show e)
     mRename a b = warning $ catch
                           (let do_backup = if map toLower x == map toLower y
-                                           then backupByCopying (ap2fp b) -- avoid making the original vanish
-                                           else backupByRenaming (ap2fp b)
+                                           then backupByCopying (realPath b) -- avoid making the original vanish
+                                           else backupByRenaming (realPath b)
                            in do_backup >> runDefaultIO (mRename a b))
                           (\e -> case () of
                                  _ | isPermissionError e -> ioError $ userError $
@@ -164,9 +161,9 @@ instance TolerantMonad m => ApplyMonadTree (TolerantWrapper m) where
                                    | otherwise -> ioError e
                           )
        where
-        x = ap2fp a
-        y = ap2fp b
+        x = realPath a
+        y = realPath b
         couldNotRename = "Could not rename " ++ x ++ " to " ++ y
 
 backup :: AnchoredPath -> IO ()
-backup f = backupByRenaming (ap2fp f)
+backup f = backupByRenaming (realPath f)

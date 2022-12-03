@@ -60,6 +60,7 @@ import Darcs.Util.Cache
     , bucketFolder
     , closestWritableDirectory
     , fetchFileUsingCache
+    , relinkUsingCache
     )
 import Darcs.Util.File ( Cachable(..), fetchFileLazyPS, withTemp )
 import Darcs.Util.Global ( darcsdir )
@@ -69,19 +70,23 @@ import Darcs.Util.ValidHash ( InventoryHash, PatchHash, encodeValidHash )
 import Darcs.Patch ( RepoPatch )
 import Darcs.Patch.PatchInfoAnd ( extractHash )
 import Darcs.Patch.Progress ( progressFL )
-import Darcs.Patch.Witnesses.Ordered ( mapFL )
 import Darcs.Patch.Set ( patchSet2FL )
+import Darcs.Patch.Witnesses.Ordered ( mapFL )
 
-import Darcs.Repository.Traverse ( listInventories )
-import Darcs.Repository.InternalTypes ( Repository, AccessType(RW), withRepoDir )
 import Darcs.Repository.Hashed ( readPatches )
+import Darcs.Repository.InternalTypes
+    ( AccessType(RW)
+    , Repository
+    , repoCache
+    , withRepoDir
+    )
 import Darcs.Repository.Paths
     ( hashedInventoryPath
-    , inventoriesDirPath
     , patchesDirPath
     , pristineDirPath
     )
 import Darcs.Repository.Pristine ( readHashedPristineRoot )
+import Darcs.Repository.Traverse ( listInventories )
 
 packsDir, basicPack, patchesPack :: String
 packsDir     = "packs"
@@ -158,16 +163,18 @@ createPacks repo =
   createDirectoryIfMissing False (darcsdir </> packsDir)
   writeFile ( darcsdir </> packsDir </> "pristine" ) $ encodeValidHash hash
   -- pack patchesTar
-  ps <- mapFL hashedPatchFileName . progressFL "Packing patches" . patchSet2FL <$>
-    readPatches repo
-  is <- map (inventoriesDirPath </>) <$> listInventories
+  ps <- progressFL "Reading patches" . patchSet2FL <$> readPatches repo
+  phs <- sequence $ mapFL patchHash ps
+  forM_ phs $ relinkUsingCache (repoCache repo)
+  let pfs = map (patchesDirPath </>) $ map encodeValidHash phs
+  is <- listInventories repo
   writeFile (darcsdir </> "meta-filelist-inventories") . unlines $
     map takeFileName is
   -- Note: tinkering with zlib's compression parameters does not make
   -- any noticeable difference in generated archive size;
   -- switching to bzip2 would provide ~25% gain OTOH.
   BLC.writeFile (patchesTar <.> "part") . GZ.compress . Tar.write =<<
-    mapM fileEntry' ((darcsdir </> "meta-filelist-inventories") : ps ++ reverse is)
+    mapM fileEntry' ((darcsdir </> "meta-filelist-inventories") : pfs ++ reverse is)
   renameFile (patchesTar <.> "part") patchesTar
   -- pack basicTar
   pr <- sortByMTime =<< dirContents pristineDirPath
@@ -188,9 +195,9 @@ createPacks repo =
     tp <- either fail return $ toTarPath False x
     return $ fileEntry tp content
   dirContents dir = map (dir </>) <$> listDirectory dir
-  hashedPatchFileName x = case extractHash x of
-    Left _ -> fail "unexpected unhashed patch"
-    Right h -> patchesDirPath </> encodeValidHash h
+  patchHash x = case extractHash x of
+    Left _ -> fail "Unexpected unhashed patch"
+    Right h -> return h
   sortByMTime xs = map snd . sort <$> mapM (\x -> (\t -> (t, x)) <$>
     getModificationTime x) xs
   removeFileIfExists x = do

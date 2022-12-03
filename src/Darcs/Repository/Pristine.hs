@@ -8,7 +8,6 @@ module Darcs.Repository.Pristine
     , peekPristineHash
     , createPristineDirectoryTree
     , readPristine
-    , cleanPristineDir
     , writePristine
     , convertSizePrefixedPristine
     ) where
@@ -18,10 +17,7 @@ import Darcs.Prelude
 import Control.Exception ( catch, IOException, throwIO )
 import Control.Monad ( when )
 
-import qualified Data.ByteString.Char8 as BC ( unpack, pack )
-import qualified Data.Set as Set
-
-import System.Directory ( listDirectory, withCurrentDirectory )
+import System.Directory ( withCurrentDirectory )
 import System.FilePath.Posix ( (</>) )
 import System.IO ( hPutStrLn, stderr )
 import System.IO.Error ( catchIOError )
@@ -50,28 +46,20 @@ import Darcs.Repository.Paths
     )
 
 import Darcs.Util.ByteString ( gzReadFilePS )
-import Darcs.Util.Cache
-    ( Cache
-    , HashedDir(HashedPristineDir)
-    , cleanCachesWithHint
-    , hashedDir
-    )
-import Darcs.Util.Global ( darcsdir )
-import Darcs.Util.Lock ( removeFileMayNotExist, writeDocBinFile )
+import Darcs.Util.Cache ( Cache )
+import Darcs.Util.Lock ( writeDocBinFile )
 import Darcs.Util.Printer ( (<+>), ($$), putDocLn, renderString, text )
-import Darcs.Util.Progress ( debugMessage )
 import Darcs.Util.Tree ( Tree )
 import Darcs.Util.Tree.Hashed
     ( darcsAddMissingHashes
     , darcsTreeHash
-    , followPristineHashes
     , hashedTreeIO
     , readDarcsHashed
     , readDarcsHashedNosize
     , writeDarcsHashed
     )
 import Darcs.Util.Tree.Plain ( writePlainTree )
-import Darcs.Util.ValidHash ( fromHash, getSize, okayHash )
+import Darcs.Util.ValidHash ( fromHash, getSize )
 
 
 data ApplyDir = ApplyNormal | ApplyInverted
@@ -190,22 +178,6 @@ readPristine repo
             gzReadFilePS (repoLocation repo </> tentativePristinePath)
         readDarcsHashedNosize (repoCache repo) hash
   | otherwise = fail oldRepoFailMsg
-
--- TODO clean this up!
-cleanPristineDir :: Cache -> [PristineHash] -> IO ()
-cleanPristineDir c hashroots =
-   do let dir = HashedPristineDir
-      -- we'll remove obsolete bits of "dir"
-      debugMessage $ "Cleaning out " ++ hashedDir dir ++ "..."
-      let hashdir = darcsdir ++ "/" ++ hashedDir dir ++ "/"
-      hs <- set . map encodeValidHash <$> followPristineHashes c hashroots
-      fs <- set . filter okayHash <$> listDirectory hashdir
-      mapM_ (removeFileMayNotExist . (hashdir++)) (unset $ fs `Set.difference` hs)
-      -- and also clean out any global caches.
-      debugMessage "Cleaning out any global caches..."
-      cleanCachesWithHint c dir (unset $ fs `Set.difference` hs)
-   where set = Set.fromList . map BC.pack
-         unset = map BC.unpack . Set.toList
 
 -- | Replace the existing pristine with a new one (loaded up in a Tree object).
 -- Warning: If @rt ~ 'RO@ this overwrites the recorded state, use only when

@@ -28,7 +28,7 @@ module Darcs.Repository.State
     , unrecordedChanges
     -- * Trees
     , readPristine, readUnrecorded, readPristineAndPending, readWorking
-    , readPendingAndWorking, readUnrecordedFiltered
+    , readUnrecordedFiltered
     -- * Index
     , readIndex, updateIndex
     -- * Utilities
@@ -52,14 +52,14 @@ import qualified Data.ByteString as B ( ByteString, concat )
 import qualified Data.ByteString.Char8 as BC ( pack, unpack )
 import qualified Data.ByteString.Lazy as BL ( toChunks )
 
-import Darcs.Patch ( RepoPatch, PrimOf, sortCoalesceFL
+import Darcs.Patch ( RepoPatch, PrimOf, canonizeFL
                    , PrimPatch, maybeApplyToTree
                    , tokreplace, forceTokReplace, move )
 import Darcs.Patch.Named ( anonymous )
 import Darcs.Patch.Apply ( ApplyState, applyToTree, effectOnPaths )
-import Darcs.Patch.Witnesses.Ordered ( FL(..), (+>+)
+import Darcs.Patch.Witnesses.Ordered ( FL(..), (+>+), consGapFL
                                      , (:>)(..), reverseRL, reverseFL
-                                     , mapFL, concatFL, toFL, nullFL )
+                                     , mapFL, concatFL, joinGapsFL, nullFL )
 import Darcs.Patch.Witnesses.Eq ( EqCheck(IsEq, NotEq) )
 import Darcs.Patch.Witnesses.Unsafe ( unsafeCoerceP, unsafeCoercePEnd )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(Sealed), seal, unFreeLeft, mapSeal
@@ -230,9 +230,9 @@ unrecordedChanges :: (RepoPatch p, ApplyState p ~ Tree)
                   => DiffOpts
                   -> Repository rt p wU wR
                   -> Maybe [AnchoredPath] -> IO (FL (PrimOf p) wR wU)
-unrecordedChanges dopts r paths = do
+unrecordedChanges dopts@DiffOpts{..} r paths = do
   (pending :> working) <- readPendingAndWorking dopts r paths
-  return $ sortCoalesceFL (pending +>+ working)
+  return $ canonizeFL diffAlg (pending +>+ working)
 
 -- Implementation note: it is important to do things in the right order: we
 -- first have to read the pending patch, then detect moves, then detect adds,
@@ -633,11 +633,11 @@ getReplaces YesLookForReplaces diffalg _repo pending working = do
       flip runStateT pending $
         forM replaces $ \(path, a, b) ->
           doReplace defaultToks path (BC.unpack a) (BC.unpack b)
-    return (new_pending, mapSeal concatFL $ toFL patches)
+    return (new_pending, mapSeal concatFL $ unFreeLeft $ joinGapsFL patches)
   where
     modifiedTokens :: PrimOf p wX wY -> [(AnchoredPath, B.ByteString, B.ByteString)]
     modifiedTokens p = case isHunk p of
-      Just (FileHunk f _ old new) ->
+      Just (FileHunk _ f _ old new) ->
         map (\(a,b) -> (f, a, b)) (concatMap checkModified $
           filter (\(a,b) -> length a == length b) -- only keep lines with same number of tokens
             $ zip (map breakToTokens old) (map breakToTokens new))
@@ -660,7 +660,7 @@ getReplaces YesLookForReplaces diffalg _repo pending working = do
           Nothing -> getForceReplace path toks old new
           Just pend' -> do
             put pend'
-            return $ joinGap (:>:) (freeGap replacePatch) (emptyGap NilFL)
+            return $ consGapFL replacePatch (emptyGap NilFL)
       where
         replacePatch = tokreplace path toks old new
 

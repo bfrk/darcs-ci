@@ -280,8 +280,7 @@ doMoves repository opts cur work moves = do
             (freeGap $ Darcs.Patch.move old new :>: NilFL)
       moveFileOrDir work old new
       unsafeAddToPending repository pendingDiff
-    void $ finalizeRepositoryChanges repository YesUpdatePending
-      (O.compress ? opts) (O.dryRun ? opts)
+    void $ finalizeRepositoryChanges repository YesUpdatePending (O.dryRun ? opts)
 
 -- Take the recorded/ working trees and the old and intended new filenames;
 -- check if the new path is safe on windows. We potentially need to create

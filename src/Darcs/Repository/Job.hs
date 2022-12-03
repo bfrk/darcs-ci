@@ -55,7 +55,7 @@ import Darcs.Repository.Format
     , writeProblem
     )
 import Darcs.Repository.Identify ( identifyRepository )
-import Darcs.Repository.Hashed( revertRepositoryChanges )
+import Darcs.Repository.Transaction( revertRepositoryChanges )
 import Darcs.Repository.InternalTypes
     ( Repository
     , AccessType(..)

@@ -23,6 +23,7 @@ where
 
 import Darcs.Prelude
 
+import System.Directory ( withCurrentDirectory )
 import System.Exit ( ExitCode(..) )
 import System.Process ( system )
 import System.IO ( hPutStrLn, stderr )
@@ -30,19 +31,18 @@ import Control.Monad ( when )
 
 import Darcs.UI.Options.All ( HookConfig(..), Verbosity(..) )
 
-import Darcs.Util.File ( withCurrentDirectory )
-import Darcs.Util.Path ( AbsolutePath )
+import Darcs.Util.Path ( AbsolutePath, toFilePath )
 import Darcs.Util.Prompt ( promptYorn )
 
 runPosthook :: HookConfig -> Verbosity -> AbsolutePath -> IO ExitCode
 runPosthook (HookConfig mPostHook askPostHook) verb repodir
     = do ph <- getHook "Posthook" mPostHook askPostHook
-         withCurrentDirectory repodir $ runHook verb "Posthook" ph
+         withCurrentDirectory (toFilePath repodir) $ runHook verb "Posthook" ph
 
 runPrehook :: HookConfig -> Verbosity -> AbsolutePath -> IO ExitCode
 runPrehook (HookConfig mPreHookCmd askPreHook) verb repodir =
     do ph <- getHook "Prehook" mPreHookCmd askPreHook
-       withCurrentDirectory repodir $ runHook verb "Prehook" ph
+       withCurrentDirectory (toFilePath repodir) $ runHook verb "Prehook" ph
 
 getHook :: String -> Maybe String -> Bool -> IO (Maybe String)
 getHook name mPostHookCmd askHook =

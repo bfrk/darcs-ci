@@ -43,7 +43,7 @@ import Darcs.Patch
 import Darcs.Patch.Apply ( ApplyState )
 import Darcs.Patch.Named ( patchcontents, anonymous )
 import Darcs.Patch.PatchInfoAnd ( PatchInfoAnd, n2pia, hopefully )
-import Darcs.Patch.Progress( progressFL )
+import Darcs.Patch.Progress( progressFL, progressRL )
 import Darcs.Patch.Set ( PatchSet, Origin, patchSet2RL )
 import Darcs.Patch.Witnesses.Ordered
     ( FL(..), RL(..), Fork(..), (:\/:)(..), (:/\:)(..), (+>+), (+<<+)
@@ -57,7 +57,6 @@ import Darcs.Repository.Flags
     , UpdatePending (..)
     , ExternalMerge (..)
     , Verbosity (..)
-    , Compression (..)
     , WantGuiPause (..)
     )
 import Darcs.Repository.Hashed
@@ -194,7 +193,7 @@ state U'':
          |
          U'
         / \
-    pw'  them''
+      pw' them''
       /     \
      T       U
     / \     /
@@ -227,14 +226,14 @@ tentativelyMergePatches_ :: (RepoPatch p, ApplyState p ~ Tree)
                          -> Repository 'RW p wU wR -> String
                          -> AllowConflicts
                          -> ExternalMerge -> WantGuiPause
-                         -> Compression -> Verbosity -> Reorder
+                         -> Verbosity -> Reorder
                          -> DiffOpts
                          -> Fork (PatchSet p)
                                  (FL (PatchInfoAnd p))
                                  (FL (PatchInfoAnd p)) Origin wR wY
                          -> IO (Sealed (FL (PrimOf p) wU))
 tentativelyMergePatches_ mc _repo cmd allowConflicts externalMerge wantGuiPause
-  compression verbosity reorder diffingOpts@DiffOpts{..} (Fork context us them) = do
+  verbosity reorder diffingOpts@DiffOpts{..} (Fork context us them) = do
     (them' :/\: us') <-
       return $ merge (progressFL "Merging us" us :\/: progressFL "Merging them" them)
     pw <- unrecordedChanges diffingOpts _repo Nothing
@@ -243,13 +242,12 @@ tentativelyMergePatches_ mc _repo cmd allowConflicts externalMerge wantGuiPause
     -- of the merge (pw' and them'').
     anonpw <- n2pia `fmap` anonymous pw
     pw' :/\: them'' <- return $ merge (them' :\/: anonpw :>: NilFL)
-    let them''content = concatFL $ progressFL "Examining patches for conflicts" $
-                                mapFL_FL (patchcontents . hopefully) them''
-    let conflicts =
+    let them''content = concatFL $ mapFL_FL (patchcontents . hopefully) them''
+        conflicts =
           standardResolution
             (patchSet2RL context +<<+ us :<: anonpw)
-            (reverseFL them'')
-    let standard_resolution = mangled conflicts
+            (progressRL "Examining patches for conflicts" $ reverseFL them'')
+        standard_resolution = mangled conflicts
 
     debugMessage "Checking for conflicts..."
     when (allowConflicts == YesAllowConflictsAndMark) $
@@ -261,8 +259,7 @@ tentativelyMergePatches_ mc _repo cmd allowConflicts externalMerge wantGuiPause
     have_conflicts <- announceConflicts cmd allowConflicts conflicts
 
     debugMessage "Checking for unrecorded conflicts..."
-    let pw'content = concatFL $ progressFL "Examining patches for conflicts" $
-                                mapFL_FL (patchcontents . hopefully) pw'
+    let pw'content = concatFL $ mapFL_FL (patchcontents . hopefully) pw'
     case listConflictedFiles pw'content of
         [] -> return ()
         fs -> do
@@ -283,34 +280,38 @@ tentativelyMergePatches_ mc _repo cmd allowConflicts externalMerge wantGuiPause
 
     debugMessage "Working out conflict markup..."
     Sealed resolution <-
-        case (externalMerge , have_conflicts) of
-            (NoExternalMerge, _)       -> return $ if allowConflicts == YesAllowConflicts
-                                                     then seal NilFL
-                                                     else standard_resolution
-            (_, False)                 -> return $ standard_resolution
-            (YesExternalMerge c, True) -> externalResolution diffAlg working c wantGuiPause
-                                             (effect us +>+ pw) (effect them) them''content
+        case (externalMerge, have_conflicts) of
+          (NoExternalMerge, _) ->
+            return $
+              if allowConflicts == YesAllowConflicts
+                then seal NilFL
+                else standard_resolution
+          (_, False) -> return $ standard_resolution
+          (YesExternalMerge c, True) ->
+            externalResolution diffAlg working c wantGuiPause
+              (effect us +>+ pw) (effect them) them''content
 
     debugMessage "Adding patches to the inventory and writing new pending..."
     when (mc == MakeChanges) $ do
-        applyToTentativePristine _repo ApplyNormal verbosity them'
+        applyToTentativePristine _repo ApplyNormal verbosity $
+          progressFL "Applying patches to pristine" them'
         -- these two cases result in the same trees (that's the idea of
         -- merging), so we only operate on the set of patches and do the
         -- adaption of pristine and pending in the common code below
         _repo <- case reorder of
             NoReorder -> do
                 tentativelyAddPatches_ DontUpdatePristine _repo
-                    compression verbosity NoUpdatePending them'
+                    verbosity NoUpdatePending them'
             Reorder -> do
                 -- we do not actually remove any effect in the end, so
                 -- it would be wrong to update the unrevert bundle or
                 -- the working tree or pending
-                r1 <- tentativelyRemovePatches_ DontUpdatePristineNorRevert _repo
-                          compression NoUpdatePending us
-                r2 <- tentativelyAddPatches_ DontUpdatePristine r1
-                          compression verbosity NoUpdatePending them
-                tentativelyAddPatches_ DontUpdatePristine r2
-                    compression verbosity NoUpdatePending us'
+                _repo <- tentativelyRemovePatches_ DontUpdatePristineNorRevert _repo
+                          NoUpdatePending us
+                _repo <- tentativelyAddPatches_ DontUpdatePristine _repo
+                          verbosity NoUpdatePending them
+                tentativelyAddPatches_ DontUpdatePristine _repo
+                    verbosity NoUpdatePending us'
         setTentativePending _repo (effect pw' +>+ resolution)
     return $ seal (effect them''content +>+ resolution)
 
@@ -318,7 +319,7 @@ tentativelyMergePatches :: (RepoPatch p, ApplyState p ~ Tree)
                         => Repository 'RW p wU wR -> String
                         -> AllowConflicts
                         -> ExternalMerge -> WantGuiPause
-                        -> Compression -> Verbosity -> Reorder
+                        -> Verbosity -> Reorder
                         -> DiffOpts
                         -> Fork (PatchSet p)
                                 (FL (PatchInfoAnd p))
@@ -331,7 +332,7 @@ considerMergeToWorking :: (RepoPatch p, ApplyState p ~ Tree)
                        => Repository 'RW p wU wR -> String
                        -> AllowConflicts
                        -> ExternalMerge -> WantGuiPause
-                       -> Compression -> Verbosity -> Reorder
+                       -> Verbosity -> Reorder
                        -> DiffOpts
                        -> Fork (PatchSet p)
                                (FL (PatchInfoAnd p))

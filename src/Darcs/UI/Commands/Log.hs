@@ -42,7 +42,7 @@ import Darcs.UI.Flags
     ( DarcsFlag
     , changesReverse, onlyToFiles, diffingOpts
     , useCache, maxCount, hasXmlOutput
-    , verbosity, withContext, isInteractive, verbose
+    , verbosity, isInteractive, verbose
     , getRepourl, pathSetFromArgs )
 import Darcs.UI.Options ( (^), parseFlags, (?) )
 import qualified Darcs.UI.Options.All as O
@@ -92,7 +92,6 @@ import Darcs.Util.Printer
     , (<+>)
     , formatWords
     , hsep
-    , insertBeforeLastline
     , prefix
     , simplePrinters
     , text
@@ -394,23 +393,25 @@ changelog opts patches li
             ]
 
           xml_with_summary :: Sealed2 (PatchInfoAndG p) -> Doc
-          xml_with_summary (Sealed2 hp) | Just p <- hopefullyM hp =
+          xml_with_summary (Sealed2 hp) =
+            case hopefullyM hp of
+              Just p ->
                     let
                       deps = getdeps p
                       xmlDependencies =
                         text "<explicit_dependencies>"
-                        $$ vcat (map (indent . toXmlShort) deps)
+                        $$ vcat (map (indent . flip toXmlShort mempty) deps)
                         $$ text "</explicit_dependencies>"
                       summary | deps == [] = indent $ xmlSummary p
                               | otherwise = indent $ xmlDependencies $$ xmlSummary p
                     in
-                      insertBeforeLastline (toXml $ info hp) summary
-          xml_with_summary (Sealed2 hp) = toXml (info hp)
+                      toXml (info hp) summary
+              Nothing -> toXml (info hp) mempty
           indent = prefix "    "
           xml_changes =
             case O.withSummary ? opts of
               O.YesSummary -> map xml_with_summary ps
-              O.NoSummary -> map (toXml . unseal2 info) ps
+              O.NoSummary -> map (flip toXml mempty . unseal2 info) ps
           xml_created_as = map create (liRenames li) where
             create :: (AnchoredPath, AnchoredPath) -> Doc
             create rename@(_, as) = createdAsXml (first_change_of as) rename
@@ -463,7 +464,7 @@ createdAsXml pinfo (current, createdAs) =
        <> text "' original_name='"
        <> escapeXML (displayPath createdAs)
        <> text "'>"
-    $$    toXml pinfo
+    $$    toXml pinfo mempty
     $$    text "</created_as>"
 
 logPatchSelOpts :: [DarcsFlag] -> S.PatchSelectionOptions
@@ -473,5 +474,4 @@ logPatchSelOpts flags = S.PatchSelectionOptions
     , S.interactive = isInteractive False flags
     , S.selectDeps = O.PromptDeps -- option not supported, use default
     , S.withSummary = O.withSummary ? flags
-    , S.withContext = withContext ? flags
     }

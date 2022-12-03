@@ -67,7 +67,8 @@ import Darcs.Repository
     , repoCache
     , withRepository
     )
-import Darcs.Repository.Pristine ( cleanPristineDir, readHashedPristineRoot )
+import Darcs.Repository.Pristine ( readHashedPristineRoot )
+import Darcs.Repository.Traverse ( cleanPristineDir )
 
 import Darcs.UI.Commands
     ( DarcsCommand(..)

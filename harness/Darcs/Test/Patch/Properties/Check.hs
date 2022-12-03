@@ -13,8 +13,8 @@ import Darcs.Test.Patch.Check ( PatchCheck,
                               )
 import Darcs.Patch.RegChars ( regChars )
 import Darcs.Util.ByteString ( linesPS )
-import qualified Data.ByteString as B ( ByteString, null, concat )
-import qualified Data.ByteString.Char8 as BC ( break, pack )
+import qualified Data.ByteString as B
+import qualified Data.ByteString.Char8 as BC
 import qualified Data.IntMap as M ( mapMaybe )
 
 import Darcs.Patch ( invert, effect, PrimPatch )
@@ -27,7 +27,7 @@ import qualified Darcs.Patch.V1.Prim as V1 ( Prim(..) )
 import qualified Darcs.Patch.V2.Prim as V2 ( Prim(..) )
 import qualified Darcs.Patch.Prim.FileUUID as FileUUID ( Prim )
 import Darcs.Patch.Prim.WithName ( PrimWithName(..) )
-import Darcs.Patch.Prim.V1.Core ( Prim(..), DirPatchType(..), FilePatchType(..) )
+import Darcs.Patch.Prim.V1.Core ( Prim(..), TreePatchType(..), FilePatchType(..) )
 import Darcs.Patch.Witnesses.Ordered
 
 type Prim1 = V1.Prim
@@ -67,13 +67,12 @@ instance Check FileUUID.Prim where
 
 instance Check Prim where
 
-   checkPatch (FP f RmFile) = removeFile f
-   checkPatch (FP f AddFile) =  createFile f
    -- This is stupid but was designed that way ages ago:
    -- empty hunks commute with everything, so the file need
    -- not even exist, nor the line in the file.
-   -- Perhaps we should avoid generating empty hunks.
-   checkPatch (FP _ (Hunk _ [] [])) = isValid
+   -- We nowadays strictly avoid generating empty hunks, in
+   -- darcs itself as well as in the test case generators.
+   checkPatch (FP _ (Hunk _ [] [])) = error "encountered empty hunk"
    checkPatch (FP f (Hunk line old new)) = do
        fileExists f
        mapM_ (deleteLine f line) old
@@ -88,17 +87,19 @@ instance Check Prim where
        fileEmpty f
        mapM_ (insertLine f 1) (reverse $ linesPS n)
 
-   checkPatch (DP d AddDir) = createDir d
-   checkPatch (DP d RmDir) = removeDir d
+   checkPatch (TP (RmFile f)) = removeFile f
+   checkPatch (TP (AddFile f)) =  createFile f
+   checkPatch (TP (AddDir d)) = createDir d
+   checkPatch (TP (RmDir d)) = removeDir d
+   checkPatch (TP (Move f f')) = checkMove f f'
 
-   checkPatch (Move f f') = checkMove f f'
-   checkPatch (ChangePref _ _ _) = isValid
+   checkPatch (CP _ _ _) = isValid
 
-tryTokPossibly :: String -> String -> String
+tryTokPossibly :: String -> B.ByteString -> B.ByteString
                 -> (Maybe FileContents) -> (Maybe FileContents)
 tryTokPossibly t o n = liftM $ \contents ->
         let lines' = M.mapMaybe (liftM B.concat
-                                  . tryTokInternal t (BC.pack o) (BC.pack n))
+                                  . tryTokInternal t o n)
                                 (fcLines contents)
         in contents { fcLines = lines' }
 

@@ -43,7 +43,7 @@ darcs whatsnew | grep 'rmfile ./f'
 not darcs whatsnew --look-for-moves # No changes
 
 # so recording with --look-for-moves sees no changes
-darcs record -a --look-for-moves | grep -i "you don't want to record anything"
+not darcs record -a --look-for-moves | grep -i "no changes"
 
 # the record did nothing, so same checks as above should succeed
 darcs whatsnew | grep 'rmfile ./f'

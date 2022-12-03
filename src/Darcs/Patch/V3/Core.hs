@@ -113,6 +113,7 @@ import Darcs.Test.TestOnly
 import Darcs.Util.Parser ( string, lexString, choice, skipSpace )
 import Darcs.Util.Printer
     ( Doc
+    , Print
     , ($$)
     , (<+>)
     , blueText
@@ -382,7 +383,10 @@ instance PatchInspect prim => PatchInspect (RepoPatchV3 name prim) where
 instance (SignedId name, Eq2 prim, Commute prim) => Eq2 (RepoPatchV3 name prim) where
     (Prim p) =\/= (Prim q) = p =\/= q
     (Conflictor r x cp) =\/= (Conflictor s y cq)
-        | IsEq <- r =\^/= s -- more efficient than IsEq <- r =\/= s
+        | IsEq <- r =\^/= s
+        -- =\^/= is not only more efficient than r =\/= s but also
+        -- semantically correct, since we want to treat different
+        -- orderings of the effect as equal here.
         , x == y
         , cp == cq = IsEq
     _ =\/= _ = NotEq
@@ -420,10 +424,11 @@ instance PrimPatch prim => Apply (RepoPatchV3 name prim) where
 instance PatchListFormat (RepoPatchV3 name prim) where
   patchListFormat = ListFormatV3
 
-instance IsHunk prim => IsHunk (RepoPatchV3 name prim) where
-  isHunk rp = do
-    Prim p <- return rp
-    isHunk p
+instance (IsHunk prim, Print name) => IsHunk (RepoPatchV3 name prim) where
+  type ExtraData (RepoPatchV3 name prim) = (name, ExtraData prim)
+  isHunk (Prim p) = isHunk p
+  isHunk _ = Nothing
+  fromHunk = Prim . fromHunk
 
 instance Summary (RepoPatchV3 name prim) where
   conflictedEffect (Conflictor _ _ (ctxView -> Sealed (_ :> p))) = [IsC Conflicted (wnPatch p)]
@@ -462,7 +467,7 @@ instance (StorableId name, PrimPatch prim)
   => ShowContextPatch (RepoPatchV3 name prim) where
 
   showContextPatch f (Prim p) = showContextPatch f p
-  showContextPatch f p = return $ showPatch f p
+  showContextPatch f p = apply p >> return (showPatch f p)
 
 -- * Read and Write
 

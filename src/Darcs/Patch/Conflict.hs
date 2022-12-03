@@ -7,6 +7,7 @@ module Darcs.Patch.Conflict
     , mangleOrFail
     , combineConflicts
     , findConflicting
+    , mapConflictDetails
     ) where
 
 import Darcs.Prelude
@@ -18,7 +19,15 @@ import Darcs.Patch.Permutations ()
 import Darcs.Patch.FromPrim ( PrimOf )
 import Darcs.Patch.Prim ( PrimMangleUnravelled(..), Mangled, Unravelled )
 import Darcs.Patch.Show ( ShowPatch(..), ShowPatchFor(ForStorage), showPatch )
-import Darcs.Patch.Witnesses.Ordered ( (:>)(..), FL(..), RL(..), mapFL, (+<<+) )
+import Darcs.Patch.Witnesses.Sealed ( mapSeal )
+import Darcs.Patch.Witnesses.Ordered
+    ( FL(..)
+    , RL(..)
+    , mapFL
+    , mapFL_FL
+    , (+<<+)
+    , (:>)(..)
+    )
 import Darcs.Util.Printer ( renderString, text, vcat, ($$) )
 
 data ConflictDetails prim wX =
@@ -27,6 +36,17 @@ data ConflictDetails prim wX =
     conflictParts :: Unravelled prim wX
   }
 
+mapConflictDetails
+  :: (forall wA wB . p wA wB -> q wA wB)
+  -> ConflictDetails p wX -> ConflictDetails q wX
+mapConflictDetails f ConflictDetails{..} =
+  ConflictDetails
+    { conflictMangled = fmap (mapSeal f) conflictMangled
+    , conflictParts = fmap (mapSeal (mapFL_FL f)) conflictParts
+    }
+
+-- | For one conflict (a connected set of conflicting prims), store the
+-- conflicting parts and, if possible, their mangled version.
 mangleOrFail :: PrimMangleUnravelled prim
              => Unravelled prim wX -> ConflictDetails prim wX
 mangleOrFail parts =

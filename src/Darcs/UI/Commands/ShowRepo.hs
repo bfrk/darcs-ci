@@ -33,7 +33,6 @@ import Darcs.Repository
     ( Repository
     , repoFormat
     , repoLocation
-    , repoPristineType
     , repoCache
     , withRepository
     , RepoJob(..)
@@ -133,7 +132,6 @@ actuallyShowRepo out r opts = do
   out "Format" $ showInOneLine $ repoFormat r
   let loc = repoLocation r
   out "Root" loc
-  out "PristineType" $ show $ repoPristineType r
   out "Cache" $ showInOneLine $ repoCache r
   piExists <- doesPatchIndexExist loc
   piDisabled <- isPatchIndexDisabled loc

@@ -32,6 +32,7 @@ import Darcs.Patch.PatchInfoAnd ( Hopefully, PatchInfoAnd,
 
 import qualified Data.ByteString as B ( ByteString )
 import qualified Data.ByteString.Char8 as BC ( break, pack, unpack )
+import qualified Data.ByteString.Short as BS
 
 import Darcs.Patch ( RepoPatch, Named, readPatch )
 import qualified Darcs.Util.Parser as P ( parse )
@@ -133,8 +134,8 @@ oldRepoFailMsg = "ERROR: repository upgrade required, try `darcs optimize upgrad
 --    flag.
 makeFilename :: PatchInfo -> String
 makeFilename pi = showIsoDateTime d++"-"++sha1_a++"-"++ (show $ makePatchname pi) ++ ".gz"
-    where d = readUTCDateOldFashioned $ BC.unpack $ _piDate pi
-          sha1_a = take 5 $ show $ sha1PS $ _piAuthor pi
+    where d = readUTCDateOldFashioned $ BC.unpack $ BS.fromShort $ _piDate pi
+          sha1_a = take 5 $ show $ sha1PS $ BS.fromShort $ _piAuthor pi
 
 readPatchInfos :: B.ByteString -> IO [PatchInfo]
 readPatchInfos inv =

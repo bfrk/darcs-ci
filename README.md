@@ -14,7 +14,7 @@ cabal update && cabal install darcs
 ```
 
 with a recent cabal (version 3.2 or later is recommended). Any version of
-ghc from 8.2 up to 8.10 should work.
+ghc from 8.2 up to 9.2 should work.
 
 From inside a clone or a source dist, use
 
@@ -22,30 +22,29 @@ From inside a clone or a source dist, use
 > cabal build
 ```
 
-or
+Cabal will tell you where the resulting darcs binary is. If you'd rather
+use `cabal install` and you are in a clone (not a source dist), you first have
+to generate the version info, like this:
 
 ```
+> runghc release/gen-version-info.hs
 > cabal install
 ```
 
-If you prefer stack:
+Building/installing with stack used to work with a few tweaks, but is no
+longer officially supported due to lack of manpower. If this inconveniences
+you, consider contributing patches to maintain our stack.yaml.
+
+Testing
+-------
+
+Running the test-suite is optional, of course, but useful if you want to
+help find bugs or before you contribute patches. The easiest and most
+flexible way to do this is
 
 ```
-> stack install
-```
-
-Note that using stack will select older versions for some dependencies,
-which may mean that performance is slightly less than optimal.
-
-Running the test suite
-----------------------
-
-This is optional, of course, but useful if you want to help find bugs or
-before you contribute patches.
-
-```
-> cabal build --enable-tests
-> cabal test --test-show-details=direct
+> cabal configure --enable-tests
+> cabal run darcs-test -- [options for darcs-test, try --help]
 ```
 
 Using

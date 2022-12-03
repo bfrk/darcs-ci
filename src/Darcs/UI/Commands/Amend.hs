@@ -61,7 +61,7 @@ import Darcs.UI.PatchHeader
 
 import Darcs.Repository.Flags ( UpdatePending(..) )
 import Darcs.Patch ( RepoPatch, description, PrimOf
-                   , effect, invert, invertFL, sortCoalesceFL
+                   , effect, invert, invertFL
                    )
 import Darcs.Patch.Apply ( ApplyState )
 import Darcs.Patch.Depends ( contextPatches, patchSetUnion, findCommon )
@@ -85,10 +85,10 @@ import Darcs.Repository
     , tentativelyAddPatch
     , withManualRebaseUpdate
     , finalizeRepositoryChanges
-    , readPendingAndWorking
     , readPristine
     , readPatches
-    , tentativelyRemoveFromPW
+    , tentativelyRemoveFromPending
+    , unrecordedChanges
     )
 import Darcs.Repository.Prefs ( getDefaultRepo )
 import Darcs.UI.SelectChanges
@@ -180,11 +180,9 @@ amend = DarcsCommand
       ^ O.lookforreplaces
       ^ O.lookformoves
       ^ O.repoDir
-      ^ O.withContext
       ^ O.diffAlgorithm
     advancedOpts
-      = O.compress
-      ^ O.umask
+      = O.umask
       ^ O.setScriptsExecutable
     allOpts = withStdOpts basicOpts advancedOpts
     amendCmd fps flags args = pathSetFromArgs fps args >>= doAmend flags
@@ -203,9 +201,7 @@ doAmend cfg files =
       -- reconstruct context patchset
       context <- return $ appendPSFL common (reverseRL kept)
       announceFiles (O.verbosity ? cfg) files "Amending changes in"
-      pristine <- readPristine repository
-      pending :> working <-
-        readPendingAndWorking (diffingOpts cfg) repository files
+      unrecorded <- unrecordedChanges (diffingOpts cfg) repository files
       -- auxiliary function needed because the witness types differ for the
       -- isTag case
       let go :: FL (PrimOf p) wR wU1 -> IO ()
@@ -216,9 +212,8 @@ doAmend cfg files =
                        (patchSelOpts cfg)
                        (Just (primSplitter (O.diffAlgorithm ? cfg)))
                        files
-                       (Just pristine)
             (chosenPatches :> _) <- runInvertibleSelection ch selection_config
-            addChangesToPatch cfg repository context oldp chosenPatches pending working
+            addChangesToPatch cfg repository context oldp chosenPatches
       if not (isTag (info oldp))
         -- amending a normal patch
         then
@@ -227,13 +222,13 @@ doAmend cfg files =
               let selection_config =
                     selectionConfigPrim Last "unrecord" (patchSelOpts cfg)
                       (Just (primSplitter (O.diffAlgorithm ? cfg)))
-                      files (Just pristine)
+                      files
               (_ :> chosenPrims) <-
                 runInvertibleSelection (effect oldp) selection_config
               let invPrims = reverseRL (invertFL chosenPrims)
-              addChangesToPatch cfg repository context oldp invPrims pending working
+              addChangesToPatch cfg repository context oldp invPrims
             else
-              go (sortCoalesceFL (pending +>+ working))
+              go unrecorded
         -- amending a tag
         else
           if hasEditMetadata cfg && isNothing files
@@ -259,10 +254,8 @@ addChangesToPatch :: (RepoPatch p, ApplyState p ~ Tree)
                   -> PatchSet p Origin wX -- ^ the context
                   -> PatchInfoAnd p wX wR -- ^ original patch
                   -> FL (PrimOf p) wR wY  -- ^ changes to add
-                  -> FL (PrimOf p) wR wP  -- ^ pending
-                  -> FL (PrimOf p) wP wU  -- ^ working
                   -> IO ()
-addChangesToPatch cfg _repository context oldp chs pending working =
+addChangesToPatch cfg _repository context oldp chs =
   if nullFL chs && not (hasEditMetadata cfg)
     then putInfo cfg "You don't want to record anything!"
     else do
@@ -284,7 +277,6 @@ addChangesToPatch cfg _repository context oldp chs pending working =
           _repository <-
             tentativelyRemovePatches
               _repository
-              (O.compress ? cfg)
               NoUpdatePending
               (oldp :>: NilFL)
           (mlogf, newp) <-
@@ -306,7 +298,6 @@ addChangesToPatch cfg _repository context oldp chs pending working =
           _repository <-
             tentativelyAddPatch
               _repository
-              (O.compress ? cfg)
               (O.verbosity ? cfg)
               NoUpdatePending
               newp
@@ -317,10 +308,10 @@ addChangesToPatch cfg _repository context oldp chs pending working =
         ("you have a bad patch: '" ++ patchDesc newp ++ "'")
         "amend it"
         (Just failmsg)
-      tentativelyRemoveFromPW _repository chs pending working
+      tentativelyRemoveFromPending _repository chs
       _repository <-
-        finalizeRepositoryChanges _repository YesUpdatePending (O.compress ? cfg)
-          (O.dryRun ? cfg) `clarifyErrors` failmsg
+        finalizeRepositoryChanges _repository YesUpdatePending (O.dryRun ? cfg)
+          `clarifyErrors` failmsg
       case O.verbosity ? cfg of
         O.NormalVerbosity -> putDocLn "Finished amending patch."
         O.Verbose -> putDocLn $ "Finished amending patch:" $$ description newp
@@ -375,7 +366,6 @@ patchSelOpts cfg = S.PatchSelectionOptions
     , S.interactive = isInteractive cfg
     , S.selectDeps = O.PromptDeps -- option not supported, use default
     , S.withSummary = O.NoSummary -- option not supported, use default
-    , S.withContext = O.withContext ? cfg
     }
 
 isInteractive :: Config -> Bool

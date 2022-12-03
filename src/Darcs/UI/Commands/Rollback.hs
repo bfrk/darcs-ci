@@ -40,7 +40,7 @@ import Darcs.UI.Commands ( DarcsCommand(..), withStdOpts, nodefaults, setEnvDarc
 import Darcs.UI.Commands.Util ( announceFiles, getLastPatches )
 import Darcs.UI.Completion ( knownFileArgs )
 import Darcs.UI.Flags ( DarcsFlag, verbosity, umask, useCache,
-                        compress, externalMerge, wantGuiPause, diffingOpts,
+                        externalMerge, wantGuiPause, diffingOpts,
                         diffAlgorithm, isInteractive, pathSetFromArgs )
 import Darcs.UI.Options ( parseFlags, (?), (^) )
 import qualified Darcs.UI.Options.All as O
@@ -79,7 +79,6 @@ patchSelOpts flags = S.PatchSelectionOptions
     , S.interactive = isInteractive True flags
     , S.selectDeps = O.PromptDeps
     , S.withSummary = O.NoSummary
-    , S.withContext = O.NoContext
     }
 
 rollback :: DarcsCommand
@@ -130,7 +129,7 @@ rollbackCmd fps opts args = withRepoLock (useCache ? opts)
               selectionConfigPrim
                   Last "rollback" (patchSelOpts opts)
                   (Just (reversePrimSplitter (diffAlgorithm ? opts)))
-                  files Nothing
+                  files
             hunks = canonizeFL (diffAlgorithm ? opts) . effect
         _ :> to_undo <- runInvertibleSelection (hunks ps) prim_selection_context
         exitIfNothingSelected to_undo "changes"
@@ -140,14 +139,13 @@ rollbackCmd fps opts args = withRepoLock (useCache ? opts)
         Sealed pw <- considerMergeToWorking _repo "rollback"
                          YesAllowConflictsAndMark
                          (externalMerge ? opts) (wantGuiPause opts)
-                         (compress ? opts) (verbosity ? opts) NoReorder
+                         (verbosity ? opts) NoReorder
                          (diffingOpts opts)
                          (Fork allpatches NilFL (rbp :>: NilFL))
         addToPending _repo (diffingOpts opts) pw
         withSignalsBlocked $ do
             _repo <-
-              finalizeRepositoryChanges _repo YesUpdatePending
-                (compress ? opts) (O.dryRun ? opts)
+              finalizeRepositoryChanges _repo YesUpdatePending (O.dryRun ? opts)
             unless (O.yes (O.dryRun ? opts)) $
               void $ applyToWorking _repo (verbosity ? opts) pw
         debugMessage "Finished applying unrecorded rollback patch"

@@ -1,6 +1,5 @@
 module Darcs.Repository.Flags
-    ( Compression (..)
-    , RemoteDarcs (..)
+    ( RemoteDarcs (..)
     , remoteDarcs
     , Reorder (..)
     , Verbosity (..)
@@ -30,14 +29,13 @@ module Darcs.Repository.Flags
     , ForgetParent (..)
     , PatchFormat (..)
     , WithPrefsTemplates (..)
+    , OptimizeDeep (..)
     ) where
 
 import Darcs.Prelude
 
-import Darcs.Util.Cache ( Compression(..) )
 import Darcs.Util.Diff ( DiffAlgorithm(..) )
 import Darcs.Util.Global ( defaultRemoteDarcsCmd )
-
 
 data Verbosity = Quiet | NormalVerbosity | Verbose
     deriving ( Eq, Show )
@@ -133,4 +131,7 @@ data PatchFormat = PatchFormat1 | PatchFormat2 | PatchFormat3
     deriving ( Eq, Show )
 
 data WithPrefsTemplates =  WithPrefsTemplates | NoPrefsTemplates
+    deriving ( Eq, Show )
+
+data OptimizeDeep = OptimizeShallow | OptimizeDeep
     deriving ( Eq, Show )

@@ -15,96 +15,103 @@
 -- the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 -- Boston, MA 02110-1301, USA.
 
-{-# OPTIONS_GHC -fno-warn-orphans -fno-warn-unused-imports #-}
-
+{-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# LANGUAGE UndecidableInstances #-}
 module Darcs.Patch.Viewing
     ( showContextHunk
     ) where
 
-import Darcs.Prelude hiding ( readFile )
+import Darcs.Prelude
 
-import Control.Applicative( (<$>) )
 import qualified Data.ByteString as B ( null )
-import Darcs.Util.Tree ( Tree )
-import Darcs.Util.Tree.Monad ( virtualTreeMonad )
 
-import Darcs.Patch.Apply ( Apply(..) )
-import Darcs.Patch.ApplyMonad ( getApplyState,
-                                ApplyMonad(..), ApplyMonadTree(..), toTree )
-import Darcs.Patch.FileHunk ( IsHunk(..), FileHunk(..), showFileHunk )
-import Darcs.Patch.Format ( PatchListFormat(..), ListFormat(..),
-                            FileNameFormat(..) )
+import Darcs.Patch.Apply ( Apply(..), ObjectIdOfPatch )
+import Darcs.Patch.ApplyMonad ( ApplyMonad(..) )
+import Darcs.Patch.FileHunk ( FileHunk(..), IsHunk(..), showContextFileHunk )
+import Darcs.Patch.Format ( FileNameFormat(..), ListFormat(..), PatchListFormat(..) )
+import Darcs.Patch.Object ( ObjectId(..), ObjectIdOf )
 import Darcs.Patch.Show
-    ( ShowPatchBasic(..), ShowPatch(..)
-    , formatFileName, ShowPatchFor(..), ShowContextPatch(..) )
-import Darcs.Patch.Witnesses.Ordered ( RL(..), FL(..), mapFL, mapFL_FL,
-                                       reverseRL, concatFL )
+    ( ShowContextPatch(..)
+    , ShowPatch(..)
+    , ShowPatchBasic(..)
+    , ShowPatchFor(..)
+    )
+import Darcs.Patch.Witnesses.Ordered
+    ( FL(..)
+    , RL(..)
+    , concatFL
+    , mapFL
+    , mapFL_FL
+    , reverseRL
+    )
 import Darcs.Util.ByteString ( linesPS )
-import Darcs.Util.Printer ( Doc, empty, vcat, text, blueText, Color(Cyan, Magenta),
-                 lineColor, ($$), (<+>), prefix, userchunkPS )
+import Darcs.Util.Printer ( Print(..), Doc, blueText, empty, vcat, ($$) )
 
-showContextSeries :: forall p m wX wY . (Apply p, ShowContextPatch p, IsHunk p,
-                                         ApplyMonad (ApplyState p) m)
-                  => ShowPatchFor -> FileNameFormat -> FL p wX wY -> m Doc
+showContextSeries
+  :: forall p m wX wY
+   . ( Apply p
+     , ShowContextPatch p
+     , IsHunk p
+     , ApplyMonad (ApplyState p) m
+     , ObjectId (ObjectIdOfPatch p)
+     )
+  => ShowPatchFor
+  -> FileNameFormat
+  -> FL p wX wY
+  -> m Doc
 showContextSeries use fmt = scs Nothing
   where
-    scs :: forall wWw wXx wYy . Maybe (FileHunk wWw wXx) -> FL p wXx wYy -> m Doc
+    scs :: Maybe (FileHunk (ExtraData p) (ObjectIdOfPatch p) wA wB) -> FL p wB wC -> m Doc
     scs pold (p :>: ps) = do
-        (_, s') <- nestedApply (apply p) =<< getApplyState
         case isHunk p of
             Nothing -> do
                 a <- showContextPatch use p
-                b <- nestedApply (scs Nothing ps) s'
-                return $ a $$ fst b
+                b <- scs Nothing ps
+                return $ a $$ b
             Just fh -> case ps of
-                NilFL -> fst <$> liftApply (cool pold fh Nothing) s'
+                NilFL -> do
+                  r <- coolContextHunk fmt pold fh Nothing
+                  apply p
+                  return r
                 (p2 :>: _) -> do
-                    a <- fst <$> liftApply (cool pold fh (isHunk p2)) s'
-                    b <- nestedApply (scs (Just fh) ps) s'
-                    return $ a $$ fst b
+                    a <- coolContextHunk fmt pold fh (isHunk p2)
+                    apply p
+                    b <- scs (Just fh) ps
+                    return $ a $$ b
     scs _ NilFL = return empty
 
-    cool :: Maybe (FileHunk wA wB) -> FileHunk wB wC -> Maybe (FileHunk wC wD)
-         -> (ApplyState p) (ApplyMonadBase m) -> (ApplyMonadBase m) Doc
-    cool pold fh ps s =
-        fst <$> virtualTreeMonad (coolContextHunk fmt pold fh ps) (toTree s)
-
-showContextHunk :: (ApplyMonad Tree m) => FileNameFormat -> FileHunk wX wY -> m Doc
+showContextHunk
+  :: (ApplyMonad state m, oid ~ ObjectIdOf state, ObjectId oid, Print xd)
+  => FileNameFormat
+  -> FileHunk xd oid wX wY
+  -> m Doc
 showContextHunk fmt h = coolContextHunk fmt Nothing h Nothing
 
-coolContextHunk :: (ApplyMonad Tree m)
+coolContextHunk :: (ApplyMonad state m, oid ~ ObjectIdOf state, ObjectId oid, Print xd)
                 => FileNameFormat
-                -> Maybe (FileHunk wA wB) -> FileHunk wB wC
-                -> Maybe (FileHunk wC wD) -> m Doc
-coolContextHunk fmt prev fh@(FileHunk f l o n) next = do
-    have <- mDoesFileExist f
-    f_content <- if have then Just `fmap` mReadFilePS f else return Nothing
-    case linesPS `fmap` f_content of
-        -- FIXME This is a weird error...
-        Nothing -> return $ showFileHunk fmt fh
-        Just ls ->
-            let pre = take numpre $ drop (l - numpre - 1) ls
-                cleanedls = case reverse ls of
-                    (x : xs)
-                        | B.null x -> reverse xs
-                    _ -> ls
-                post = take numpost $ drop (max 0 $ l+length o-1) cleanedls in
-            return $
-                blueText "hunk" <+> formatFileName fmt f
-                    <+> text (show l)
-                $$ prefix " " (vcat $ map userchunkPS pre)
-                $$ lineColor Magenta (prefix "-" (vcat $ map userchunkPS o))
-                $$ lineColor Cyan    (prefix "+" (vcat $ map userchunkPS n))
-                $$ prefix " " (vcat $ map userchunkPS post)
+                -> Maybe (FileHunk xd oid wA wB) -> FileHunk xd oid wB wC
+                -> Maybe (FileHunk xd oid wC wD) -> m Doc
+coolContextHunk fmt prev fh@(FileHunk _ f l o n) next = do
+    ls <- linesPS <$> readFilePS f
+    let pre = take numpre $ drop (l - numpre - 1) ls
+        -- This removes the last line if that is empty. This is because if a
+        -- file ends with a newline, this would add an unintuitive "empty last
+        -- line"; in other words, we regard the newline as a terminator, not a
+        -- separator. See also the long comment in Darcs.Repository.Diff.
+        cleanedls = case reverse ls of
+            (x : xs)
+                | B.null x -> reverse xs
+            _ -> ls
+        post = take numpost $ drop (max 0 $ l + length o - 1) cleanedls
+    return $ showContextFileHunk fmt pre fh post
   where
     numpre = case prev of
-        Just (FileHunk f' lprev _ nprev)
+        Just (FileHunk _ f' lprev _ nprev)
             | f' == f && l - (lprev + length nprev + 3) < 3 && lprev < l
             -> max 0 $ l - (lprev + length nprev + 3)
         _ -> if l >= 4 then 3 else l - 1
-
     numpost = case next of
-        Just (FileHunk f' lnext _ _)
+        Just (FileHunk _ f' lnext _ _)
             | f' == f && lnext < l + length n + 4 && lnext > l
             -> lnext - (l + length n)
         _ -> 3
@@ -123,8 +130,13 @@ instance (PatchListFormat p, ShowPatchBasic p) => ShowPatchBasic (FL p) where
         showPatchInternal ListFormatDefault ps = vcat (mapFL (showPatch ForStorage) ps)
         showPatchInternal ListFormatV3 ps = vcat (mapFL (showPatch ForStorage) ps)
 
-instance (Apply p, IsHunk p, PatchListFormat p, ShowContextPatch p)
-        => ShowContextPatch (FL p) where
+instance ( Apply p
+         , IsHunk p
+         , PatchListFormat p
+         , ShowContextPatch p
+         , ObjectId (ObjectIdOfPatch p)
+         ) =>
+         ShowContextPatch (FL p) where
     showContextPatch ForDisplay = showContextSeries ForDisplay FileNameFormatDisplay
     showContextPatch ForStorage = showContextPatchInternal patchListFormat
       where
@@ -139,7 +151,7 @@ instance (Apply p, IsHunk p, PatchListFormat p, ShowContextPatch p)
             return $ blueText "{" $$ x $$ blueText "}"
         showContextPatchInternal ListFormatV2 ps = showContextSeries ForStorage FileNameFormatV2 ps
         showContextPatchInternal ListFormatDefault ps = showContextSeries ForStorage FileNameFormatV2 ps
-        showContextPatchInternal ListFormatV3 ps = return $ showPatch ForStorage ps
+        showContextPatchInternal ListFormatV3 ps = showContextSeries ForStorage FileNameFormatV2 ps
 
 instance (PatchListFormat p, ShowPatch p) => ShowPatch (FL p) where
     content = vcat . mapFL content
@@ -160,7 +172,7 @@ instance (PatchListFormat p, ShowPatch p) => ShowPatch (FL p) where
 instance (PatchListFormat p, ShowPatchBasic p) => ShowPatchBasic (RL p) where
     showPatch f = showPatch f . reverseRL
 
-instance (ShowContextPatch p, Apply p, IsHunk p, PatchListFormat p)
+instance (ShowContextPatch p, Apply p, IsHunk p, PatchListFormat p, ObjectId (ObjectIdOfPatch p))
         => ShowContextPatch (RL p) where
     showContextPatch use = showContextPatch use . reverseRL
 

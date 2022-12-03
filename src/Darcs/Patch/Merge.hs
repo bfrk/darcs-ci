@@ -37,7 +37,6 @@ import Darcs.Patch.Witnesses.Ordered
     , (:/\:)(..)
     , FL(..)
     , (:>)(..)
-    , (+>+)
     )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(..) )
 
@@ -169,19 +168,19 @@ swapCleanMerge (x :\/: y) = do
   x' :/\: y' <- cleanMerge (y :\/: x)
   return $ y' :/\: x'
 
--- | Combine a list of patch sequences, all starting at the same state, into a
--- single sequence that also starts at the same state, using cleanMerge.
--- If the merge fails, we return the two sequences that
+-- | Combine a list of patches, all starting at the same state, into a
+-- sequence that also starts at the same state, using 'cleanMerge'.
+-- If any of the 'cleanMerge's fails, we return the two sequences that
 -- could not be merged so we can issue more detailed error messages.
 mergeList :: CleanMerge p
-          => [Sealed (FL p wX)]
-          -> Either (Sealed (FL p wX), Sealed (FL p wX)) (Sealed (FL p wX))
+          => [Sealed (p wX)]
+          -> Either (Sealed (FL p wX), Sealed (p wX)) (Sealed (FL p wX))
 mergeList = foldM mergeTwo (Sealed NilFL)
   where
-    mergeTwo (Sealed ps) (Sealed qs) =
-      case cleanMerge (ps :\/: qs) of
-        Just (qs' :/\: _) -> Right $ Sealed $ ps +>+ qs'
-        Nothing -> Left (Sealed ps, Sealed qs)
+    mergeTwo (Sealed ps) (Sealed q) =
+      case cleanMerge (ps :\/: q :>: NilFL) of
+        Just (_ :/\: ps') -> Right $ Sealed $ q :>: ps'
+        Nothing -> Left (Sealed ps, Sealed q)
 
 -- | This function serves no purpose except to demonstrate how merge together
 -- with the square commute law allows us to commute any pair of adjacent

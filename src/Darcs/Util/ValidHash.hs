@@ -40,19 +40,19 @@ class (Eq h, IsSizeHash h) => ValidHash h where
   calcValidHash content = fromSizeAndHash (B.length content) (sha256strict content)
 
 newtype InventoryHash = InventoryHash SizeHash
-  deriving (Eq, Show, IsSizeHash)
+  deriving (Eq, Ord, Show, IsSizeHash)
 
 instance ValidHash InventoryHash where
   dirofValidHash _ = HashedInventoriesDir
 
 newtype PatchHash = PatchHash SizeHash
-  deriving (Eq, Show, IsSizeHash)
+  deriving (Eq, Ord, Show, IsSizeHash)
 
 instance ValidHash PatchHash where
   dirofValidHash _ = HashedPatchesDir
 
 newtype PristineHash = PristineHash SizeHash
-  deriving (Eq, Show, IsSizeHash)
+  deriving (Eq, Ord, Show, IsSizeHash)
 
 instance ValidHash PristineHash where
   dirofValidHash _ = HashedPristineDir
@@ -105,7 +105,7 @@ checkHash vh content =
 data SizeHash
   = WithSize !Int !Hash
   | NoSize !Hash
-  deriving (Eq, Show)
+  deriving (Eq, Ord, Show)
 
 -- | Methods to wrap and unwrap 'ValidHash'es
 class IsSizeHash h where

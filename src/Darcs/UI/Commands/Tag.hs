@@ -54,7 +54,6 @@ import Darcs.UI.Completion ( noArgs )
 import Darcs.UI.Flags
     ( DarcsFlag
     , author
-    , compress
     , getAuthor
     , getDate
     , umask
@@ -142,7 +141,7 @@ tag = DarcsCommand
       ^ O.askLongComment
       ^ O.askDeps
       ^ O.repoDir
-    tagAdvancedOpts = O.compress ^ O.umask
+    tagAdvancedOpts = O.umask
     tagOpts = tagBasicOpts `withStdOpts` tagAdvancedOpts
 
 tagCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
@@ -160,9 +159,9 @@ tagCmd _ opts args =
     (name, long_comment)  <- get_name_log tags
     myinfo <- patchinfo date name the_author long_comment
     let mypatch = infopatch myinfo NilFL
-    _ <- tentativelyAddPatch repository (compress ? opts) (verbosity ? opts) YesUpdatePending
+    _ <- tentativelyAddPatch repository (verbosity ? opts) YesUpdatePending
              $ n2pia $ adddeps mypatch deps
-    _ <- finalizeRepositoryChanges repository YesUpdatePending (compress ? opts) (O.dryRun ? opts)
+    _ <- finalizeRepositoryChanges repository YesUpdatePending (O.dryRun ? opts)
     putFinished opts $ "tagging '"++name++"'"
   where
     get_name_log :: [String] -> IO (String, [String])
@@ -196,7 +195,6 @@ askAboutTagDepends flags ps = do
              , S.interactive = True
              , S.selectDeps = O.PromptDeps
              , S.withSummary = O.NoSummary
-             , S.withContext = O.NoContext
              }
   (deps:>_) <- runSelection ps $
                      ((selectionConfig FirstReversed "depend on" opts Nothing Nothing)

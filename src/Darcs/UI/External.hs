@@ -56,7 +56,7 @@ import GHC.IO.Encoding
 #endif
 
 import Control.Concurrent ( forkIO, newEmptyMVar, putMVar, takeMVar )
-import Control.Exception ( IOException, finally, try )
+import Control.Exception ( IOException, catch, finally, try )
 import System.IO.Error ( ioeGetErrorType )
 import GHC.IO.Exception ( IOErrorType(ResourceVanished) )
 #ifdef WIN32
@@ -407,9 +407,10 @@ viewDocWith pr msg = do
 #endif
                `ortryrunning` pipeDocToPager "" [] pr msg
      else pipeDocToPager "" [] pr msg
-              where lengthGreaterThan n _ | n <= 0 = True
-                    lengthGreaterThan _ [] = False
-                    lengthGreaterThan n (_:xs) = lengthGreaterThan (n-1) xs
+  `catch` \ExitSuccess -> return ()
+  where lengthGreaterThan n _ | n <= 0 = True
+        lengthGreaterThan _ [] = False
+        lengthGreaterThan n (_:xs) = lengthGreaterThan (n-1) xs
 
 getViewer :: IO (Maybe String)
 getViewer = Just `fmap` (getEnv "DARCS_PAGER" `catchall` getEnv "PAGER")

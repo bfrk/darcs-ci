@@ -24,7 +24,6 @@ module Darcs.Patch.PatchInfoAnd
     , patchInfoAndPatch
     , fmapPIAP
     , fmapFLPIAP
-    , conscientiously
     , hopefully
     , info
     , hopefullyM
@@ -46,7 +45,6 @@ import Darcs.Patch.Commute ( Commute(..) )
 import Darcs.Patch.Conflict ( Conflict(..) )
 import Darcs.Patch.Debug ( PatchDebug(..) )
 import Darcs.Patch.Effect ( Effect(..) )
-import Darcs.Patch.FileHunk ( IsHunk(..) )
 import Darcs.Patch.Format ( PatchListFormat )
 import Darcs.Patch.FromPrim ( PrimPatchBase(..) )
 import Darcs.Patch.Ident ( Ident(..), PatchId )
@@ -99,6 +97,11 @@ type PatchInfoAnd p = PatchInfoAndG (Named p)
 -- patch through its info. We're not sure we have the patch, but we
 -- know its info.
 data PatchInfoAndG p wA wB =
+  -- TODO Should the PatchInfo really be strict here and in Named?
+  -- Sharing it with the one inside the Named (if present) would probably
+  -- consume a lot less memory. Similarly when we manipulate (commute, merge)
+  -- patches. For the vast majority of patches their PatchInfo never changes
+  -- once it is read from disk.
   PIAP !PatchInfo
        (Hopefully p wA wB)
   deriving (Show)
@@ -165,8 +168,7 @@ conscientiously er ~(PIAP pinf hp) =
       Right p -> p
       Left e -> throw $ PatchNotAvailable $ er (displayPatchInfo pinf $$ text e)
 
--- | @hopefullyM@ is a version of @hopefully@ which calls @fail@ in a
--- monad instead of erroring.
+-- | Return 'Just' the patch content or 'Nothing' if it is unavailable.
 hopefullyM :: PatchInfoAndG p wA wB -> Maybe (p wA wB)
 hopefullyM (PIAP _ hp) = case hopefully2either hp of
                               Right p -> return p
@@ -287,7 +289,7 @@ instance PatchInspect p => PatchInspect (PatchInfoAndG p) where
 instance Apply p => Apply (PatchInfoAndG p) where
     type ApplyState (PatchInfoAndG p) = ApplyState p
     apply = apply . hopefully
-    unapply = unapply .hopefully
+    unapply = unapply . hopefully
 
 instance ( ReadPatch p, Ident p, PatchId p ~ PatchInfo
          ) => ReadPatch (PatchInfoAndG p) where
@@ -295,9 +297,6 @@ instance ( ReadPatch p, Ident p, PatchId p ~ PatchInfo
 
 instance Effect p => Effect (PatchInfoAndG p) where
     effect = effect . hopefully
-
-instance IsHunk (PatchInfoAndG p) where
-    isHunk _ = Nothing
 
 instance PatchDebug p => PatchDebug (PatchInfoAndG p)
 

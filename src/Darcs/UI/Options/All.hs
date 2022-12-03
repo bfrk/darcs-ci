@@ -155,12 +155,13 @@ module Darcs.UI.Options.All
     , AllowConflicts (..) -- re-export
     , conflictsNo
     , conflictsYes
+    , handleConflicts
     , ExternalMerge (..) -- re-export
     , externalMerge
     , reorder
 
     -- optimizations
-    , Compression (..) -- re-export
+    , Compression (..)
     , compress
     , usePacks
     , WithPatchIndex (..) -- re-export
@@ -169,6 +170,8 @@ module Darcs.UI.Options.All
     , Reorder (..) -- re-export
     , minimize
     , storeInMemory
+    , OptimizeDeep (..)
+    , optimizeDeep
 
     -- miscellaneous
     , Output (..)
@@ -243,8 +246,7 @@ module Darcs.UI.Options.All
 import Darcs.Prelude
 
 import Darcs.Repository.Flags
-    ( Compression (..)
-    , RemoteDarcs (..)
+    ( RemoteDarcs (..)
     , Reorder (..)
     , Verbosity (..)
     , UseCache (..)
@@ -270,6 +272,7 @@ import Darcs.Repository.Flags
     , WithWorkingDir (..)
     , PatchFormat (..)
     , WithPrefsTemplates(..)
+    , OptimizeDeep(..)
     )
 
 import qualified Darcs.UI.Options.Flags as F ( DarcsFlag(..) )
@@ -1006,7 +1009,42 @@ conflicts def = withDefault (Just def)
   , RawNoArg [] ["dont-allow-conflicts","no-allow-conflicts","no-resolve-conflicts"]
       F.NoAllowConflicts (Just NoAllowConflicts) "fail if there are patches that would create conflicts"
   , RawNoArg [] ["skip-conflicts"]
-      F.SkipConflicts Nothing "filter out any patches that would create conflicts" ]
+      F.SkipConflicts Nothing "filter out any patches that would create conflicts"
+{-
+  , RawNoArg [] ["rebase-conflicts"]
+      F.SuspendConflicts Nothing
+      "rebase suspend local patches that conflict with remote ones (pull only)"
+  , RawNoArg [] ["store-conflicts"]
+      F.StoreConflicts Nothing
+      "store conflicting patches in the receiving repo on a new branch"
+-}
+  ]
+
+handleConflicts :: AllowConflicts -> PrimDarcsOption (Maybe AllowConflicts)
+handleConflicts def =
+  withDefault (Just def) $
+    [ RawStrArg [] ["prehook"] F.Conflicts unF toV unV "SPEC" desc ]
+  where
+    unF f = [ s | F.Conflicts s <- [f] ]
+    unV x = [ showV n | n <- [x] ]
+    toV = parseV
+    expected = "one of: mark, yes, no, skip"
+    desc = "specify how to handle conflicts (" ++ expected ++ ")"
+    showV (Just YesAllowConflicts) = "yes"
+    showV (Just NoAllowConflicts) = "no"
+    showV (Just YesAllowConflictsAndMark) = "mark"
+    showV Nothing = "skip"
+    parseV s =
+      case s of
+        "mark" -> Just YesAllowConflictsAndMark
+        "yes" -> Just YesAllowConflicts
+        "no" -> Just NoAllowConflicts
+        "skip" -> Nothing
+        _ -> throwArgumentParseError s expected
+{-
+        "rebase" -> Just RebaseConflicts
+        "store" -> Just StoreConflicts
+-}
 
 -- Technically not an isomorphism.
 externalMerge :: PrimDarcsOption ExternalMerge
@@ -1030,6 +1068,10 @@ reorder = withDefault NoReorder
 
 -- * Optimizations
 
+data Compression = NoCompression | GzipCompression
+  deriving ( Eq, Show )
+
+-- | push
 compress :: PrimDarcsOption Compression
 compress = withDefault GzipCompression
   [ RawNoArg [] ["compress"] F.Compress GzipCompression "compress patch data"
@@ -1059,6 +1101,13 @@ storeInMemory = withDefault False
     "do patch application in memory rather than on disk"
   , RawNoArg [] ["no-store-in-memory"] F.ApplyOnDisk False
     "do patch application on disk" ]
+
+optimizeDeep :: PrimDarcsOption OptimizeDeep
+optimizeDeep = withDefault OptimizeShallow
+  [ RawNoArg [] ["deep"] F.OptimizeDeep OptimizeDeep
+    "also optimize clean tags in the complete history"
+  , RawNoArg [] ["shallow"] F.OptimizeShallow OptimizeShallow
+    "only reorder recent patches (works with lazy repo)" ]
 
 -- * Output
 

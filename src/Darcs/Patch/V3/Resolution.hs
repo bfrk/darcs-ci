@@ -1,6 +1,8 @@
 {- | Conflict resolution for 'RepoPatchV3' -}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
-module Darcs.Patch.V3.Resolution () where
+module Darcs.Patch.V3.Resolution
+    ( conflictingAlternatives
+    , patchIsConflicted
+    ) where
 
 import Data.Maybe ( catMaybes )
 import qualified Data.Map as M
@@ -10,7 +12,6 @@ import qualified Data.Vector as V
 import Darcs.Prelude
 
 import Darcs.Patch.Commute ( commuteFL )
-import Darcs.Patch.Conflict ( Conflict(..), ConflictDetails(..), mangleOrFail )
 import Darcs.Patch.Ident
     ( Ident(..)
     , SignedId(..)
@@ -19,7 +20,7 @@ import Darcs.Patch.Ident
     )
 import Darcs.Patch.Merge ( CleanMerge(..) )
 import Darcs.Patch.Prim ( PrimPatch )
-import Darcs.Patch.Prim.WithName ( PrimWithName, wnPatch )
+import Darcs.Patch.Prim.WithName ( PrimWithName )
 import Darcs.Patch.Show hiding ( displayPatch )
 import Darcs.Patch.V3.Contexted
     ( Contexted
@@ -36,9 +37,8 @@ import Darcs.Patch.Witnesses.Ordered
     , Fork(..)
     , RL(..)
     , (+>+)
-    , mapFL_FL
     )
-import Darcs.Patch.Witnesses.Sealed ( Sealed(..), mapSeal )
+import Darcs.Patch.Witnesses.Sealed ( Sealed(..) )
 import Darcs.Patch.Witnesses.Show ( Show2 )
 
 import Darcs.Util.Graph ( Vertex, components, ltmis )
@@ -88,18 +88,6 @@ we can now convert them to plain FLs and merge them cleanly.
 The result of merging all maximal independent sets in a component gives us
 one set of alternatives, which is then passed as input to 'mangleUnravelled'
 to generate the markup. -}
-
-instance (SignedId name, StorableId name, PrimPatch prim) =>
-         Conflict (RepoPatchV3 name prim) where
-  isConflicted Conflictor{} = True
-  isConflicted Prim{} = False
-  resolveConflicts context =
-      resolveComponents . findEdges . findVertices context
-    where
-      resolveComponents :: [Node name prim wX] -> [ConflictDetails prim wX]
-      resolveComponents = map (mangleOrFail . map mergeThem) . alternatives
-      mergeThem :: [Contexted (PrimWithName name prim) wX] -> Sealed (FL prim wX)
-      mergeThem = mapSeal (mapFL_FL wnPatch) . mergeList . map ctxToFL
 
 -- | A single 'Node' in the conflict graph. The 'neighbors' are those that we
 -- know are in conflict with 'self'.
@@ -152,6 +140,13 @@ from the graph that another vertex depends on (the function there has the
 beautiful and expressive name 'getSupers';-). By uniformly ignoring any
 patch we cannot commute to the head we achieve the same result implicitly.
 -}
+conflictingAlternatives
+  :: (SignedId name, StorableId name, PrimPatch prim)
+  => RL (RepoPatchV3 name prim) wO wX
+  -> RL (RepoPatchV3 name prim) wX wY
+  -> [[Sealed (FL (PrimWithName name prim) wY)]]
+conflictingAlternatives context =
+  map (map mergeThem) . alternatives . findEdges . findVertices context
 
 findVertices
   :: forall name prim wO wX wY
@@ -167,7 +162,7 @@ findVertices context patches = go S.empty [] context patches NilFL where
      -> FL (RepoPatchV3 name prim) wB wY
      -> [Contexted (PrimWithName name prim) wY]
   go check done cs (ps :<: p) passedby
-    | isConflicted p || ident p `S.member` check
+    | patchIsConflicted p || ident p `S.member` check
     , Just (_ :> Conflictor _ _ cp) <- commuteFL (p :> passedby) =
         go (conflicts p <> ident p -| check) (cp : done) cs ps (p :>: passedby)
     | otherwise =
@@ -184,6 +179,10 @@ findVertices context patches = go S.empty [] context patches NilFL where
 
   conflicts (Conflictor _ x _) = S.map ctxId x
   conflicts _ = S.empty
+
+patchIsConflicted :: RepoPatchV3 name prim wX wY -> Bool
+patchIsConflicted Conflictor{} = True
+patchIsConflicted Prim{} = False
 
 -- | Note that 'ctxNoConflict' also regards dependent contexted prims as
 -- "conflicting". That is, if @q@ depends on @p@, then
@@ -218,8 +217,8 @@ findEdges = fromVertexSet . S.fromList
       where
         go cp ns = Node cp (S.filter (conflictsWith cp) vs) : ns
 
--- | The input is a list of nodes with no duplicates representing a connected
--- component of the conflict graph. The list contains an element for
+-- | The input is a list of nodes with no duplicates representing the
+-- conflict graph. The list contains an element for
 -- each node in the graph, but the conflicts (edges) may refer to non-nodes.
 -- The output is a list of the maximal independent sets of the conflict graph:
 -- each one can be merged cleanly.
@@ -260,6 +259,12 @@ mergeList = foldr mergeTwo (Sealed NilFL)
                 $$ displayPatch ps
                 $$ redText "conflicts with"
                 $$ displayPatch qs
+
+mergeThem
+  :: (SignedId name, StorableId name, PrimPatch prim)
+  => [Contexted (PrimWithName name prim) wX]
+  -> Sealed (FL (PrimWithName name prim) wX)
+mergeThem = mergeList . map ctxToFL
 
 -- We only use displayPatch for error messages here, so it makes sense
 -- to use the storage format that contains the patch names.
