@@ -47,7 +47,7 @@ import System.Directory
 import System.FilePath.Posix ( (</>) )
 import System.IO.Unsafe ( unsafeInterleaveIO )
 
-import Darcs.Patch ( RepoPatch, effect, invertFL, readPatch )
+import Darcs.Patch ( RepoPatch, effect, invert, invertFL, readPatch )
 import Darcs.Patch.Apply ( Apply(..) )
 import Darcs.Patch.Depends
     ( cleanLatestTag
@@ -57,6 +57,7 @@ import Darcs.Patch.Depends
     )
 import Darcs.Patch.Format ( PatchListFormat )
 import Darcs.Patch.Info ( displayPatchInfo, makePatchname, piName )
+import Darcs.Patch.Invertible ( mkInvertible )
 import Darcs.Patch.PatchInfoAnd
     ( PatchInfoAnd
     , createHashed
@@ -75,6 +76,7 @@ import Darcs.Patch.Witnesses.Ordered
     ( FL(..)
     , foldFL_M
     , foldrwFL
+    , mapFL_FL
     , mapRL
     , (+>+)
     , (+>>+)
@@ -119,8 +121,7 @@ import Darcs.Repository.Pending
     , writeTentativePending
     )
 import Darcs.Repository.Pristine
-    ( ApplyDir(..)
-    , applyToTentativePristine
+    ( applyToTentativePristine
     , applyToTentativePristineCwd
     , convertSizePrefixedPristine
     )
@@ -302,7 +303,7 @@ tentativelyAddPatch_ upr r verb upe p = do
        addToTentativeInventory (repoCache r) p
        when (upr == UpdatePristine) $ do
           debugMessage "Applying to pristine cache..."
-          applyToTentativePristine r ApplyNormal verb p
+          applyToTentativePristine r verb p
        when (upe == YesUpdatePending) $ do
           debugMessage "Updating pending..."
           Sealed pend <- readTentativePending r
@@ -331,8 +332,9 @@ tentativelyRemovePatches_ upr r upe ps
         r' <- removeFromTentativeInventory r ps
         withTentativeRebase r r' (foldrwFL (addFixupsToSuspended . hopefully) ps)
         when (upr == UpdatePristine) $
-          applyToTentativePristineCwd (repoCache r) ApplyInverted $
-            progressFL "Applying inverse to pristine" ps
+          applyToTentativePristineCwd (repoCache r) $
+            progressFL "Applying inverse to pristine" $
+            invert $ mapFL_FL mkInvertible ps
         when (upe == YesUpdatePending) $ do
           debugMessage "Adding changes to pending..."
           Sealed pend <- readTentativePending r

@@ -66,7 +66,6 @@ import Darcs.Repository.Hashed
     )
 import Darcs.Repository.Pristine
     ( applyToTentativePristine
-    , ApplyDir(..)
     )
 import Darcs.Repository.InternalTypes ( AccessType(RW), Repository, repoLocation )
 import Darcs.Repository.Pending ( setTentativePending )
@@ -293,7 +292,7 @@ tentativelyMergePatches_ mc _repo cmd allowConflicts externalMerge wantGuiPause
 
     debugMessage "Adding patches to the inventory and writing new pending..."
     when (mc == MakeChanges) $ do
-        applyToTentativePristine _repo ApplyNormal verbosity $
+        applyToTentativePristine _repo verbosity $
           progressFL "Applying patches to pristine" them'
         -- these two cases result in the same trees (that's the idea of
         -- merging), so we only operate on the set of patches and do the

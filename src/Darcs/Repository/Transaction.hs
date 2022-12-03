@@ -19,7 +19,6 @@ import Darcs.Patch.Show ( ShowPatchFor(..) )
 import Darcs.Patch.Witnesses.Ordered ( FL(..), RL(..), (:>)(..) )
 import Darcs.Patch.Witnesses.Sealed ( Dup(..), Sealed(..) )
 
-import Darcs.Repository.Branch ( finalizeTentativeBranch, revertTentativeBranch )
 import Darcs.Repository.Flags ( DryRun(..), UpdatePending(..) )
 import Darcs.Repository.Format
     ( RepoProperty(HashedInventory, RebaseInProgress, RebaseInProgress_2_16)
@@ -101,7 +100,6 @@ revertRepositoryChanges r upe
         revertTentativeUnrevert
         revertPending r upe
         revertTentativeChanges r
-        revertTentativeBranch r -- must come after revertTentativeChanges
         let r' = unsafeCoerceR r
         revertTentativeRebase r'
         return $ unsafeStartTransaction r'
@@ -123,7 +121,6 @@ finalizeRepositoryChanges r updatePending dryrun
             debugMessage "Finalizing changes..."
             withSignalsBlocked $ do
                 finalizeTentativeRebase
-                finalizeTentativeBranch
                 finalizeTentativeChanges r
                 finalizePending r updatePending
                 finalizeTentativeUnrevert

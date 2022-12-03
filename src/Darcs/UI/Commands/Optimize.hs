@@ -111,7 +111,6 @@ import Darcs.Repository.Flags
     )
 import Darcs.Patch.Progress ( progressFL )
 import Darcs.Util.Cache ( allHashedDirs, bucketFolder, cleanCaches, mkDirCache )
-import Darcs.Repository ( UpdatePending(NoUpdatePending), finalizeRepositoryChanges )
 import Darcs.Repository.Format
     ( identifyRepoFormat
     , createRepoFormat
@@ -125,8 +124,7 @@ import Darcs.Repository.Hashed
     , finalizeTentativeChanges
     )
 import Darcs.Repository.Pristine
-    ( ApplyDir(ApplyNormal)
-    , applyToTentativePristineCwd
+    ( applyToTentativePristineCwd
     )
 
 import Darcs.Util.Tree
@@ -205,7 +203,6 @@ optimizeCleanCmd _ opts _ =
     withRepoLock (useCache ? opts) (umask ? opts) $
     RepoJob $ \repository -> do
       cleanRepository repository
-      _ <- finalizeRepositoryChanges repository NoUpdatePending O.NoDryRun
       putInfo opts "Done cleaning repository!"
 
 optimizeUpgrade :: DarcsCommand
@@ -453,7 +450,7 @@ actuallyUpgradeFormat _opts _repository = do
   -- We ignore the returned root hash, we don't use it.
   _ <- writePristine _repository emptyTree
   sequence_ $
-    mapFL (applyToTentativePristineCwd (repoCache _repository) ApplyNormal) $
+    mapFL (applyToTentativePristineCwd (repoCache _repository)) $
     bunchFL 100 patchesToApply
   -- now make it official
   finalizeTentativeChanges _repository

@@ -22,7 +22,6 @@ import Darcs.UI.Commands.Add ( add )
 import Darcs.UI.Commands.Amend ( amend, amendrecord )
 import Darcs.UI.Commands.Annotate ( annotate )
 import Darcs.UI.Commands.Apply ( apply )
-import Darcs.UI.Commands.Branch ( branchCommand )
 import Darcs.UI.Commands.Clone ( clone, get, put )
 import Darcs.UI.Commands.Compare ( compareCommand )
 import Darcs.UI.Commands.Convert ( convert )
@@ -68,7 +67,6 @@ commandControlList =
     , normalCommand clone, hiddenCommand get, hiddenCommand put
     , normalCommand pull
     , normalCommand push
-    , normalCommand branchCommand
     , commandGroup "Preparing patches before recording:"
     , normalCommand move, hiddenCommand mv
     , normalCommand remove, hiddenCommand unadd, hiddenCommand rm

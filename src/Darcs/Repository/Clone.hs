@@ -21,8 +21,7 @@ import Darcs.Repository.Create
     )
 import Darcs.Repository.Identify ( identifyRepositoryFor, ReadingOrWriting(..) )
 import Darcs.Repository.Pristine
-    ( ApplyDir(..)
-    , applyToTentativePristineCwd
+    ( applyToTentativePristineCwd
     , createPristineDirectoryTree
     , writePristine
     )
@@ -401,7 +400,7 @@ copyRepoOldFashioned fromRepo _toRepo verb withWorkingDir = do
   local_patches <- readPatches _toRepo
   let patchesToApply = progressFL "Applying patch" $ patchSet2FL local_patches
   sequence_ $
-    mapFL (applyToTentativePristineCwd (repoCache _toRepo) ApplyNormal) $
+    mapFL (applyToTentativePristineCwd (repoCache _toRepo)) $
     bunchFL 100 patchesToApply
   _toRepo <- finalizeRepositoryChanges _toRepo NoUpdatePending NoDryRun
   putVerbose verb $ text "Writing the working tree..."

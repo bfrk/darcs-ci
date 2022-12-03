@@ -1,7 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Darcs.Repository.Pristine
-    ( ApplyDir(..)
-    , applyToTentativePristine
+    ( applyToTentativePristine
     , applyToTentativePristineCwd
     , readHashedPristineRoot
     , pokePristineHash
@@ -62,27 +61,22 @@ import Darcs.Util.Tree.Plain ( writePlainTree )
 import Darcs.Util.ValidHash ( fromHash, getSize )
 
 
-data ApplyDir = ApplyNormal | ApplyInverted
-
 -- | Apply a patch to the 'Tree' identified by the given root 'PristineHash',
 -- then return the root hash of the result. The 'ApplyDir' argument says
 -- whether to add or remove the changes. The 'Cache' argument specifies the
 -- possible locations for hashed files.
 applyToHashedPristine :: (Apply p, ApplyState p ~ Tree, ShowPatch p)
                       => Cache
-                      -> ApplyDir
                       -> PristineHash
                       -> p wX wY
                       -> IO PristineHash
-applyToHashedPristine cache dir root patch = tryApply `catchIOError` annotateError
+applyToHashedPristine cache root patch = tryApply `catchIOError` annotateError
   where
     tryApply :: IO PristineHash
     tryApply = do
         -- Read a non-size-prefixed pristine, failing if we encounter one.
         tree <- readDarcsHashedNosize cache root
-        (_, updatedTree) <- case dir of
-            ApplyNormal -> hashedTreeIO (apply patch) tree cache
-            ApplyInverted -> hashedTreeIO (unapply patch) tree cache
+        (_, updatedTree) <- hashedTreeIO (apply patch) tree cache
         return $ fromHash $ darcsTreeHash updatedTree
 
     annotateError e =
@@ -109,32 +103,30 @@ convertSizePrefixedPristine cache ph = do
 -- tree, and updates the tentative pristine hash
 applyToTentativePristine :: (ApplyState q ~ Tree, Apply q, ShowPatch q)
                          => Repository 'RW p wU wR
-                         -> ApplyDir
                          -> Verbosity
                          -> q wR wY
                          -> IO ()
-applyToTentativePristine r dir verb p =
+applyToTentativePristine r verb p =
   withRepoDir r $ do
     when (verb == Verbose) $
       putDocLn $ text "Applying to pristine..." <+> description p
-    applyToTentativePristineCwd (repoCache r) dir p
+    applyToTentativePristineCwd (repoCache r) p
 
 -- | Unsafe low-level version of 'applyToTentativePristine'.
 -- Use only inside a transaction and with cwd set to the
 -- 'repoLocation'.
 applyToTentativePristineCwd :: (ApplyState p ~ Tree, Apply p, ShowPatch p)
                             => Cache
-                            -> ApplyDir
                             -> p wX wY
                             -> IO ()
-applyToTentativePristineCwd cache dir p = do
+applyToTentativePristineCwd cache p = do
     tentativePristine <- gzReadFilePS tentativePristinePath
     -- Extract the pristine hash from the tentativePristine file, using
     -- peekPristineHash (this is valid since we normally just extract the hash
     -- from the first line of an inventory file; we can pass in a one-line file
     -- that just contains said hash).
     let tentativePristineHash = peekPristineHash tentativePristine
-    newPristineHash <- applyToHashedPristine cache dir tentativePristineHash p
+    newPristineHash <- applyToHashedPristine cache tentativePristineHash p
     writeDocBinFile tentativePristinePath $
         pokePristineHash newPristineHash tentativePristine
 

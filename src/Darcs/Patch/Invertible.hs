@@ -20,6 +20,7 @@ import Darcs.Patch.RepoPatch
     , Eq2(..)
     , PrimPatchBase(..)
     , PatchInspect(..)
+    , PatchListFormat(..)
     , ShowContextPatch(..)
     , ShowPatch(..)
     , ShowPatchBasic(..)
@@ -110,3 +111,5 @@ instance ShowPatch p => ShowPatch (Invertible p) where
 instance ShowContextPatch p => ShowContextPatch (Invertible p) where
   showContextPatch ForStorage = error "Invertible patches must not be stored"
   showContextPatch ForDisplay = withInvertible (showContextPatch ForDisplay)
+
+instance PatchListFormat p => PatchListFormat (Invertible p)

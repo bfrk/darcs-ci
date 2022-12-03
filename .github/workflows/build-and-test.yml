@@ -69,7 +69,7 @@ jobs:
           cabal-store-${{ matrix.os }}-ghc-${{ matrix.ghc }}-
 
     - name: Configure
-      run: cabal configure --enable-tests -fwarn-as-error
+      run: cabal configure --enable-tests # -fwarn-as-error
 
     - name: Build dependencies
       run: cabal build --only-dependencies

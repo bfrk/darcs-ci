@@ -18,9 +18,6 @@ module Darcs.Repository.Inventory.Format
     , peekPristineHash
     , skipPristineHash
     , pristineName
-    -- exported for D.R.Branch
-    , pPristineHash
-    , pHash
     -- properties
     , prop_inventoryParseShow
     , prop_peekPokePristineHash
