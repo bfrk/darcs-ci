@@ -15,7 +15,6 @@
 -- the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 -- Boston, MA 02110-1301, USA.
 
-{-# OPTIONS_GHC -fno-warn-missing-methods #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 
 module Darcs.Repository.ApplyPatches
@@ -61,10 +60,13 @@ newtype DefaultIO a = DefaultIO { runDefaultIO :: IO a }
 
 instance ApplyMonad Tree DefaultIO where
     type ApplyMonadBase DefaultIO = IO
+    readFilePS path = mReadFilePS path
 
 instance ApplyMonadTree DefaultIO where
+    mDoesFileExist = DefaultIO . doesFileExist . realPath
     mDoesDirectoryExist = DefaultIO . doesDirectoryExist . realPath
     mChangePref a b c = DefaultIO $ changePrefval a b c
+    mReadFilePS = DefaultIO . B.readFile . realPath
     mModifyFilePS f j = DefaultIO $ B.readFile (realPath f) >>= runDefaultIO . j >>= writeAtomicFilePS (realPath f)
     mCreateDirectory = DefaultIO . createDirectory . realPath
     mCreateFile f = DefaultIO $
@@ -129,8 +131,10 @@ runDefault action =
 
 instance TolerantMonad m => ApplyMonad Tree (TolerantWrapper m) where
     type ApplyMonadBase (TolerantWrapper m) = IO
+    readFilePS path = mReadFilePS path
 
 instance TolerantMonad m => ApplyMonadTree (TolerantWrapper m) where
+    mDoesFileExist = runTM . runDefaultIO . mDoesFileExist
     mDoesDirectoryExist d = runTM $ runDefaultIO $ mDoesDirectoryExist d
     mReadFilePS f = runTM $ runDefaultIO $ mReadFilePS f
     mChangePref a b c = warning $ runDefaultIO $ mChangePref a b c

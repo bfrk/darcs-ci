@@ -56,7 +56,7 @@ import GHC.IO.Encoding
 #endif
 
 import Control.Concurrent ( forkIO, newEmptyMVar, putMVar, takeMVar )
-import Control.Exception ( IOException, catch, finally, try )
+import Control.Exception ( IOException, catch, finally, throwIO, try )
 import System.IO.Error ( ioeGetErrorType )
 import GHC.IO.Exception ( IOErrorType(ResourceVanished) )
 #ifdef WIN32
@@ -407,7 +407,7 @@ viewDocWith pr msg = do
 #endif
                `ortryrunning` pipeDocToPager "" [] pr msg
      else pipeDocToPager "" [] pr msg
-  `catch` \ExitSuccess -> return ()
+  `catch` \e -> if e==ExitSuccess then return () else throwIO e
   where lengthGreaterThan n _ | n <= 0 = True
         lengthGreaterThan _ [] = False
         lengthGreaterThan n (_:xs) = lengthGreaterThan (n-1) xs

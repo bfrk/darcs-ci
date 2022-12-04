@@ -21,7 +21,7 @@ import Darcs.Repository.Create
     )
 import Darcs.Repository.Identify ( identifyRepositoryFor, ReadingOrWriting(..) )
 import Darcs.Repository.Pristine
-    ( applyToTentativePristineCwd
+    ( applyToTentativePristine
     , createPristineDirectoryTree
     , writePristine
     )
@@ -111,6 +111,7 @@ import Darcs.Repository.Flags
 
 import Darcs.Patch ( RepoPatch, description )
 import Darcs.Patch.Depends ( findCommon )
+import Darcs.Patch.Invertible ( mkInvertible )
 import Darcs.Patch.Set
     ( Origin
     , patchSet2FL
@@ -127,8 +128,6 @@ import Darcs.Patch.Witnesses.Ordered
     , FL(..)
     , RL(..)
     , lengthFL
-    , bunchFL
-    , mapFL
     , mapRL
     , lengthRL
     , nullFL
@@ -399,9 +398,7 @@ copyRepoOldFashioned fromRepo _toRepo verb withWorkingDir = do
   endTedious k
   local_patches <- readPatches _toRepo
   let patchesToApply = progressFL "Applying patch" $ patchSet2FL local_patches
-  sequence_ $
-    mapFL (applyToTentativePristineCwd (repoCache _toRepo)) $
-    bunchFL 100 patchesToApply
+  applyToTentativePristine _toRepo NormalVerbosity (mkInvertible patchesToApply)
   _toRepo <- finalizeRepositoryChanges _toRepo NoUpdatePending NoDryRun
   putVerbose verb $ text "Writing the working tree..."
   createPristineDirectoryTree _toRepo "." withWorkingDir

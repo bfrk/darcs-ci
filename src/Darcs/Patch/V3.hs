@@ -50,5 +50,5 @@ instance PrimPatch prim => Conflict (RepoPatchV3 prim) where
     where
       resolveOne :: Unravelled (NamedPrim prim) wX -> ConflictDetails prim wX
       resolveOne
-        | False = mapConflictDetails wnPatch . mangleOrFail
+        | False==True = mapConflictDetails wnPatch . mangleOrFail
         | True = mangleOrFail . map (mapSeal (mapFL_FL wnPatch))

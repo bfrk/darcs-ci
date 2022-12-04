@@ -40,7 +40,6 @@ import Darcs.Repository.Prefs ( getPreflist, globalCacheDir )
 import Darcs.Repository
     ( Repository
     , AccessType(RW)
-    , repoCache
     , repoLocation
     , withRepoLock
     , RepoJob(..)
@@ -66,12 +65,9 @@ import Darcs.Repository.Paths
     , pristineDirPath
     )
 import Darcs.Repository.Packs ( createPacks )
-import Darcs.Patch.Witnesses.Ordered
-     ( mapFL
-     , bunchFL
-     , lengthRL
-     )
+import Darcs.Patch.Witnesses.Ordered ( lengthRL )
 import Darcs.Patch ( RepoPatch )
+import Darcs.Patch.Invertible ( mkInvertible )
 import Darcs.Patch.Set
     ( patchSet2RL
     , patchSet2FL
@@ -111,6 +107,7 @@ import Darcs.Repository.Flags
     )
 import Darcs.Patch.Progress ( progressFL )
 import Darcs.Util.Cache ( allHashedDirs, bucketFolder, cleanCaches, mkDirCache )
+import Darcs.Repository ( UpdatePending(NoUpdatePending), finalizeRepositoryChanges )
 import Darcs.Repository.Format
     ( identifyRepoFormat
     , createRepoFormat
@@ -123,8 +120,9 @@ import Darcs.Repository.Hashed
     ( writeTentativeInventory
     , finalizeTentativeChanges
     )
+import Darcs.Repository.InternalTypes ( unsafeCoerceR )
 import Darcs.Repository.Pristine
-    ( applyToTentativePristineCwd
+    ( applyToTentativePristine
     )
 
 import Darcs.Util.Tree
@@ -203,6 +201,7 @@ optimizeCleanCmd _ opts _ =
     withRepoLock (useCache ? opts) (umask ? opts) $
     RepoJob $ \repository -> do
       cleanRepository repository
+      _ <- finalizeRepositoryChanges repository NoUpdatePending O.NoDryRun
       putInfo opts "Done cleaning repository!"
 
 optimizeUpgrade :: DarcsCommand
@@ -449,9 +448,8 @@ actuallyUpgradeFormat _opts _repository = do
   createDirectoryIfMissing False pristineDirPath
   -- We ignore the returned root hash, we don't use it.
   _ <- writePristine _repository emptyTree
-  sequence_ $
-    mapFL (applyToTentativePristineCwd (repoCache _repository)) $
-    bunchFL 100 patchesToApply
+  -- we must coerce here because we just emptied out pristine
+  applyToTentativePristine (unsafeCoerceR _repository) O.NormalVerbosity (mkInvertible patchesToApply)
   -- now make it official
   finalizeTentativeChanges _repository
   writeRepoFormat (createRepoFormat PatchFormat1 WithWorkingDir) formatPath

@@ -239,6 +239,7 @@ Library
                       Darcs.Prelude
                       Darcs.Repository
                       Darcs.Repository.ApplyPatches
+                      Darcs.Repository.Branch
                       Darcs.Repository.Clone
                       Darcs.Repository.Create
                       Darcs.Repository.Diff
@@ -274,6 +275,7 @@ Library
                       Darcs.UI.Commands.Amend
                       Darcs.UI.Commands.Annotate
                       Darcs.UI.Commands.Apply
+                      Darcs.UI.Commands.Branch
                       Darcs.UI.Commands.Clone
                       Darcs.UI.Commands.Compare
                       Darcs.UI.Commands.Convert

@@ -15,7 +15,7 @@ module Darcs.UI.Commands.Test.Impl
     , runTestable
     ) where
 
-import Darcs.Prelude hiding ( init, when, Monad(..) )
+import Darcs.Prelude hiding ( init, Monad(..) )
 import Darcs.Util.IndexedMonad
 
 import qualified Control.Monad as Base ( Monad(..) )

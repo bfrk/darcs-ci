@@ -29,7 +29,7 @@ module Darcs.Util.Cache
     ) where
 
 import Control.Concurrent.MVar ( MVar, modifyMVar_, newMVar, readMVar )
-import Control.Monad ( filterM, forM_, liftM, unless, when )
+import Control.Monad ( filterM, forM_, liftM, unless, when, void )
 import qualified Data.ByteString as B ( ByteString )
 import Data.List ( intercalate, nub, sortBy )
 import Data.Maybe ( catMaybes, fromMaybe, listToMaybe )

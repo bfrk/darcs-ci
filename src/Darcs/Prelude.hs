@@ -26,7 +26,6 @@ it to the Prelude import.
 module Darcs.Prelude
     ( module Prelude
     , module Control.Applicative
-    , module Control.Monad
     , module Data.Monoid
     , Semigroup(..)
     , module Data.Traversable
@@ -66,7 +65,6 @@ import Prelude hiding
     )
 
 import Control.Applicative ( Applicative(..), (<$>), (<*>) )
-import Control.Monad ( forM, forM_, unless, when, unless, void, (>=>) )
 import Data.Monoid ( Monoid(..) )
 import Data.Semigroup ( Semigroup(..) )
 import Data.Traversable ( traverse )

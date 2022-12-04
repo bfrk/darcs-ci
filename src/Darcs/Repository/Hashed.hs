@@ -74,10 +74,10 @@ import Darcs.Patch.Rebase.Suspended
 import Darcs.Patch.Set ( Origin, PatchSet(..), patchSet2RL )
 import Darcs.Patch.Witnesses.Ordered
     ( FL(..)
-    , foldFL_M
+    , foldlwFL
     , foldrwFL
-    , mapFL_FL
     , mapRL
+    , sequenceFL_
     , (+>+)
     , (+>>+)
     )
@@ -122,7 +122,6 @@ import Darcs.Repository.Pending
     )
 import Darcs.Repository.Pristine
     ( applyToTentativePristine
-    , applyToTentativePristineCwd
     , convertSizePrefixedPristine
     )
 import Darcs.Repository.Rebase
@@ -286,8 +285,19 @@ tentativelyAddPatches_ :: (RepoPatch p, ApplyState p ~ Tree)
                        -> UpdatePending
                        -> FL (PatchInfoAnd p) wR wY
                        -> IO (Repository 'RW p wU wY)
-tentativelyAddPatches_ upr r v upe ps =
-    foldFL_M (\r' p -> tentativelyAddPatch_ upr r' v upe p) r ps
+tentativelyAddPatches_ upr r v upe ps = do
+    let r' = unsafeCoerceR r
+    withTentativeRebase r r' (foldlwFL (removeFixupsFromSuspended . hopefully) ps)
+    withRepoDir r $ do
+       sequenceFL_ (addToTentativeInventory (repoCache r)) ps
+       when (upr == UpdatePristine) $ do
+          debugMessage "Applying to pristine cache..."
+          applyToTentativePristine r v (mkInvertible ps)
+       when (upe == YesUpdatePending) $ do
+          debugMessage "Updating pending..."
+          Sealed pend <- readTentativePending r
+          writeTentativePending r' $ invertFL (effect ps) +>>+ pend
+       return r'
 
 tentativelyAddPatch_ :: (RepoPatch p, ApplyState p ~ Tree)
                      => UpdatePristine
@@ -296,19 +306,8 @@ tentativelyAddPatch_ :: (RepoPatch p, ApplyState p ~ Tree)
                      -> UpdatePending
                      -> PatchInfoAnd p wR wY
                      -> IO (Repository 'RW p wU wY)
-tentativelyAddPatch_ upr r verb upe p = do
-    let r' = unsafeCoerceR r
-    withTentativeRebase r r' (removeFixupsFromSuspended $ hopefully p)
-    withRepoDir r $ do
-       addToTentativeInventory (repoCache r) p
-       when (upr == UpdatePristine) $ do
-          debugMessage "Applying to pristine cache..."
-          applyToTentativePristine r verb p
-       when (upe == YesUpdatePending) $ do
-          debugMessage "Updating pending..."
-          Sealed pend <- readTentativePending r
-          writeTentativePending r' $ invertFL (effect p) +>>+ pend
-       return r'
+tentativelyAddPatch_ upr r verb upe p =
+    tentativelyAddPatches_ upr r verb upe (p :>: NilFL)
 
 tentativelyRemovePatches :: (RepoPatch p, ApplyState p ~ Tree)
                          => Repository 'RW p wU wR
@@ -332,9 +331,8 @@ tentativelyRemovePatches_ upr r upe ps
         r' <- removeFromTentativeInventory r ps
         withTentativeRebase r r' (foldrwFL (addFixupsToSuspended . hopefully) ps)
         when (upr == UpdatePristine) $
-          applyToTentativePristineCwd (repoCache r) $
-            progressFL "Applying inverse to pristine" $
-            invert $ mapFL_FL mkInvertible ps
+          applyToTentativePristine r NormalVerbosity $
+            invert $ mkInvertible $ progressFL "Applying inverse to pristine" ps
         when (upe == YesUpdatePending) $ do
           debugMessage "Adding changes to pending..."
           Sealed pend <- readTentativePending r

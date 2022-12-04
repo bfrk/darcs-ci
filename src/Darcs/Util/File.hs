@@ -6,6 +6,7 @@ module Darcs.Util.File
     , getRecursiveContents
     , getRecursiveContentsFullPath
     , copyTree
+    , copySubTree
       -- * Fetching files
     , fetchFilePS
     , fetchFileLazyPS

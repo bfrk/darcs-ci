@@ -148,8 +148,8 @@ readPatchesFromInventoryEntries cache ris = read_patches (reverse ris)
     speculateAndParse h is i = speculate h is >> readSinglePatch cache i h
 
     speculate :: PatchHash -> [InventoryEntry] -> IO ()
-    speculate pHash is = do
-        already_got_one <- peekInCache cache pHash
+    speculate patch_hash is = do
+        already_got_one <- peekInCache cache patch_hash
         unless already_got_one $
             speculateFilesUsingCache cache (map snd is)
 

@@ -1,7 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Darcs.Repository.Pristine
     ( applyToTentativePristine
-    , applyToTentativePristineCwd
     , readHashedPristineRoot
     , pokePristineHash
     , peekPristineHash
@@ -21,9 +20,11 @@ import System.FilePath.Posix ( (</>) )
 import System.IO ( hPutStrLn, stderr )
 import System.IO.Error ( catchIOError )
 
-import Darcs.Patch ( description )
+import Darcs.Patch ( PatchInfoAnd, RepoPatch, description )
 import Darcs.Patch.Apply ( Apply(..) )
+import Darcs.Patch.Invertible ( Invertible )
 import Darcs.Patch.Show ( ShowPatch )
+import Darcs.Patch.Witnesses.Ordered ( FL )
 
 import Darcs.Repository.Flags ( Verbosity(..), WithWorkingDir(..) )
 import Darcs.Repository.Format ( RepoProperty(HashedInventory), formatHas )
@@ -99,34 +100,24 @@ convertSizePrefixedPristine cache ph = do
       -- and return the new root hash.
       writeDarcsHashed old cache
 
--- |applyToTentativePristine applies a patch @p@ to the tentative pristine
--- tree, and updates the tentative pristine hash
-applyToTentativePristine :: (ApplyState q ~ Tree, Apply q, ShowPatch q)
+-- | Apply an 'FL' of 'Invertible' patches tentative pristine tree, and update
+-- the tentative pristine hash. The patches need to be 'Invertible' so that we
+-- can use it when removing patches from the repository, too.
+applyToTentativePristine :: (ApplyState p ~ Tree, RepoPatch p)
                          => Repository 'RW p wU wR
                          -> Verbosity
-                         -> q wR wY
+                         -> Invertible (FL (PatchInfoAnd p)) wR wY
                          -> IO ()
-applyToTentativePristine r verb p =
-  withRepoDir r $ do
+applyToTentativePristine r verb p = do
     when (verb == Verbose) $
       putDocLn $ text "Applying to pristine..." <+> description p
-    applyToTentativePristineCwd (repoCache r) p
-
--- | Unsafe low-level version of 'applyToTentativePristine'.
--- Use only inside a transaction and with cwd set to the
--- 'repoLocation'.
-applyToTentativePristineCwd :: (ApplyState p ~ Tree, Apply p, ShowPatch p)
-                            => Cache
-                            -> p wX wY
-                            -> IO ()
-applyToTentativePristineCwd cache p = do
     tentativePristine <- gzReadFilePS tentativePristinePath
     -- Extract the pristine hash from the tentativePristine file, using
     -- peekPristineHash (this is valid since we normally just extract the hash
     -- from the first line of an inventory file; we can pass in a one-line file
     -- that just contains said hash).
     let tentativePristineHash = peekPristineHash tentativePristine
-    newPristineHash <- applyToHashedPristine cache tentativePristineHash p
+    newPristineHash <- applyToHashedPristine (repoCache r) tentativePristineHash p
     writeDocBinFile tentativePristinePath $
         pokePristineHash newPristineHash tentativePristine
 
