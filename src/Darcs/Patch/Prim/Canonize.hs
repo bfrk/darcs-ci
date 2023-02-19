@@ -14,9 +14,8 @@ import Darcs.Patch.Witnesses.Ordered ( FL(..), mapFL_FL, concatFL )
 import Darcs.Patch.Witnesses.Sealed ( unseal, Gap(..), unFreeLeft )
 import Darcs.Patch.Witnesses.Unsafe ( unsafeCoercePEnd )
 import Darcs.Util.Diff ( DiffAlgorithm, getChanges )
-import Darcs.Util.Path ( AnchoredPath )
 
-canonizeHunk :: Gap w => DiffAlgorithm -> FileHunk wX wY -> w (FL FileHunk)
+canonizeHunk :: Gap w => DiffAlgorithm -> FileHunk oid wX wY -> w (FL (FileHunk oid))
 canonizeHunk _ (FileHunk f line old new)
   | null old || null new || old == [B.empty] || new == [B.empty] =
       freeGap (FileHunk f line old new :>: NilFL)
@@ -24,10 +23,10 @@ canonizeHunk da (FileHunk f line old new) =
   makeHoley f line $ getChanges da old new
 
 makeHoley :: Gap w
-          => AnchoredPath
+          => oid
           -> Int
           -> [(Int, [B.ByteString], [B.ByteString])]
-          -> w (FL FileHunk)
+          -> w (FL (FileHunk oid))
 makeHoley f line =
   foldr
     (joinGap (:>:) . (\(l, o, n) -> freeGap (FileHunk f (l + line) o n)))

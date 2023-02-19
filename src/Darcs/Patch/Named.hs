@@ -15,8 +15,18 @@
 --  the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 --  Boston, MA 02110-1301, USA.
 
+-- | 'Named' patches group a set of changes with meta data ('PatchInfo') and
+-- explicit dependencies (created using `darcs tag` or using --ask-deps).
+--
+-- While the data constructor 'NamedP' is exported for technical reasons, code
+-- outside this modules should (and generally does) treat it as an abstract
+-- data type. The only exception is the rebase implementation i.e. the modules
+-- under "Darcs.Patch.Rebase".
+
+{-# LANGUAGE UndecidableInstances #-}
 module Darcs.Patch.Named
     ( Named(..)
+    -- treated as abstract data type except by Darcs.Patch.Rebase
     , infopatch
     , adddeps
     , anonymous
@@ -45,7 +55,8 @@ import Darcs.Patch.Format ( PatchListFormat )
 import Darcs.Patch.Info ( PatchInfo, readPatchInfo, showPatchInfo, patchinfo,
                           piName, displayPatchInfo, makePatchname )
 import Darcs.Patch.Merge ( CleanMerge(..), Merge(..) )
-import Darcs.Patch.Apply ( Apply(..) )
+import Darcs.Patch.Object ( ObjectId )
+import Darcs.Patch.Apply ( Apply(..), ObjectIdOfPatch )
 import Darcs.Patch.Commute ( Commute(..) )
 import Darcs.Patch.Ident ( Ident(..), PatchId )
 import Darcs.Patch.Inspect ( PatchInspect(..) )
@@ -350,8 +361,13 @@ showNamedPrefix f@ForDisplay n d p =
 instance (PatchListFormat p, ShowPatchBasic p) => ShowPatchBasic (Named p) where
     showPatch f (NamedP n d p) = showNamedPrefix f n d $ showPatch f p
 
-instance (Apply p, IsHunk p, PatchListFormat p,
-          ShowContextPatch p) => ShowContextPatch (Named p) where
+instance ( Apply p
+         , IsHunk p
+         , PatchListFormat p
+         , ObjectId (ObjectIdOfPatch p)
+         , ShowContextPatch p
+         ) =>
+         ShowContextPatch (Named p) where
     showContextPatch f (NamedP n d p) =
         showNamedPrefix f n d <$> showContextPatch f p
 

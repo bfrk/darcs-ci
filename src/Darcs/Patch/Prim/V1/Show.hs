@@ -1,5 +1,5 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
-{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE ViewPatterns, UndecidableInstances #-}
 module Darcs.Patch.Prim.V1.Show
     ( showHunk )
     where
@@ -9,7 +9,7 @@ import Darcs.Prelude
 import Darcs.Util.ByteString ( fromPS2Hex )
 import qualified Data.ByteString as B (ByteString, length, take, drop)
 
-import Darcs.Patch.Apply ( ApplyState )
+import Darcs.Patch.Apply ( Apply(..), ObjectIdOfPatch )
 import Darcs.Patch.FileHunk ( FileHunk(..), showFileHunk )
 import Darcs.Patch.Format ( FileNameFormat )
 import Darcs.Patch.Show ( formatFileName )
@@ -35,7 +35,8 @@ deriving instance Show (Prim wX wY)
 deriving instance Show (FilePatchType wX wY)
 deriving instance Show (DirPatchType wX wY)
 
-instance ApplyState Prim ~ Tree => PrimShow Prim where
+instance (Apply Prim, ApplyState Prim ~ Tree, ObjectIdOfPatch Prim ~ AnchoredPath) =>
+         PrimShow Prim where
   showPrim fmt (FP f AddFile) = showAddFile fmt f
   showPrim fmt (FP f RmFile)  = showRmFile fmt f
   showPrim fmt (FP f (Hunk line old new))  = showHunk fmt f line old new
@@ -45,8 +46,13 @@ instance ApplyState Prim ~ Tree => PrimShow Prim where
   showPrim fmt (DP d RmDir)  = showRmDir fmt d
   showPrim fmt (Move f f') = showMove fmt f f'
   showPrim _ (ChangePref p f t) = showChangePref p f t
-  showPrimCtx fmt (FP f (Hunk line old new)) = showContextHunk fmt (FileHunk f line old new)
-  showPrimCtx fmt p = return $ showPrim fmt p
+  showPrimCtx fmt p@(FP f (Hunk line old new)) = do
+    r <- showContextHunk fmt (FileHunk f line old new)
+    apply p
+    return r
+  showPrimCtx fmt p = do
+    apply p
+    return $ showPrim fmt p
 
 showAddFile :: FileNameFormat -> AnchoredPath -> Doc
 showAddFile fmt f = blueText "addfile" <+> formatFileName fmt f

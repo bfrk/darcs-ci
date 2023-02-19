@@ -53,7 +53,7 @@ import System.IO ( IOMode(..), hClose, hPutStrLn, openBinaryFile, stderr )
 import System.IO.Error ( catchIOError )
 import System.IO.Unsafe ( unsafeInterleaveIO )
 
-import Darcs.Patch ( RepoPatch, effect, readPatch )
+import Darcs.Patch ( RepoPatch, effect, invertFL, readPatch )
 import Darcs.Patch.Apply ( Apply(..) )
 import Darcs.Patch.Depends
     ( cleanLatestTag
@@ -89,6 +89,7 @@ import Darcs.Patch.Witnesses.Ordered
     , foldrwFL
     , mapRL
     , (+>+)
+    , (+>>+)
     )
 import Darcs.Patch.Witnesses.Sealed ( Dup(..), Sealed(..) )
 import Darcs.Patch.Witnesses.Unsafe ( unsafeCoerceP )
@@ -143,7 +144,6 @@ import Darcs.Repository.Pending
     ( finalizePending
     , readTentativePending
     , revertPending
-    , tentativelyRemoveFromPending
     , writeTentativePending
     )
 import Darcs.Repository.Pristine
@@ -350,7 +350,8 @@ tentativelyAddPatch_ upr r compr verb upe p = do
           applyToTentativePristine r ApplyNormal verb p
        when (upe == YesUpdatePending) $ do
           debugMessage "Updating pending..."
-          tentativelyRemoveFromPending r' (effect p)
+          Sealed pend <- readTentativePending r
+          writeTentativePending r' $ invertFL (effect p) +>>+ pend
        return r'
 
 tentativelyRemovePatches :: (RepoPatch p, ApplyState p ~ Tree)

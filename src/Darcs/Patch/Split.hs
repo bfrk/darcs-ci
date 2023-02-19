@@ -37,6 +37,7 @@ import Data.List ( intersperse )
 import Darcs.Patch.Witnesses.Ordered
 import Darcs.Patch.Witnesses.Sealed
 
+import Darcs.Patch.Apply ( ApplyState )
 import Darcs.Patch.FileHunk ( FileHunk(..), IsHunk(..) )
 import Darcs.Patch.Read ( ReadPatch(..) )
 import Darcs.Patch.Show ( showPatch, ShowPatch(..) )
@@ -133,7 +134,7 @@ doPrimSplit da = doPrimSplit_ da True explanation
         , ""
         ]
 
-doPrimSplit_ :: (PrimPatch prim, IsHunk p)
+doPrimSplit_ :: forall prim p wX wY. (PrimPatch prim, IsHunk p, ApplyState p ~ ApplyState prim)
              => D.DiffAlgorithm
              -> Bool
              -> [B.ByteString]
@@ -157,7 +158,7 @@ doPrimSplit_ da edit_before_part helptext (isHunk -> Just (FileHunk fn n before 
                      then hunk before before' +>+ hunk before' after' +>+ hunk after' after
                      else hunk before after' +>+ hunk after' after)
     where sep = BC.pack "=========================="
-          hunk :: PrimPatch prim => [B.ByteString] -> [B.ByteString] -> FL prim wA wB
+          hunk :: [B.ByteString] -> [B.ByteString] -> FL prim wA wB
           hunk b a = canonizeFL da (primFromHunk (FileHunk fn n b a) :>: NilFL)
           mkSep s = BC.append sep (BC.pack s)
           breakSep xs = case break (sep `BC.isPrefixOf`) xs of

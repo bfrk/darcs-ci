@@ -73,9 +73,7 @@ withPatchMods (FMM m) fps =
 -- apply.
 instance ApplyMonad Tree FileModMonad where
     type ApplyMonadBase FileModMonad = FileModMonad
-    nestedApply _ _ = error "nestedApply FileModMonad"
-    liftApply _ _ = error "liftApply FileModMonad"
-    getApplyState = error "getApplyState FileModMonad"
+    readFilePS = error "readFilePS FileModMonad"
 
 instance ApplyMonadTree FileModMonad where
     mDoesDirectoryExist d = do

@@ -61,7 +61,7 @@ import Darcs.UI.PatchHeader
 
 import Darcs.Repository.Flags ( UpdatePending(..) )
 import Darcs.Patch ( RepoPatch, description, PrimOf
-                   , effect, invert, invertFL, sortCoalesceFL
+                   , effect, invert, invertFL, canonizeFL
                    )
 import Darcs.Patch.Apply ( ApplyState )
 import Darcs.Patch.Depends ( contextPatches, patchSetUnion, findCommon )
@@ -233,7 +233,7 @@ doAmend cfg files =
               let invPrims = reverseRL (invertFL chosenPrims)
               addChangesToPatch cfg repository context oldp invPrims pending working
             else
-              go (sortCoalesceFL (pending +>+ working))
+              go (canonizeFL (O.diffAlgorithm ? cfg) (pending +>+ working))
         -- amending a tag
         else
           if hasEditMetadata cfg && isNothing files

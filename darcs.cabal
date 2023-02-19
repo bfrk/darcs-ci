@@ -165,11 +165,13 @@ Library
                       Darcs.Patch.Match
                       Darcs.Patch.Merge
                       Darcs.Patch.Named
+                      Darcs.Patch.Object
                       Darcs.Patch.PatchInfoAnd
                       Darcs.Patch.Permutations
                       Darcs.Patch.Prim
                       Darcs.Patch.Prim.Canonize
                       Darcs.Patch.Prim.Class
+                      Darcs.Patch.Prim.Coalesce
                       Darcs.Patch.Prim.FileUUID
                       Darcs.Patch.Prim.FileUUID.Apply
                       Darcs.Patch.Prim.FileUUID.Coalesce
@@ -189,7 +191,6 @@ Library
                       Darcs.Patch.Prim.V1.Mangle
                       Darcs.Patch.Prim.V1.Read
                       Darcs.Patch.Prim.V1.Show
-                      Darcs.Patch.Prim.V1.Sift
                       Darcs.Patch.Prim.WithName
                       Darcs.Patch.Progress
                       Darcs.Patch.Read

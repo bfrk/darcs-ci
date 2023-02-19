@@ -29,6 +29,7 @@ module Darcs.Patch.Prim.FileUUID.ObjectMap
 
 import Darcs.Prelude
 
+import Darcs.Patch.Object ( ObjectIdOf )
 import Darcs.Util.Hash ( Hash )
 import Darcs.Util.Path ( Name )
 import qualified Data.ByteString as B (ByteString)
@@ -63,3 +64,5 @@ data ObjectMap (m :: * -> *) = ObjectMap
   , putObject :: UUID -> Object m -> m (ObjectMap m)
   , listObjects :: m [UUID]
   }
+
+type instance ObjectIdOf ObjectMap = UUID

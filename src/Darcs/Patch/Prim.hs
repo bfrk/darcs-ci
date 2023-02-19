@@ -12,6 +12,7 @@ module Darcs.Patch.Prim
     , Mangled
     , Unravelled
     , canonizeFL
+    , coalesce
     ) where
 
 import Darcs.Patch.Prim.Class
@@ -27,6 +28,5 @@ import Darcs.Patch.Prim.Class
     , Mangled
     , Unravelled
     )
-import Darcs.Patch.Prim.Canonize
-    ( canonizeFL
-    )
+import Darcs.Patch.Prim.Canonize ( canonizeFL )
+import Darcs.Patch.Prim.Coalesce ( coalesce )

@@ -462,7 +462,7 @@ instance (StorableId name, PrimPatch prim)
   => ShowContextPatch (RepoPatchV3 name prim) where
 
   showContextPatch f (Prim p) = showContextPatch f p
-  showContextPatch f p = return $ showPatch f p
+  showContextPatch f p = apply p >> return (showPatch f p)
 
 -- * Read and Write
 

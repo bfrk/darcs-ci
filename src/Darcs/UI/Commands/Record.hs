@@ -31,7 +31,7 @@ import Data.Foldable ( traverse_ )
 import System.Directory ( removeFile )
 import System.Exit ( ExitCode(..), exitFailure, exitSuccess )
 
-import Darcs.Patch ( PrimOf, RepoPatch, sortCoalesceFL, summaryFL )
+import Darcs.Patch ( PrimOf, RepoPatch, canonizeFL, summaryFL )
 import Darcs.Patch.Apply ( ApplyState )
 import Darcs.Patch.Info ( PatchInfo, patchinfo )
 import Darcs.Patch.Named ( adddeps, infopatch )
@@ -267,7 +267,8 @@ doRecord repository cfg files pw@(pending :> working) = do
     debugMessage "I'm slurping the repository."
     pristine <- readPristine repository
     debugMessage "About to select changes..."
-    (chs :> _ ) <- runInvertibleSelection (sortCoalesceFL $ pending +>+ working) $
+    let da = O.diffAlgorithm ? cfg
+    (chs :> _ ) <- runInvertibleSelection (canonizeFL da $ pending +>+ working) $
                       selectionConfigPrim
                           First "record" (patchSelOpts cfg)
                           (Just (primSplitter (O.diffAlgorithm ? cfg)))

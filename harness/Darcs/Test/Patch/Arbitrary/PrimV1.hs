@@ -23,7 +23,8 @@ import Darcs.Patch.Witnesses.Sealed
 import Darcs.Patch.Witnesses.Eq
 import Darcs.Patch.Witnesses.Unsafe
 import Darcs.Patch.Witnesses.Ordered
-import Darcs.Patch.Prim.V1.Core ( FilePatchType( Hunk ), isIdentity )
+import Darcs.Patch.Prim ( isIdentity )
+import Darcs.Patch.Prim.V1.Core ( FilePatchType( Hunk ) )
 import qualified Darcs.Patch.Prim.V1.Core as Prim ( Prim( FP ) )
 import qualified Darcs.Patch.V1.Prim as V1 ( Prim(..) )
 import qualified Darcs.Patch.V2.Prim as V2 ( Prim(..) )

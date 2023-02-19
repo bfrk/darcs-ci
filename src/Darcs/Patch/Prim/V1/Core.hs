@@ -19,8 +19,6 @@ module Darcs.Patch.Prim.V1.Core
     ( Prim(..)
     , DirPatchType(..)
     , FilePatchType(..)
-    , isIdentity
-    , comparePrim
     ) where
 
 import Darcs.Prelude
@@ -28,14 +26,16 @@ import Darcs.Prelude
 import qualified Data.ByteString as B (ByteString)
 
 import Darcs.Util.Path ( AnchoredPath )
-import Darcs.Patch.Witnesses.Eq ( Eq2(..), EqCheck(..) )
+import Darcs.Patch.Witnesses.Eq ( Eq2(..) )
 import Darcs.Patch.Witnesses.Unsafe ( unsafeCoerceP )
+import Darcs.Patch.Apply ( ApplyState )
 import Darcs.Patch.Debug ( PatchDebug(..) )
 import Darcs.Patch.FileHunk ( FileHunk(..), IsHunk(..) )
 import Darcs.Patch.Invert ( Invert(..) )
 import Darcs.Patch.Inspect ( PatchInspect(..) )
+import Darcs.Patch.Object ( ObjectIdOf )
 import Darcs.Patch.Permutations () -- for Invert instance of FL
-import Darcs.Patch.Prim.Class ( PrimConstruct(..) )
+import Darcs.Patch.Prim.Class ( PrimConstruct(..), PrimSift(..) )
 
 data Prim wX wY where
     Move :: !AnchoredPath -> !AnchoredPath -> Prim wX wY
@@ -75,14 +75,7 @@ instance Invert DirPatchType where
     invert RmDir = AddDir
     invert AddDir = RmDir
 
-isIdentity :: Prim wX wY -> EqCheck wX wY
-isIdentity (FP _ (Binary old new)) | old == new = unsafeCoerceP IsEq
-isIdentity (FP _ (Hunk _ old new)) | old == new = unsafeCoerceP IsEq
-isIdentity (FP _ (TokReplace _ old new)) | old == new = unsafeCoerceP IsEq
-isIdentity (Move old new) | old == new = unsafeCoerceP IsEq
-isIdentity _ = NotEq
-
-instance PrimConstruct Prim where
+instance ObjectIdOf (ApplyState Prim) ~ AnchoredPath => PrimConstruct Prim where
     addfile f = FP f AddFile
     rmfile f = FP f RmFile
     adddir d = DP d AddDir
@@ -94,7 +87,7 @@ instance PrimConstruct Prim where
     binary f old new = FP f $ Binary old new
     primFromHunk (FileHunk f line before after) = FP f (Hunk line before after)
 
-instance IsHunk Prim where
+instance ObjectIdOf (ApplyState Prim) ~ AnchoredPath => IsHunk Prim where
     isHunk (FP f (Hunk line before after)) = Just (FileHunk f line before after)
     isHunk _ = Nothing
 
@@ -133,19 +126,7 @@ instance Eq2 Prim where
 instance Eq (Prim wX wY) where
     (==) = unsafeCompare
 
--- | 'comparePrim' @p1 p2@ is used to provide an arbitrary ordering between
---   @p1@ and @p2@.  Basically, identical patches are equal and
---   @Move < DP < FP < ChangePref@.
---   Everything else is compared in dictionary order of its arguments.
-comparePrim :: Prim wX wY -> Prim wW wZ -> Ordering
-comparePrim (Move a b) (Move c d) = compare (a, b) (c, d)
-comparePrim (Move _ _) _ = LT
-comparePrim _ (Move _ _) = GT
-comparePrim (DP d1 p1) (DP d2 p2) = compare (d1, p1) $ unsafeCoerceP (d2, p2)
-comparePrim (DP _ _) _ = LT
-comparePrim _ (DP _ _) = GT
-comparePrim (FP f1 fp1) (FP f2 fp2) = compare (f1, fp1) $ unsafeCoerceP (f2, fp2)
-comparePrim (FP _ _) _ = LT
-comparePrim _ (FP _ _) = GT
-comparePrim (ChangePref a1 b1 c1) (ChangePref a2 b2 c2)
- = compare (c1, b1, a1) (c2, b2, a2)
+instance PrimSift Prim where
+  primIsSiftable (FP _ (Binary _ _)) = True
+  primIsSiftable (FP _ (Hunk _ _ _)) = True
+  primIsSiftable _ = False

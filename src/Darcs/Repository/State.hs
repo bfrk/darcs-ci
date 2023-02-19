@@ -52,7 +52,7 @@ import qualified Data.ByteString as B ( ByteString, concat )
 import qualified Data.ByteString.Char8 as BC ( pack, unpack )
 import qualified Data.ByteString.Lazy as BL ( toChunks )
 
-import Darcs.Patch ( RepoPatch, PrimOf, sortCoalesceFL
+import Darcs.Patch ( RepoPatch, PrimOf, canonizeFL
                    , PrimPatch, maybeApplyToTree
                    , tokreplace, forceTokReplace, move )
 import Darcs.Patch.Named ( anonymous )
@@ -230,9 +230,9 @@ unrecordedChanges :: (RepoPatch p, ApplyState p ~ Tree)
                   => DiffOpts
                   -> Repository rt p wU wR
                   -> Maybe [AnchoredPath] -> IO (FL (PrimOf p) wR wU)
-unrecordedChanges dopts r paths = do
+unrecordedChanges dopts@DiffOpts{..} r paths = do
   (pending :> working) <- readPendingAndWorking dopts r paths
-  return $ sortCoalesceFL (pending +>+ working)
+  return $ canonizeFL diffAlg (pending +>+ working)
 
 -- Implementation note: it is important to do things in the right order: we
 -- first have to read the pending patch, then detect moves, then detect adds,

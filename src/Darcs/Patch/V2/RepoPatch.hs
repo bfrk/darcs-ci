@@ -861,7 +861,7 @@ instance PrimPatch prim => ShowPatchBasic (RepoPatchV2 prim) where
 
 instance PrimPatch prim => ShowContextPatch (RepoPatchV2 prim) where
     showContextPatch f (Normal p) = showContextPatch f p
-    showContextPatch f p = return $ showPatch f p
+    showContextPatch f p = apply p >> return (showPatch f p)
 
 instance PrimPatch prim => ShowPatch (RepoPatchV2 prim) where
     summary = plainSummary

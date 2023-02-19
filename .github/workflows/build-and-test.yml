@@ -39,9 +39,7 @@ jobs:
             ghc: 8.2.2
     env:
       runtests: ${{ matrix.ghc == '8.2.2' || matrix.ghc == '9.4.2' }}
-      # for some reason this test randomly fails with darcs.net server
-      # timeouts or similar errors; works fine on my machine
-      tests-to-run: -t='!network/log'
+      tests-to-run: # e.g. -t=EXAMPLE
       testcmd: cabal run -- darcs-test -j=6 -f=123 -i=yn -c=yn --hide
       ACTIONS_ALLOW_UNSECURE_COMMANDS: true
       # avoid occasional timeouts in test scripts that access darcs.net:
