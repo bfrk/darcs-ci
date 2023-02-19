@@ -155,13 +155,12 @@ module Darcs.UI.Options.All
     , AllowConflicts (..) -- re-export
     , conflictsNo
     , conflictsYes
-    , handleConflicts
     , ExternalMerge (..) -- re-export
     , externalMerge
     , reorder
 
     -- optimizations
-    , Compression (..)
+    , Compression (..) -- re-export
     , compress
     , usePacks
     , WithPatchIndex (..) -- re-export
@@ -246,7 +245,8 @@ module Darcs.UI.Options.All
 import Darcs.Prelude
 
 import Darcs.Repository.Flags
-    ( RemoteDarcs (..)
+    ( Compression (..)
+    , RemoteDarcs (..)
     , Reorder (..)
     , Verbosity (..)
     , UseCache (..)
@@ -1009,42 +1009,7 @@ conflicts def = withDefault (Just def)
   , RawNoArg [] ["dont-allow-conflicts","no-allow-conflicts","no-resolve-conflicts"]
       F.NoAllowConflicts (Just NoAllowConflicts) "fail if there are patches that would create conflicts"
   , RawNoArg [] ["skip-conflicts"]
-      F.SkipConflicts Nothing "filter out any patches that would create conflicts"
-{-
-  , RawNoArg [] ["rebase-conflicts"]
-      F.SuspendConflicts Nothing
-      "rebase suspend local patches that conflict with remote ones (pull only)"
-  , RawNoArg [] ["store-conflicts"]
-      F.StoreConflicts Nothing
-      "store conflicting patches in the receiving repo on a new branch"
--}
-  ]
-
-handleConflicts :: AllowConflicts -> PrimDarcsOption (Maybe AllowConflicts)
-handleConflicts def =
-  withDefault (Just def) $
-    [ RawStrArg [] ["prehook"] F.Conflicts unF toV unV "SPEC" desc ]
-  where
-    unF f = [ s | F.Conflicts s <- [f] ]
-    unV x = [ showV n | n <- [x] ]
-    toV = parseV
-    expected = "one of: mark, yes, no, skip"
-    desc = "specify how to handle conflicts (" ++ expected ++ ")"
-    showV (Just YesAllowConflicts) = "yes"
-    showV (Just NoAllowConflicts) = "no"
-    showV (Just YesAllowConflictsAndMark) = "mark"
-    showV Nothing = "skip"
-    parseV s =
-      case s of
-        "mark" -> Just YesAllowConflictsAndMark
-        "yes" -> Just YesAllowConflicts
-        "no" -> Just NoAllowConflicts
-        "skip" -> Nothing
-        _ -> throwArgumentParseError s expected
-{-
-        "rebase" -> Just RebaseConflicts
-        "store" -> Just StoreConflicts
--}
+      F.SkipConflicts Nothing "filter out any patches that would create conflicts" ]
 
 -- Technically not an isomorphism.
 externalMerge :: PrimDarcsOption ExternalMerge
@@ -1068,10 +1033,6 @@ reorder = withDefault NoReorder
 
 -- * Optimizations
 
-data Compression = NoCompression | GzipCompression
-  deriving ( Eq, Show )
-
--- | push
 compress :: PrimDarcsOption Compression
 compress = withDefault GzipCompression
   [ RawNoArg [] ["compress"] F.Compress GzipCompression "compress patch data"
@@ -1222,17 +1183,17 @@ cloneKind = withDefault NormalClone
 
 -- ** convert import/export
 
-marks :: DarcsOption a (Maybe String -> Maybe String -> a)
+marks :: DarcsOption a (Maybe AbsolutePath -> Maybe AbsolutePath -> a)
 marks = readMarks ^ writeMarks
 
-readMarks :: PrimDarcsOption (Maybe String)
-readMarks = singleStrArg [] ["read-marks"] F.ReadMarks arg
+readMarks :: PrimDarcsOption (Maybe AbsolutePath)
+readMarks = singleAbsPathArg [] ["read-marks"] F.ReadMarks arg
     "FILE" "continue conversion, previously checkpointed by --write-marks"
   where arg (F.ReadMarks s) = Just s
         arg _ = Nothing
 
-writeMarks :: PrimDarcsOption (Maybe String)
-writeMarks = singleStrArg [] ["write-marks"] F.WriteMarks arg
+writeMarks :: PrimDarcsOption (Maybe AbsolutePath)
+writeMarks = singleAbsPathArg [] ["write-marks"] F.WriteMarks arg
     "FILE" "checkpoint conversion to continue it later"
   where arg (F.WriteMarks s) = Just s
         arg _ = Nothing

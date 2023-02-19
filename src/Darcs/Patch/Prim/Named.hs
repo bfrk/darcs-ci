@@ -27,7 +27,6 @@ import Darcs.Prelude hiding ( take )
 
 import Darcs.Patch.Ident ( PatchId, SignedId(..), StorableId(..) )
 import Darcs.Patch.Info ( PatchInfo, makePatchname )
-import Darcs.Patch.Prim.Class ( PrimMangleUnravelled(..) )
 import Darcs.Patch.Prim.WithName ( PrimWithName(..) )
 import Darcs.Patch.Show ( ShowPatchFor(..) )
 
@@ -92,9 +91,6 @@ instance StorableId PrimPatchId where
     text "hash" <+> text (show i) <+> packedString (sha1Show h)
   showId ForDisplay _ = mempty
 
-instance Print PrimPatchId where
-  print = showId ForStorage
-
 -- Because we are using unsafePerformIO, we need -fno-cse for
 -- this module. We don't need -fno-full-laziness because the
 -- body of the unsafePerformIO mentions 'p' so can't float outside
@@ -112,8 +108,3 @@ anonymousNamedPrim p =
            (abs (Binary.decode $ BL.fromStrict b8))
            (Binary.decode $ BL.fromStrict b20))
         p
-
-instance PrimMangleUnravelled prim => PrimMangleUnravelled (NamedPrim prim) where
-  -- mangleUnravelled :: Unravelled prim wX -> Maybe (Mangled prim wX)
-  -- WIP TODO define a proper instance that uses IDs to improve markup
-  mangleUnravelled _ = undefined

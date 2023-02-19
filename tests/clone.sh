@@ -16,6 +16,24 @@ darcs clone temp1 --context="${abs_to_context}" temp2
 darcs log --context --repo temp2 > repo2_context
 diff -u "${abs_to_context}" repo2_context
 
+# trailing slash in the target dir should not change the result
+rm -rf temp2
+darcs clone temp1 --context="${abs_to_context}" temp2/
+darcs log --context --repo temp2 > repo2_context
+diff -u "${abs_to_context}" repo2_context
+
+# clone should fail if the target dir already exists
+rm -rf temp2
+mkdir temp2
+not darcs clone temp1 temp2
+not ls temp2/* temp2/.[^.]*
+
+# same, with target dir containing a trailing slash
+rm -rf temp2
+mkdir temp2
+not darcs clone temp1 temp2/
+not ls temp2/* temp2/.[^.]*
+
 # issue1865: cover interaction of clone --context with tags
 
 rm -rf temp1 temp2

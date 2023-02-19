@@ -60,7 +60,7 @@ import Darcs.UI.Flags
     , minimize
     , editDescription
     )
-import Darcs.UI.Options ( parseFlags, (?), (^) )
+import Darcs.UI.Options ( (?), (^) )
 import qualified Darcs.UI.Options.All as O
 
 import Darcs.Patch.PatchInfoAnd ( PatchInfoAnd, hopefully, patchDesc )
@@ -135,10 +135,11 @@ import Darcs.Util.SignalHandler ( catchInterrupt )
 patchSelOpts :: [DarcsFlag] -> S.PatchSelectionOptions
 patchSelOpts flags = S.PatchSelectionOptions
     { S.verbosity = verbosity ? flags
-    , S.matchFlags = parseFlags O.matchSeveral flags
+    , S.matchFlags = O.matchSeveral ? flags
     , S.interactive = isInteractive True flags
     , S.selectDeps = selectDeps ? flags
     , S.withSummary = O.withSummary ? flags
+    , S.withContext = O.NoContext
     }
 
 send :: DarcsCommand
@@ -281,7 +282,7 @@ prepareBundle opts common e = do
        Left to_be_sent -> makeBundle Nothing
                                       (unsafeCoerceP common)
                                       (mapFL_FL hopefully to_be_sent)
-  signString (parseFlags O.sign opts) unsig_bundle
+  signString (O.sign ? opts) unsig_bundle
 
 sendBundle
   :: forall p wX wY

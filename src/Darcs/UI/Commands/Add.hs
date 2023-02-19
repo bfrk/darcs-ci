@@ -85,7 +85,7 @@ import Darcs.Repository
     )
 import Darcs.Repository.Prefs ( isBoring )
 import Darcs.Util.File ( getFileStatus )
-import Darcs.Patch.Witnesses.Ordered ( FL(..), concatGapsFL, nullFL )
+import Darcs.Patch.Witnesses.Ordered ( FL(..), (+>+), nullFL )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(..), Gap(..), FreeLeft, unFreeLeft )
 
 addDescription :: String
@@ -181,7 +181,8 @@ addFiles opts paths =
     when (nullFL ps && not (null paths)) $
         fail "No files were added"
     addToPending repository (diffingOpts opts) ps
-    void $ finalizeRepositoryChanges repository YesUpdatePending (O.dryRun ? opts)
+    void $ finalizeRepositoryChanges repository YesUpdatePending
+      (O.compress ? opts) (O.dryRun ? opts)
     unless gotDryRun $ do
       putInfo opts $ vcat $
         map text $ ["Finished adding:"] ++ map displayPath (listTouchedFiles ps)
@@ -245,7 +246,7 @@ addp msgs opts cur0 files = do
        putWarning opts . text $ "WARNING: Some files were not added because they are already in the repository."
        putVerboseWarning opts . text $ dupMsg ++ caseMsg
        mapM_ (putVerboseWarning opts . text . displayPath) uniq_dups
-    return $ concatGapsFL ps
+    return $ foldr (joinGap (+>+)) (emptyGap NilFL) ps
   where
     addp' :: Tree IO
           -> AnchoredPath

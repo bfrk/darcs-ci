@@ -1,4 +1,4 @@
-#!/bin/env bash
+#!/usr/bin/env bash
 # A test for test --linear, test --bisect and test --backoff.
 # In general it construct various repositories and try
 # to find the last recent failing patch and match it with

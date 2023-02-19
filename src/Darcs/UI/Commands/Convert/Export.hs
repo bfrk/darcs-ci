@@ -67,8 +67,7 @@ import Darcs.Repository
     , repoCache
     , withRepository
     )
-import Darcs.Repository.Pristine ( readHashedPristineRoot )
-import Darcs.Repository.Traverse ( cleanPristineDir )
+import Darcs.Repository.Pristine ( cleanPristineDir, readHashedPristineRoot )
 
 import Darcs.UI.Commands
     ( DarcsCommand(..)
@@ -97,6 +96,7 @@ import Darcs.Util.Path
     , AnchoredPath(..)
     , anchorPath
     , appendPath
+    , toFilePath
     )
 import Darcs.Util.Printer ( Doc, text )
 import Darcs.Util.Tree
@@ -170,12 +170,12 @@ fastExport :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 fastExport _ opts _ = do
   marks <- case parseFlags O.readMarks opts of
     Nothing -> return emptyMarks
-    Just f  -> readMarks f
+    Just f  -> readMarks (toFilePath f)
   newMarks <-
     withRepository (useCache ? opts) $ RepoJob $ \repo -> fastExport' repo marks
   case parseFlags O.writeMarks opts of
     Nothing -> return ()
-    Just f  -> writeMarks f newMarks
+    Just f  -> writeMarks (toFilePath f) newMarks
 
 fastExport' :: (RepoPatch p, ApplyState p ~ Tree)
             => Repository rt p wU wR -> Marks -> IO Marks

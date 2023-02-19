@@ -27,7 +27,7 @@ else
 fi
 
 if [ x${REMOTE} = x ]; then
-  REMOTE=$(whoami)@localhost
+  REMOTE=$(whoami)@localhost.
 fi
 
 init_remote_repo() {

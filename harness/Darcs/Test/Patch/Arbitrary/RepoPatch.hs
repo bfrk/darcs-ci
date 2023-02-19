@@ -1,6 +1,6 @@
 {-# LANGUAGE UndecidableInstances, ViewPatterns #-}
 -- | Test case generator for patch with a Merge instance
-module Darcs.Test.Patch.Arbitrary.Mergeable
+module Darcs.Test.Patch.Arbitrary.RepoPatch
   ( withSingle
   , withPair
   , withTriple
@@ -8,7 +8,7 @@ module Darcs.Test.Patch.Arbitrary.Mergeable
   , withSequence
   , withAllSequenceItems
   , NotRepoPatchV1(..)
-  , ArbitraryMergeable(..)
+  , ArbitraryRepoPatch(..)
   ) where
 
 import Darcs.Prelude
@@ -22,6 +22,7 @@ import Darcs.Patch.Witnesses.Sealed
 import Darcs.Patch.Witnesses.Ordered hiding ( Fork )
 import Darcs.Patch.Apply ( Apply(..) )
 import Darcs.Patch.FromPrim ( PrimOf )
+import Darcs.Patch.RepoPatch ( RepoPatch )
 import Darcs.Patch.V1 ( RepoPatchV1 )
 
 import Data.Constraint
@@ -31,10 +32,11 @@ data NotRepoPatchV1 p = NotRepoPatchV1 (forall prim . Dict (p ~ RepoPatchV1 prim
 
 -- | Class to simplify type signatures and superclass constraints.
 class
-  ( ArbitraryPrim (PrimOf p)
+  ( RepoPatch p
+  , ArbitraryPrim (PrimOf p)
   , ModelOf p ~ ModelOf (PrimOf p)
   , ApplyState p ~ RepoState (ModelOf p)
-  ) => ArbitraryMergeable p where
+  ) => ArbitraryRepoPatch p where
 
   notRepoPatchV1 :: Maybe (NotRepoPatchV1 p)
 

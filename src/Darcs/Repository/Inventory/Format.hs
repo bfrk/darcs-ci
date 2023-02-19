@@ -8,7 +8,6 @@ module Darcs.Repository.Inventory.Format
     , PristineHash
     , inventoryPatchNames
     , parseInventory
-    , parseInventoryParent
     , parseHeadInventory -- not used
     , showInventory
     , showInventoryPatches
@@ -18,9 +17,6 @@ module Darcs.Repository.Inventory.Format
     , peekPristineHash
     , skipPristineHash
     , pristineName
-    -- exported for D.R.Branch
-    , pPristineHash
-    , pHash
     -- properties
     , prop_inventoryParseShow
     , prop_peekPokePristineHash
@@ -78,10 +74,6 @@ parseHeadInventory = fmap fst . parse pHeadInv
 
 parseInventory :: B.ByteString -> Either String Inventory
 parseInventory = fmap fst . parse pInv
-
--- | Parse only the (optional) parent inventory hash, ignore the patches.
-parseInventoryParent :: B.ByteString -> Either String (Maybe InventoryHash)
-parseInventoryParent = fmap fst . parse pInvParent
 
 pHeadInv :: Parser HeadInventory
 pHeadInv = (,) <$> pPristineHash <*> pInv

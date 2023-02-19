@@ -41,16 +41,16 @@ import Darcs.Repository
     , UpdatePending(..)
     , addToPending
     , finalizeRepositoryChanges
-    , readPristine
     , readPristineAndPending
     , readUnrecorded
     )
 import Darcs.Repository.Diff( treeDiff )
 
-import Darcs.Patch ( RepoPatch, PrimOf, PrimPatch, listTouchedFiles )
+import Darcs.Patch ( RepoPatch, PrimOf, PrimPatch, adddir, rmdir, addfile, rmfile,
+                     listTouchedFiles )
 import Darcs.Patch.Apply( ApplyState )
-import Darcs.Patch.Witnesses.Ordered ( FL(..), concatGapsFL, nullFL )
-import Darcs.Patch.Witnesses.Sealed ( Sealed(..), FreeLeft, unFreeLeft )
+import Darcs.Patch.Witnesses.Ordered ( FL(..), (+>+), nullFL )
+import Darcs.Patch.Witnesses.Sealed ( Sealed(..), Gap(..), FreeLeft, unFreeLeft )
 import Darcs.Repository.Prefs ( filetypeFunction, FileType )
 import Darcs.Util.Tree( Tree, TreeItem(..), explodePaths )
 import qualified Darcs.Util.Tree as T ( find, modifyTree, expand, list )
@@ -109,7 +109,7 @@ removeCmd fps opts relargs = do
             fail "No files were removed."
         addToPending repository (diffingOpts opts) p
         void $ finalizeRepositoryChanges repository YesUpdatePending
-            (O.dryRun ? opts)
+            (O.compress ? opts) (O.dryRun ? opts)
         putInfo opts $ vcat $ map text $ ["Will stop tracking:"] ++
             map displayPath (listTouchedFiles p)
 
@@ -121,65 +121,50 @@ makeRemovePatch :: (RepoPatch p, ApplyState p ~ Tree)
                 => [DarcsFlag] -> Repository rt p wU wR
                 -> [AnchoredPath] -> IO (Sealed (FL (PrimOf p) wU))
 makeRemovePatch opts repository files = do
-  recorded <- T.expand =<< readPristine repository
-  pending <- T.expand =<< readPristineAndPending repository
+  recorded <- T.expand =<< readPristineAndPending repository
   unrecorded <- readUnrecorded repository (O.useIndex ? opts) $ Just files
   ftf <- filetypeFunction
-  result <- foldM removeOnePath (ftf, recorded, pending, unrecorded, []) files
+  result <- foldM removeOnePath (ftf, recorded, unrecorded, []) files
   case result of
-    (_, _, _, _, patches) ->
+    (_, _, _, patches) ->
       return $
-      unFreeLeft $ concatGapsFL $ reverse patches
+      unFreeLeft $ foldr (joinGap (+>+)) (emptyGap NilFL) $ reverse patches
   where
-    removeOnePath (ftf, recorded, pending, unrecorded, patches) f = do
-      let pending' = T.modifyTree pending f Nothing
+    removeOnePath (ftf, recorded, unrecorded, patches) f = do
+      let recorded' = T.modifyTree recorded f Nothing
           unrecorded' = T.modifyTree unrecorded f Nothing
-      local <-
-        makeRemoveGap opts ftf recorded pending pending' unrecorded unrecorded' f
+      local <- makeRemoveGap opts ftf recorded unrecorded unrecorded' f
       -- we can tell if the remove succeeded by looking if local is
       -- empty. If the remove succeeded, we should pass on updated
-      -- pending and unrecorded that reflect the removal
+      -- recorded and unrecorded that reflect the removal
       return $
         case local of
-          Just gap -> (ftf, recorded, pending', unrecorded', gap : patches)
-          _ -> (ftf, recorded, pending, unrecorded, patches)
+          Just gap -> (ftf, recorded', unrecorded', gap : patches)
+          _ -> (ftf, recorded, unrecorded, patches)
 
--- | Return the FL of patches to remove the item at the given path, wrapped in
--- a 'Gap'. Returns 'Nothing' in case the path cannot be removed (if it is not
--- tracked (i.e. in the pending state), or if it's a directory and is not empty).
-makeRemoveGap
-  :: PrimPatch prim
-  => [DarcsFlag]
-  -> (FilePath -> FileType)
-  -> Tree IO      -- ^ recorded state
-  -> Tree IO      -- ^ pending state
-  -> Tree IO      -- ^ pending state with item removed
-  -> Tree IO      -- ^ unrecorded state
-  -> Tree IO      -- ^ unrecorded state with item removed
-  -> AnchoredPath -- ^ path of item
-  -> IO (Maybe (FreeLeft (FL prim)))
-makeRemoveGap opts ftf recorded pending pending' unrecorded unrecorded' path =
-    case (T.find recorded path, T.find pending path, T.find unrecorded path) of
-        (_, Just (SubTree _), Just (SubTree unrecordedChildren))
-            | not $ null (T.list unrecordedChildren) ->
-              skipAndWarn "it is not empty"
-        (Just _, _, Nothing) ->
-            -- item was already removed in the working tree
-            -- (may or may not be removed in pending)
-            -- FIXME The result here, if non-empty, is in the wrong context,
-            -- since it applies after pending and not after working, as
-            -- expected by addToPending. Concretely, the item exists after
-            -- pending, but was removed in the working tree, so applying the
-            -- remove after working is wrong. It is unclear to me why this
-            -- still seems to work. Anyway, the previous solution is not
-            -- better: it adds the file before removing it, which is also
-            -- incorrect (the addfile should be right after pending, the
-            -- remove should be after working.
-            Just <$> treeDiff (diffAlgorithm ? opts) ftf pending pending'
-        (_, Just _, Just _) ->
-            -- item is present in both pending and working
-            Just <$> treeDiff (diffAlgorithm ? opts) ftf unrecorded unrecorded'
-        _ -> skipAndWarn "it is not tracked by darcs"
+-- | Takes a file path and returns the FL of patches to remove that, wrapped in
+--   a 'Gap'.
+--   Returns 'Nothing' in case the path cannot be removed (if it is not tracked,
+--   or if it's a directory and it's not tracked).
+--   The three 'Tree' arguments are the recorded state, the unrecorded state
+--   excluding the removal of this file, and the unrecorded state including the
+--   removal of this file.
+makeRemoveGap :: PrimPatch prim => [DarcsFlag] -> (FilePath -> FileType)
+                -> Tree IO -> Tree IO -> Tree IO -> AnchoredPath
+                -> IO (Maybe (FreeLeft (FL prim)))
+makeRemoveGap opts ftf recorded unrecorded unrecorded' path =
+    case (T.find recorded path, T.find unrecorded path) of
+        (Just (SubTree _), Just (SubTree unrecordedChildren)) ->
+            if not $ null (T.list unrecordedChildren)
+              then skipAndWarn "it is not empty"
+              else return $ Just $ freeGap (rmdir path :>: NilFL)
+        (Just (File _), Just (File _)) -> do
+            Just `fmap` treeDiff (diffAlgorithm ? opts) ftf unrecorded unrecorded'
+        (Just (File _), _) ->
+            return $ Just $ freeGap (addfile path :>: rmfile path :>: NilFL)
+        (Just (SubTree _), _) ->
+            return  $ Just $ freeGap (adddir path :>: rmdir path :>: NilFL)
+        (_, _) -> skipAndWarn "it is not tracked by darcs"
   where skipAndWarn reason =
             do putWarning opts . text $ "Can't remove " ++ displayPath path
                                         ++ " (" ++ reason ++ ")"

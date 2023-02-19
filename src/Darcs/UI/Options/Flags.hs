@@ -20,13 +20,16 @@ data DarcsFlag = Version | ExactVersion | ListCommands
                | Subject String | InReplyTo String | Charset String
                | SendmailCmd String | Author String | SelectAuthor | PatchName String
                | OnePatch String | SeveralPatch String
-               | OneHash String
                | AfterPatch String | UpToPatch String
+               | OnePattern String | SeveralPattern String
+               | AfterPattern String | UpToPattern String
+               | OneTag String | SeveralTag String
+               | AfterTag String | UpToTag String
+               | OneHash String | SeveralHash String
                | AfterHash String | UpToHash String
-               | TagName String | LastN String | MaxCount String
+               | LastN String | MaxCount String
                | IndexRange String | OneIndex String
                | NumberPatches
-               | OneTag String | AfterTag String | UpToTag String
                | GenContext | Context AbsolutePath | Count
                | LogFile AbsolutePath | RmLogFile | DontRmLogFile
                | DistName String | DistZip | All
@@ -49,7 +52,7 @@ data DarcsFlag = Version | ExactVersion | ListCommands
                | EditLongComment | NoEditLongComment | PromptLongComment
                | KeepDate | NoKeepDate
                | AllowConflicts | MarkConflicts | NoAllowConflicts
-               | SkipConflicts | Conflicts String
+               | SkipConflicts
                | Boring | SkipBoring
                | AllowCaseOnly | DontAllowCaseOnly
                | AllowWindowsReserved | DontAllowWindowsReserved
@@ -69,8 +72,6 @@ data DarcsFlag = Version | ExactVersion | ListCommands
                | DiffFlags String
                | XMLOutput
                | ForceReplace
-               | OnePattern String | SeveralPattern String
-               | AfterPattern String | UpToPattern String
                | NonApply | NonVerify | NonForce
                | DryRun
                | InheritDefault | NoInheritDefault
@@ -93,7 +94,7 @@ data DarcsFlag = Version | ExactVersion | ListCommands
                | NoCache
                | AllowUnrelatedRepos
                | Check | Repair | JustThisRepo
-               | ReadMarks String | WriteMarks String
+               | ReadMarks AbsolutePath | WriteMarks AbsolutePath
                | NullFlag
                | NoAmendUnrecord | AmendUnrecord
                | PatchIndexFlag

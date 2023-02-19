@@ -28,7 +28,6 @@ module Darcs.UI.Options.Util
     , parseIndexRangeArg
     , showIntArg
     , showIndexRangeArg
-    , throwArgumentParseError
     -- * Re-exports
     , AbsolutePath
     , AbsolutePathOrStd
@@ -299,17 +298,14 @@ parseIntArg :: String -> (Int -> Bool) -> String -> Int
 parseIntArg expected cond s =
   case reads s of
     (n,""):_ | cond n -> n
-    _ -> throwArgumentParseError s expected
-
-throwArgumentParseError :: String -> String -> a
-throwArgumentParseError s e = throw (ArgumentParseError s e)
+    _ -> throw (ArgumentParseError s expected)
 
 parseIndexRangeArg :: String -> (Int,Int)
 parseIndexRangeArg s =
   case reads s of
     (n,""):_ | n > 0 -> (n,n)
     (n,'-':s'):_ | n > 0, (m,""):_ <- reads s', m > 0 -> (n,m)
-    _ -> throwArgumentParseError s "index range"
+    _ -> throw (ArgumentParseError s "index range")
 
 showIntArg :: Int -> String
 showIntArg = show

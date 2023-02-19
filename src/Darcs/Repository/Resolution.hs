@@ -88,7 +88,7 @@ import Darcs.Patch ( displayPatch )
 
 data StandardResolution prim wX =
   StandardResolution {
-    mangled :: Mangled (FL prim) wX,
+    mangled :: Mangled prim wX,
     unmangled :: [Unravelled prim wX],
     conflictedPaths :: [AnchoredPath]
   }

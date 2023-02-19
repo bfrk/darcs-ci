@@ -15,188 +15,137 @@
 --  the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 --  Boston, MA 02110-1301, USA.
 
-{-# LANGUAGE OverloadedStrings #-}
 module Darcs.Patch.Prim.V1.Core
     ( Prim(..)
-    , TreePatchType(..)
+    , DirPatchType(..)
     , FilePatchType(..)
-    , With(..)
+    , isIdentity
+    , comparePrim
     ) where
 
 import Darcs.Prelude
-import qualified Data.ByteString.Char8 as BC
 
-import Darcs.Patch.Apply ( ApplyState )
-import Darcs.Patch.Commute ( Commute(..), invertCommute, trivialCommute )
+import qualified Data.ByteString as B (ByteString)
+
+import Darcs.Util.Path ( AnchoredPath )
+import Darcs.Patch.Witnesses.Eq ( Eq2(..), EqCheck(..) )
+import Darcs.Patch.Witnesses.Unsafe ( unsafeCoerceP )
 import Darcs.Patch.Debug ( PatchDebug(..) )
 import Darcs.Patch.FileHunk ( FileHunk(..), IsHunk(..) )
-import Darcs.Patch.Inspect ( PatchInspect(..) )
 import Darcs.Patch.Invert ( Invert(..) )
-import Darcs.Patch.Merge ( CleanMerge(..) )
-import Darcs.Patch.Object ( ObjectIdOf )
-import Darcs.Patch.Permutations ()
-import Darcs.Patch.Prim.Class
-    ( PrimConstruct(..)
-    , PrimDetails(..)
-    , PrimRead(..)
-    , PrimShow(..)
-    , PrimSift(..)
-    , primCleanMerge
-    )
-import Darcs.Patch.Prim.V1.FilePatch ( FilePatchType(..), With(..) )
-import Darcs.Patch.Prim.V1.TreePatch ( TreePatchType(..), orIfEq )
-import Darcs.Patch.SummaryData ( SummDetail(..) )
-import Darcs.Patch.Witnesses.Eq ( Eq2(..) )
-import Darcs.Patch.Witnesses.Ordered ( (:>)(..) )
-import Darcs.Patch.Witnesses.Sealed ( mapSeal, seal )
-import Darcs.Patch.Witnesses.Show ( Show1, Show2 )
-import Darcs.Patch.Witnesses.Unsafe ( unsafeCoerceP )
-import Darcs.Util.Parser
-    ( anyChar
-    , choice
-    , lexWord
-    , skipSpace
-    , skipWhile
-    , string
-    , takeTillChar
-    )
-import Darcs.Util.Path ( AnchoredPath, movedirfilename )
-import Darcs.Util.Printer ( blueText, text, userchunk, ($$), (<+>) )
-
+import Darcs.Patch.Inspect ( PatchInspect(..) )
+import Darcs.Patch.Permutations () -- for Invert instance of FL
+import Darcs.Patch.Prim.Class ( PrimConstruct(..) )
 
 data Prim wX wY where
-    TP :: !(TreePatchType wX wY) -> Prim wX wY
+    Move :: !AnchoredPath -> !AnchoredPath -> Prim wX wY
+    DP :: !AnchoredPath -> !(DirPatchType wX wY) -> Prim wX wY
     FP :: !AnchoredPath -> !(FilePatchType wX wY) -> Prim wX wY
-    CP :: !String -> !String -> !String -> Prim wX wY
-    deriving (Eq)
+    ChangePref :: !String -> !String -> !String -> Prim wX wY
 
--- | The reason the 'Ord' instances are manually defined is that we have to
--- keep the ordering exactly as it was, because, unfortunately, RepoPatchV2
--- internally uses sortCoalesceFL when commuting conflictors.
-instance Ord (Prim wX wY) where
-    compare (TP p) (TP q) = compare p q
-    compare (TP (RmFile f)) (FP g _) = compare f g `orIfEq` LT
-    compare (TP (AddFile f)) (FP g _) = compare f g `orIfEq` LT
-    compare (FP f _) (TP (RmFile g)) = compare f g `orIfEq` GT
-    compare (FP f _) (TP (AddFile g)) = compare f g `orIfEq` GT
-    compare (TP _) _ = LT
-    compare _ (TP _) = GT
-    compare (FP f p) (FP g q) = compare f g `orIfEq` compare p q
-    compare (FP _ _) _ = LT
-    compare _ (FP _ _) = GT
-    compare (CP a b c) (CP a' b' c') = compare (a,b,c) (a',b',c')
+data FilePatchType wX wY
+    = RmFile
+    | AddFile
+    | Hunk !Int [B.ByteString] [B.ByteString]
+    | TokReplace !String !String !String
+    | Binary B.ByteString B.ByteString
+    deriving (Eq,Ord)
 
-instance Show2 Prim
-instance Show1 (Prim wX)
-deriving instance Show (Prim wX wY)
+type role FilePatchType nominal nominal
 
-instance PrimShow Prim where
-    showPrim fmt (TP tp) = showPrim fmt tp
-    showPrim fmt (FP f p) = showPrim fmt (With f p)
-    showPrim _ (CP p f t) =
-      blueText "changepref" <+> text p $$ userchunk f $$ userchunk t
+data DirPatchType wX wY = RmDir | AddDir
+                           deriving (Eq,Ord)
 
-instance PrimRead Prim where
-    readPrim fmt =
-      skipSpace >>
-      choice
-        [ mapSeal fromFP <$> readPrim fmt
-        , mapSeal TP <$> readPrim fmt
-        , seal <$> readChangePref
-        ]
-      where
-        readChangePref = do
-          string "changepref"
-          p <- lexWord
-          skipWhile (== ' ')
-          _ <- anyChar -- skip newline
-          f <- takeTillChar '\n'
-          _ <- anyChar -- skip newline
-          t <- takeTillChar '\n'
-          return $ CP (BC.unpack p) (BC.unpack f) (BC.unpack t)
-        fromFP (With f p) = FP f p
+type role DirPatchType nominal nominal
 
-instance ObjectIdOf (ApplyState Prim) ~ AnchoredPath => PrimConstruct Prim where
-    addfile p = TP (AddFile p)
-    rmfile p = TP (RmFile p)
-    adddir p = TP (AddDir p)
-    rmdir p = TP (RmDir p)
-    move old new = TP (Move old new)
-    changepref p f t = CP p f t
+instance Eq2 FilePatchType where
+    unsafeCompare a b = a == unsafeCoerceP b
+
+instance Invert FilePatchType where
+    invert RmFile = AddFile
+    invert AddFile = RmFile
+    invert (Hunk line old new) = Hunk line new old
+    invert (TokReplace t o n) = TokReplace t n o
+    invert (Binary o n) = Binary n o
+
+instance Eq2 DirPatchType where
+    unsafeCompare a b = a == unsafeCoerceP b
+
+instance Invert DirPatchType where
+    invert RmDir = AddDir
+    invert AddDir = RmDir
+
+isIdentity :: Prim wX wY -> EqCheck wX wY
+isIdentity (FP _ (Binary old new)) | old == new = unsafeCoerceP IsEq
+isIdentity (FP _ (Hunk _ old new)) | old == new = unsafeCoerceP IsEq
+isIdentity (FP _ (TokReplace _ old new)) | old == new = unsafeCoerceP IsEq
+isIdentity (Move old new) | old == new = unsafeCoerceP IsEq
+isIdentity _ = NotEq
+
+instance PrimConstruct Prim where
+    addfile f = FP f AddFile
+    rmfile f = FP f RmFile
+    adddir d = DP d AddDir
+    rmdir d = DP d RmDir
+    move old new = Move old new
+    changepref p f t = ChangePref p f t
     hunk f line old new = FP f (Hunk line old new)
-    tokreplace f tokchars old new =
-      FP f (TokReplace tokchars (BC.pack old) (BC.pack new))
+    tokreplace f tokchars old new = FP f (TokReplace tokchars old new)
     binary f old new = FP f $ Binary old new
+    primFromHunk (FileHunk f line before after) = FP f (Hunk line before after)
 
-instance ObjectIdOf (ApplyState Prim) ~ AnchoredPath => IsHunk Prim where
-    type ExtraData Prim = ()
-    isHunk (FP f (Hunk line before after)) = Just (FileHunk () f line before after)
+instance IsHunk Prim where
+    isHunk (FP f (Hunk line before after)) = Just (FileHunk f line before after)
     isHunk _ = Nothing
-    fromHunk (FileHunk () f line before after) = FP f (Hunk line before after)
 
 instance Invert Prim where
-    invert (FP f fp)  = FP f (invert fp)
-    invert (TP tp) = TP (invert tp)
-    invert (CP p f t) = CP p t f
+    invert (FP f p)  = FP f (invert p)
+    invert (DP d p) = DP d (invert p)
+    invert (Move f f') = Move f' f
+    invert (ChangePref p f t) = ChangePref p t f
 
 instance PatchInspect Prim where
     -- Recurse on everything, these are potentially spoofed patches
+    listTouchedFiles (Move f1 f2) = [f1, f2]
     listTouchedFiles (FP f _) = [f]
-    listTouchedFiles (TP tp) = listTouchedFiles tp
-    listTouchedFiles (CP _ _ _) = []
+    listTouchedFiles (DP d _) = [d]
+    listTouchedFiles (ChangePref _ _ _) = []
 
     hunkMatches f (FP _ (Hunk _ remove add)) = anyMatches remove || anyMatches add
         where anyMatches = foldr ((||) . f) False
     hunkMatches _ (FP _ _) = False
-    hunkMatches f (TP tp) = hunkMatches f tp
-    hunkMatches _ (CP _ _ _) = False
-
-instance PrimDetails Prim where
-    summarizePrim (TP p) = summarizePrim p
-    summarizePrim (FP f p) = summarizePrim (With f p)
-    summarizePrim (CP{}) = [SummNone]
+    hunkMatches _ (DP _ _) = False
+    hunkMatches _ (ChangePref _ _ _) = False
+    hunkMatches _ (Move _ _) = False
 
 instance PatchDebug Prim
 
 instance Eq2 Prim where
-    unsafeCompare p q = p == unsafeCoerceP q
+    unsafeCompare (Move a b) (Move c d) = a == c && b == d
+    unsafeCompare (DP d1 p1) (DP d2 p2)
+        = d1 == d2 && p1 `unsafeCompare` p2
+    unsafeCompare (FP f1 fp1) (FP f2 fp2)
+        = f1 == f2 && fp1 `unsafeCompare` fp2
+    unsafeCompare (ChangePref a1 b1 c1) (ChangePref a2 b2 c2)
+        = c1 == c2 && b1 == b2 && a1 == a2
+    unsafeCompare _ _ = False
 
-instance PrimSift Prim where
-    primIsSiftable (FP _ (Binary _ _)) = True
-    primIsSiftable (FP _ (Hunk _ _ _)) = True
-    primIsSiftable _ = False
+instance Eq (Prim wX wY) where
+    (==) = unsafeCompare
 
-instance Commute Prim where
-  commute pair =
-    case pair of
-      FP f1 p1 :> FP f2 p2
-        | f1 == f2 -> do
-          p2' :> p1' <- commute (p1 :> p2)
-          return (FP f2 p2' :> FP f1 p1')
-        | otherwise -> do
-          p2' :> p1' <- trivialCommute (p1 :> p2)
-          return (FP f2 p2' :> FP f1 p1')
-      TP tp1 :> TP tp2 -> do
-        tp2' :> tp1' <- commute (tp1 :> tp2)
-        return (TP tp2' :> TP tp1')
-      FP f fp :> TP tp -> do
-        tp' :> With f' fp' <- commuteFPTP (With f fp :> tp)
-        return (TP tp' :> FP f' fp')
-      TP tp :> FP f fp -> do
-        With f' fp' :> tp' <- invertCommute commuteFPTP (tp :> With f fp)
-        return (FP f' fp' :> TP tp')
-      -- the wildcard matches here mean we only have to consider TP and FP above
-      _ :> CP {} -> trivialCommute pair
-      CP {} :> _ -> trivialCommute pair
-    where
-      commuteFPTP (With f fp :> p2@(Move o n)) =
-        return
-          (unsafeCoerceP p2 :> With (movedirfilename o n f) (unsafeCoerceP fp))
-      commuteFPTP fptp@(With f1 _ :> RmFile f2)
-        | f1 == f2 = Nothing
-        | otherwise = trivialCommute fptp
-      -- the rest (AddFile, RmDir, AddDir) is trivial
-      commuteFPTP fptp@(_ :> _) = trivialCommute fptp
-
-instance CleanMerge Prim where
-  cleanMerge = primCleanMerge
+-- | 'comparePrim' @p1 p2@ is used to provide an arbitrary ordering between
+--   @p1@ and @p2@.  Basically, identical patches are equal and
+--   @Move < DP < FP < ChangePref@.
+--   Everything else is compared in dictionary order of its arguments.
+comparePrim :: Prim wX wY -> Prim wW wZ -> Ordering
+comparePrim (Move a b) (Move c d) = compare (a, b) (c, d)
+comparePrim (Move _ _) _ = LT
+comparePrim _ (Move _ _) = GT
+comparePrim (DP d1 p1) (DP d2 p2) = compare (d1, p1) $ unsafeCoerceP (d2, p2)
+comparePrim (DP _ _) _ = LT
+comparePrim _ (DP _ _) = GT
+comparePrim (FP f1 fp1) (FP f2 fp2) = compare (f1, fp1) $ unsafeCoerceP (f2, fp2)
+comparePrim (FP _ _) _ = LT
+comparePrim _ (FP _ _) = GT
+comparePrim (ChangePref a1 b1 c1) (ChangePref a2 b2 c2)
+ = compare (c1, b1, a1) (c2, b2, a2)

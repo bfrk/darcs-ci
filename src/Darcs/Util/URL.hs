@@ -50,7 +50,8 @@ Boston, MA 02110-1301, USA.
 
 module Darcs.Util.URL (
     isValidLocalPath, isHttpUrl, isSshUrl, isRelative, isAbsolute,
-    isSshNopath, SshFilePath, sshRepo, sshUhost, sshFile, sshFilePathOf, splitSshUrl
+    isSshNopath, SshFilePath, sshRepo, sshUhost, sshFile, sshFilePathOf, splitSshUrl,
+    sshCanonRepo
   ) where
 
 import Darcs.Prelude
@@ -66,6 +67,7 @@ import qualified System.FilePath as FP
     , pathSeparators
     )
 import System.FilePath ( (</>) )
+import System.FilePath.Posix ( joinPath, splitDirectories )
 
 isRelative :: String -> Bool
 isRelative "" = error "Empty filename in isRelative"
@@ -133,3 +135,15 @@ data SshFilePath = SshFP { sshUhost :: String
 
 sshFilePathOf :: SshFilePath -> String
 sshFilePathOf (SshFP uhost dir file) = uhost ++ ":" ++ (dir </> darcsdir </> file)
+
+-- | Return a canonical representation of an SSH repo in the format uhost:path
+-- Notably, this means the returned string does not contain:
+--   - an "ssh://" prefix
+--   - any redundant slashes (including all trailing ones)
+sshCanonRepo :: SshFilePath -> String
+sshCanonRepo (SshFP uhost repo _) =
+  uhost ++ ":" ++ (joinPath $ map canondir $ splitDirectories repo)
+  where
+    canondir [] = ""
+    canondir (x:xs) | x == '/' = "/"
+                    | otherwise = (x:xs)

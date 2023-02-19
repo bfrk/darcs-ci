@@ -165,13 +165,11 @@ Library
                       Darcs.Patch.Match
                       Darcs.Patch.Merge
                       Darcs.Patch.Named
-                      Darcs.Patch.Object
                       Darcs.Patch.PatchInfoAnd
                       Darcs.Patch.Permutations
                       Darcs.Patch.Prim
                       Darcs.Patch.Prim.Canonize
                       Darcs.Patch.Prim.Class
-                      Darcs.Patch.Prim.Coalesce
                       Darcs.Patch.Prim.FileUUID
                       Darcs.Patch.Prim.FileUUID.Apply
                       Darcs.Patch.Prim.FileUUID.Coalesce
@@ -185,10 +183,13 @@ Library
                       Darcs.Patch.Prim.V1
                       Darcs.Patch.Prim.V1.Apply
                       Darcs.Patch.Prim.V1.Coalesce
+                      Darcs.Patch.Prim.V1.Commute
                       Darcs.Patch.Prim.V1.Core
-                      Darcs.Patch.Prim.V1.FilePatch
+                      Darcs.Patch.Prim.V1.Details
                       Darcs.Patch.Prim.V1.Mangle
-                      Darcs.Patch.Prim.V1.TreePatch
+                      Darcs.Patch.Prim.V1.Read
+                      Darcs.Patch.Prim.V1.Show
+                      Darcs.Patch.Prim.V1.Sift
                       Darcs.Patch.Prim.WithName
                       Darcs.Patch.Progress
                       Darcs.Patch.Read
@@ -227,19 +228,16 @@ Library
                       Darcs.Patch.V3.Core
                       Darcs.Patch.V3.Resolution
                       Darcs.Patch.Viewing
-                      Darcs.Patch.Witnesses.Balanced
                       Darcs.Patch.Witnesses.Eq
                       Darcs.Patch.Witnesses.Maybe
                       Darcs.Patch.Witnesses.Ordered
                       Darcs.Patch.Witnesses.Sealed
                       Darcs.Patch.Witnesses.Show
-                      Darcs.Patch.Witnesses.Square
                       Darcs.Patch.Witnesses.Unsafe
                       Darcs.Patch.Witnesses.WZipper
                       Darcs.Prelude
                       Darcs.Repository
                       Darcs.Repository.ApplyPatches
-                      Darcs.Repository.Branch
                       Darcs.Repository.Clone
                       Darcs.Repository.Create
                       Darcs.Repository.Diff
@@ -264,7 +262,6 @@ Library
                       Darcs.Repository.Repair
                       Darcs.Repository.Resolution
                       Darcs.Repository.State
-                      Darcs.Repository.Transaction
                       Darcs.Repository.Traverse
                       Darcs.Repository.Unrevert
                       Darcs.Repository.Working
@@ -275,9 +272,7 @@ Library
                       Darcs.UI.Commands.Amend
                       Darcs.UI.Commands.Annotate
                       Darcs.UI.Commands.Apply
-                      Darcs.UI.Commands.Branch
                       Darcs.UI.Commands.Clone
-                      Darcs.UI.Commands.Compare
                       Darcs.UI.Commands.Convert
                       Darcs.UI.Commands.Convert.Darcs2
                       Darcs.UI.Commands.Convert.Export
@@ -335,7 +330,6 @@ Library
                       Darcs.UI.Options.Util
                       Darcs.UI.PatchHeader
                       Darcs.UI.PrintPatch
-                      Darcs.UI.Prompt
                       Darcs.UI.RunCommand
                       Darcs.UI.RunHook
                       Darcs.UI.SelectChanges
@@ -377,7 +371,6 @@ Library
                       Darcs.Util.SignalHandler
                       Darcs.Util.Ssh
                       Darcs.Util.Tree
-                      Darcs.Util.Tree.Apply
                       Darcs.Util.Tree.Hashed
                       Darcs.Util.Tree.Monad
                       Darcs.Util.Tree.Plain
@@ -439,7 +432,7 @@ Library
                       async             >= 2.0.2 && < 2.3,
                       constraints       >= 0.11 && < 0.14,
                       unix-compat       >= 0.6 && < 0.6.1,
-                      bytestring        >= 0.11.3 && < 0.12,
+                      bytestring        >= 0.10.6 && < 0.12,
                       old-time          >= 1.1.0.3 && < 1.2,
                       time              >= 1.5.0.1 && < 1.14,
                       text              >= 1.2.1.3 && < 2.1,
@@ -619,7 +612,7 @@ test-suite darcs-test
                     Darcs.Test.Patch.Arbitrary.PatchTree
                     Darcs.Test.Patch.Arbitrary.PrimFileUUID
                     Darcs.Test.Patch.Arbitrary.PrimV1
-                    Darcs.Test.Patch.Arbitrary.Mergeable
+                    Darcs.Test.Patch.Arbitrary.RepoPatch
                     Darcs.Test.Patch.Arbitrary.RepoPatchV1
                     Darcs.Test.Patch.Arbitrary.RepoPatchV2
                     Darcs.Test.Patch.Arbitrary.RepoPatchV3

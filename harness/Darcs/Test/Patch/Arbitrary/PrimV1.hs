@@ -23,8 +23,7 @@ import Darcs.Patch.Witnesses.Sealed
 import Darcs.Patch.Witnesses.Eq
 import Darcs.Patch.Witnesses.Unsafe
 import Darcs.Patch.Witnesses.Ordered
-import Darcs.Patch.Prim ( isIdentity )
-import Darcs.Patch.Prim.V1.Core ( FilePatchType( Hunk ) )
+import Darcs.Patch.Prim.V1.Core ( FilePatchType( Hunk ), isIdentity )
 import qualified Darcs.Patch.Prim.V1.Core as Prim ( Prim( FP ) )
 import qualified Darcs.Patch.V1.Prim as V1 ( Prim(..) )
 import qualified Darcs.Patch.V2.Prim as V2 ( Prim(..) )
@@ -80,9 +79,6 @@ instance Shrinkable Prim.Prim where
 deriving instance Shrinkable V1.Prim
 deriving instance Shrinkable V2.Prim
 
-instance RepoApply Prim1
-instance RepoApply Prim2
-
 ----------------------------------------------------------------------
 -- * QuickCheck generators
 
@@ -127,19 +123,12 @@ aTokReplace :: Content -> Gen (String, String, String)
 aTokReplace []
   = do w <- vectorOf 1 alpha
        w' <- vectorOf 1 alpha
-       s <- alpha `suchThat` (\c -> all (c <=) (w<>w'))
-       e <- alpha `suchThat` (\c -> all (<= c) (w<>w'))
-       -- note: both w and w' must contain only chars in tokchars
-       tokchars <- elements $ [defaultToks, w<>w', [s,'-',e]]
-       return (tokchars, w, w')
+       return (defaultToks, w, w')
 aTokReplace content
   = do let fileWords = concatMap BC.words content
-       w <- elements fileWords
+       wB <- elements fileWords
        w' <- alphaBS `notIn` fileWords
-       s <- alpha `suchThat` (\c -> BC.all (c <=) (w<>w'))
-       e <- alpha `suchThat` (\c -> BC.all (<= c) (w<>w'))
-       tokchars <- elements [defaultToks, BC.unpack (w<>w'), [s,'-',e]]
-       return (tokchars, BC.unpack w, BC.unpack w')
+       return (defaultToks, BC.unpack wB, BC.unpack w')
   where
       alphaBS = do x <- alpha; return $ BC.pack [x]
 
@@ -244,11 +233,8 @@ aModelShrinkFileContent repo = do
 
 
 -- | Generates any type of 'prim' patch, except binary and setpref patches.
-aPrim
-  :: forall prim wX
-   . (PrimPatch prim, ApplyState prim ~ RepoState V1Model, RepoApply prim)
-  => V1Model wX
-  -> Gen (Sealed (WithEndState V1Model (prim wX)))
+aPrim :: forall prim wX . (PrimPatch prim, ApplyState prim ~ RepoState V1Model)
+      => V1Model wX -> Gen (Sealed (WithEndState V1Model (prim wX)))
 aPrim repo
   = do mbFile <- maybeOf repoFiles
        mbEmptyFile <- maybeOf $ filter (isEmpty . snd) repoFiles
@@ -335,7 +321,6 @@ aPrimPair :: ( PrimPatch prim
              , ArbitraryState prim
              , ApplyState prim ~ RepoState V1Model
              , ModelOf prim ~ V1Model
-             , RepoApply prim
              )
           => V1Model wX
           -> Gen (Sealed (WithEndState V1Model (Pair prim wX)))

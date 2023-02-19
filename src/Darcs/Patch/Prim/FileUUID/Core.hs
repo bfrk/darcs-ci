@@ -105,11 +105,10 @@ instance PrimConstruct Prim where
   hunk _ _ _ _ = error "PrimConstruct hunk"
   tokreplace _ _ _ _ = error "PrimConstruct tokreplace"
   binary _ _ _ = error "PrimConstruct binary"
+  primFromHunk _ = error "PrimConstruct primFromHunk"
 
 instance IsHunk Prim where
-  type ExtraData Prim = ()
   isHunk _ = Nothing
-  fromHunk _ = error "PrimConstruct fromHunk"
 
 instance Invert Prim where
   invert (Hunk x h) = Hunk x $ invertHunk h

@@ -28,7 +28,6 @@ import qualified Darcs.Patch.Prim as W ( coalesce )
 import qualified Darcs.Patch.Witnesses.Ordered as W
 import Darcs.Patch.Witnesses.Sealed
 import Darcs.Patch.Witnesses.Eq
-import Darcs.Patch.Witnesses.Maybe
 import Darcs.Patch.Witnesses.Show
 import Darcs.Patch.Witnesses.Unsafe ( unsafeCoerceP, unsafeCoercePStart, unsafeCoercePEnd )
 
@@ -136,4 +135,5 @@ getTriples :: FL (RepoPatchV2 Prim2) wX wY -> [Sealed2 (RepoPatchV2 Prim2 :> Rep
 getTriples = map (mapSeal2 fromW) . W.getTriples . toW
 
 coalesce :: (Prim2 :> Prim2) wX wY -> Maybe (FL Prim2 wX wY)
-coalesce = fmap (fromW . maybeToFL) . W.coalesce . toW
+coalesce = fmap fromW . W.coalesce . toW
+

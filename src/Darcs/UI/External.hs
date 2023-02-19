@@ -56,7 +56,7 @@ import GHC.IO.Encoding
 #endif
 
 import Control.Concurrent ( forkIO, newEmptyMVar, putMVar, takeMVar )
-import Control.Exception ( IOException, catch, finally, throwIO, try )
+import Control.Exception ( IOException, finally, try )
 import System.IO.Error ( ioeGetErrorType )
 import GHC.IO.Exception ( IOErrorType(ResourceVanished) )
 #ifdef WIN32
@@ -395,7 +395,7 @@ viewDocWith pr msg = do
              case mbViewerPlusArgs of
                   Just viewerPlusArgs -> do
                     case words viewerPlusArgs of
-                      [] -> error "impossible"
+                      [] -> pipeDocToPager "" [] pr msg
                       (viewer : args) -> pipeDocToPager viewer args pr msg
                   Nothing -> return $ ExitFailure 127 -- No such command
                -- TEMPORARY passing the -K option should be removed as soon as
@@ -407,10 +407,9 @@ viewDocWith pr msg = do
 #endif
                `ortryrunning` pipeDocToPager "" [] pr msg
      else pipeDocToPager "" [] pr msg
-  `catch` \e -> if e==ExitSuccess then return () else throwIO e
-  where lengthGreaterThan n _ | n <= 0 = True
-        lengthGreaterThan _ [] = False
-        lengthGreaterThan n (_:xs) = lengthGreaterThan (n-1) xs
+              where lengthGreaterThan n _ | n <= 0 = True
+                    lengthGreaterThan _ [] = False
+                    lengthGreaterThan n (_:xs) = lengthGreaterThan (n-1) xs
 
 getViewer :: IO (Maybe String)
 getViewer = Just `fmap` (getEnv "DARCS_PAGER" `catchall` getEnv "PAGER")

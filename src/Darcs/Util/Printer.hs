@@ -6,10 +6,8 @@
 -- This code was made generic in the element type by Juliusz Chroboczek.
 module Darcs.Util.Printer
     (
-    -- * Class 'Print'
-    Print(..)
     -- * 'Doc' type and structural combinators
-    , Doc(Doc,unDoc)
+      Doc(Doc,unDoc)
     , empty, (<>), (<?>), (<+>), ($$), ($+$), vcat, vsep, hcat, hsep
     , minus, newline, plus, space, backslash, lparen, rparen
     , parens, sentence
@@ -24,6 +22,8 @@ module Darcs.Util.Printer
     , userchunk, packedString
     , prefix
     , hiddenPrefix
+    , insertBeforeLastline
+    , prefixLines
     , invisiblePS, userchunkPS
     -- * Rendering to 'String'
     , renderString, renderStringWith
@@ -37,6 +37,8 @@ module Darcs.Util.Printer
     , simplePrinters, invisiblePrinter, simplePrinter
     -- * Printables
     , Printable(..)
+    , doc
+    , printable, invisiblePrintable, hiddenPrintable, userchunkPrintable
     -- * Constructing colored 'Doc's
     , Color(..)
     , blueText, redText, greenText, magentaText, cyanText
@@ -48,7 +50,7 @@ module Darcs.Util.Printer
     , hPutDocCompr
     , debugDocLn
     -- * TODO: It is unclear what is unsafe about these constructors
-    , unsafeText, unsafeBothText
+    , unsafeText, unsafeBoth, unsafeBothText, unsafeChar
     , unsafePackedString
     ) where
 
@@ -59,18 +61,8 @@ import System.IO ( Handle, stdout )
 import qualified Data.ByteString as B ( ByteString, hPut, concat )
 import qualified Data.ByteString.Char8 as BC ( singleton )
 
-import Darcs.Util.ByteString ( decodeLocale, encodeLocale, gzWriteHandle )
+import Darcs.Util.ByteString ( linesPS, decodeLocale, encodeLocale, gzWriteHandle )
 import Darcs.Util.Global ( debugMessage )
-
-
-class Print a where
-  print :: a -> Doc
-
-instance (Print a, Print b) => Print (a, b) where
-  print (a, b) = print a $$ print b
-
-instance Print () where
-  print () = empty
 
 -- | A 'Printable' is either a String, a packed string, or a chunk of
 -- text with both representations.
@@ -138,7 +130,7 @@ putDocWith prs = hPutDocWith prs stdout
 putDocLnWith :: Printers -> Doc -> IO ()
 putDocLnWith prs = hPutDocLnWith prs stdout
 
--- | 'putDoc' puts a 'Doc' on stdout using the 'simplePrinters'.
+-- | 'putDoc' puts a 'Doc' on stdout using the simple printer 'simplePrinters'.
 putDoc :: Doc -> IO ()
 putDoc = hPutDoc stdout
 
@@ -217,6 +209,7 @@ data Color = Blue | Red | Green | Cyan | Magenta
 
 -- | 'Document' is a wrapper around '[Printable] -> [Printable]' which allows
 -- to handle the special case of an empty 'Document' in a non-uniform manner.
+-- The simplest 'Documents' are built from 'String's using 'text'.
 data Document = Document ([Printable] -> [Printable])
               | Empty
 
@@ -275,6 +268,21 @@ prefix s (Doc d) = Doc $ \st ->
                      Document d'' -> Document $ (p:) . d''
                      Empty -> Empty
 
+-- TODO try to find another way to do this, it's rather a violation
+-- of the Doc abstraction
+prefixLines :: Doc -> Doc -> Doc
+prefixLines prefixer prefixee =
+  vcat $ map (prefixer <+>) $ map packedString $ linesPS $ renderPS prefixee
+
+-- TODO try to find another way to do this, it's rather a violation
+-- of the Doc abstraction
+insertBeforeLastline :: Doc -> Doc -> Doc
+insertBeforeLastline a b =
+  case reverse $ map packedString $ linesPS $ renderPS a of
+    (ll:ls) -> vcat (reverse ls) $$ b $$ ll
+    [] ->
+      error "empty Doc given as first argument of Printer.insert_before_last_line"
+
 lineColor :: Color -> Doc -> Doc
 lineColor c d = Doc $ \st -> case lineColorT (printers st) c d of
                              Doc d' -> d' st
@@ -291,10 +299,10 @@ hiddenPrefix s (Doc d) =
 -- | 'unsafeBoth' builds a Doc from a 'String' and a 'B.ByteString' representing
 -- the same text, but does not check that they do.
 unsafeBoth :: String -> B.ByteString -> Doc
-unsafeBoth s ps = printable (Both s ps)
+unsafeBoth s ps = Doc $ simplePrinter (Both s ps)
 
 -- | 'unsafeBothText' builds a 'Doc' from a 'String'. The string is stored in the
--- Doc as both a String and a 'B.ByteString' using 'simplePrinter'
+-- Doc as both a String and a 'B.ByteString'.
 unsafeBothText :: String -> Doc
 unsafeBothText s = Doc $ simplePrinter (Both s (encodeLocale s))
 
@@ -310,8 +318,9 @@ unsafePackedString = Doc . simplePrinter . PS
 invisiblePS :: B.ByteString -> Doc
 invisiblePS = invisiblePrintable . PS
 
--- | Create a 'Doc' representing a user chunk from a 'B.ByteString';
--- see 'userchunk' for details.
+-- | 'userchunkPS' creates a 'Doc' representing a user chunk from a 'B.ByteString'.
+--
+-- Rrrright. And what, please is that supposed to mean?
 userchunkPS :: B.ByteString -> Doc
 userchunkPS = userchunkPrintable . PS
 
@@ -335,17 +344,7 @@ invisibleText = invisiblePrintable . S
 hiddenText :: String -> Doc
 hiddenText = hiddenPrintable . S
 
--- | Create a 'Doc' containing a userchunk from a @String@.
---
--- Userchunks are used for printing arbitrary bytes stored in prim patches:
---
---  * old and new preference values in ChangePref prims
---  * old and new content lines in Hunk prims
---
--- In colored mode they are printed such that trailing whitespace before the
--- end of a line is made visible by marking the actual line ending with a red
--- '$' char (unless DARCS_DONT_ESCAPE_TRAILING_SPACES or even
--- DARCS_DONT_ESCAPE_ANYTHING are set in the environment).
+-- | 'userchunk' creates a 'Doc' containing a user chunk from a @String@
 userchunk :: String -> Doc
 userchunk = userchunkPrintable . S
 
@@ -395,7 +394,7 @@ invisiblePrintable x = Doc $ \st -> invisibleP (printers st) x st
 hiddenPrintable :: Printable -> Doc
 hiddenPrintable x = Doc $ \st -> hiddenP (printers st) x st
 
--- | Creates a userchunk from any 'Printable'; see 'userchunk' for details.
+-- | Creates... WTF is a userchunk???
 userchunkPrintable :: Printable -> Doc
 userchunkPrintable x = Doc $ \st -> userchunkP (printers st) x st
 

@@ -7,6 +7,7 @@ module Darcs.Test.Patch.FileUUIDModel
   , repoApply
   , emptyFile
   , emptyDir
+  , nullRepo
   , root, rootId
   , repoObjects, repoIds
   , aFilename, aDirname
@@ -24,7 +25,6 @@ import Darcs.Test.Util.QuickCheck ( alpha, uniques, bSized )
 import Darcs.Test.Patch.RepoModel
 
 import Darcs.Patch.Apply( applyToState )
-import Darcs.Patch.Info ( PatchInfo )
 import Darcs.Patch.Prim.FileUUID.Core( UUID(..), Object(..) )
 import Darcs.Patch.Prim.FileUUID.Apply( ObjectMap(..) )
 import Darcs.Patch.Witnesses.Sealed ( Sealed, seal )
@@ -39,14 +39,12 @@ import Data.Maybe ( fromJust )
 import Test.QuickCheck
   ( Arbitrary(..)
   , Gen, choose, vectorOf, frequency, oneof )
+-- import Text.Show.Pretty ( ppShow )
 
 ----------------------------------------------------------------------
 -- * Model definition
 
-data FileUUIDModel wX = FileUUIDModel
-  { _repoMap :: ObjectMap Fail
-  , _repoPatches :: [PatchInfo]
-  }
+newtype FileUUIDModel wX = FileUUIDModel { _repoMap :: ObjectMap Fail }
 
 ----------------------------------------
 -- Instances
@@ -75,6 +73,11 @@ objectMap m = ObjectMap { getObject = get, putObject = put, listObjects = list }
         put k o = return $ objectMap (M.insert k o m)
         get k = return $ M.lookup k m
 
+{-
+emptyRepo :: FileUUIDModel wX
+emptyRepo = FileUUIDModel (objectMap $ M.singleton rootId emptyDir)
+-}
+
 emptyFile :: (Monad m) => Object m
 emptyFile = Blob (return B.empty) Nothing
 
@@ -84,15 +87,18 @@ emptyDir = Directory M.empty
 ----------------------------------------------------------------------
 -- * Queries
 
+nullRepo :: FileUUIDModel wX -> Bool
+nullRepo repo = repoIds repo == [rootId]
+
 rootId :: UUID
-rootId = Recorded "ROOT"
+rootId = UUID "ROOT"
 
 -- | The root directory of a repository.
 root :: FileUUIDModel wX -> (UUID, Object Fail)
-root (FileUUIDModel repo _) = (rootId, fromJust $ unFail $ getObject repo rootId)
+root (FileUUIDModel repo) = (rootId, fromJust $ unFail $ getObject repo rootId)
 
 repoObjects :: FileUUIDModel wX -> [(UUID, Object Fail)]
-repoObjects (FileUUIDModel repo _) =
+repoObjects (FileUUIDModel repo) =
     [(uuid, obj uuid) | uuid <- unFail $ listObjects repo]
   where
     obj uuid = fromJust $ unFail $ getObject repo uuid
@@ -108,6 +114,9 @@ isEmpty (Blob f _) = B.null $ unFail f
 
 nonEmptyRepoObjects :: FileUUIDModel wX -> [(UUID, Object Fail)]
 nonEmptyRepoObjects = filter (not . isEmpty . snd) . repoObjects
+
+----------------------------------------------------------------------
+-- * Comparing repositories
 
 ----------------------------------------------------------------------
 -- * QuickCheck generators
@@ -174,7 +183,7 @@ aDir (dirid:dirids) fileids =
 
 
 anUUID :: Gen UUID
-anUUID = Recorded . BC.pack <$> vectorOf 4 (oneof $ map return "0123456789")
+anUUID = UUID . BC.pack <$> vectorOf 4 (oneof $ map return "0123456789")
 
 -- | @aRepo filesNo dirsNo@ produces repositories with *at most* 
 -- @filesNo@ files and @dirsNo@ directories. 
@@ -191,7 +200,7 @@ aRepo maxFiles maxDirs = do
   let (dirids, ids') = splitAt dirsNo ids
       fileids = take filesNo ids'
   objectmap <- aDir (rootId : dirids) fileids
-  return $ FileUUIDModel (objectMap $ M.fromList objectmap) []
+  return $ FileUUIDModel $ objectMap $ M.fromList objectmap
 
 -- | Generate small repositories.
 -- Small repositories help generating (potentially) conflicting patches.
@@ -200,10 +209,8 @@ instance RepoModel FileUUIDModel where
   aSmallRepo = do filesNo <- frequency [(3, return 1), (1, return 2)]
                   dirsNo <- frequency [(3, return 1), (1, return 0)]
                   aRepo filesNo dirsNo
-  appliedPatchNames (FileUUIDModel _ patches) = patches
-  repoApply (FileUUIDModel state patches) patch =
-    FileUUIDModel <$> applyToState patch state <*> pure (patches ++ patchNames patch)
-  showModel = show
+  repoApply (FileUUIDModel state) patch = FileUUIDModel <$> applyToState patch state
+  showModel = show -- ppShow
   eqModel r1 r2 = nonEmptyRepoObjects r1 == nonEmptyRepoObjects r2
 
 instance Arbitrary (Sealed FileUUIDModel) where

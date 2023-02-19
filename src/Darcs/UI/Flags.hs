@@ -56,6 +56,7 @@ module Darcs.UI.Flags
     , withNewRepo
 
     -- * Re-exports
+    , O.compress
     , O.diffAlgorithm
     , O.reorder
     , O.minimize

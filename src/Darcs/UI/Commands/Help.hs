@@ -428,7 +428,9 @@ environmentHelpPager :: ([String], [String])
 environmentHelpPager = (["DARCS_PAGER", "PAGER"],[
  "Darcs will invoke a pager if the output of some command is longer",
  "than 20 lines. Darcs will use the pager specified by $DARCS_PAGER",
- "or $PAGER.  If neither are set, `less` will be used."])
+ "or $PAGER.  If neither are set, `less` will be used.  Set $DARCS_PAGER",
+ "- or $PAGER if the former is not set - to the empty string in order not",
+ "to use a pager."])
 
 environmentHelpTimeout :: ([String], [String])
 environmentHelpTimeout = (["DARCS_CONNECTION_TIMEOUT"],[

@@ -38,7 +38,11 @@
 -- (additionally including the 'OneIndex' flag --index=n), to denote
 -- selection of a full 'PatchSet' up to the latest matching patch. This
 -- works similar to 'secondMatcher' except for tag matches, which in this
--- case mean to select only the tag and all its dependencies.
+-- case mean to select only the tag and all its dependencies. In other
+-- words, the tag will be clean in the resulting 'PatchSet'.
+--
+-- (Implementation note: keep in mind that the PatchSet is written
+-- backwards with respect to the timeline, ie., from right to left)
 module Darcs.Patch.Match
     ( helpOnMatchers
     , matchFirstPatchset
@@ -49,13 +53,12 @@ module Darcs.Patch.Match
     , firstMatch
     , secondMatch
     , haveNonrangeMatch
-    , PatchSetMatch
+    , PatchSetMatch(..)
     , patchSetMatch
     , checkMatchSyntax
     , hasIndexRange
     , getMatchingTag
     , matchAPatchset
-    , matchOnePatchset
     , MatchFlag(..)
     , matchingHead
     , Matchable
@@ -96,15 +99,14 @@ import Data.List ( isPrefixOf, intercalate )
 import Data.Char ( toLower )
 import Data.Typeable ( Typeable )
 
-import Darcs.Util.Path ( AbsolutePath, toFilePath )
+import Darcs.Util.Path ( AbsolutePath )
 import Darcs.Patch ( hunkMatches, listTouchedFiles )
-import Darcs.Patch.Bundle ( readContextFile )
 import Darcs.Patch.Info ( justName, justAuthor, justLog, makePatchname,
                           piDate, piTag )
 
 import qualified Data.ByteString.Char8 as BC
 
-import Darcs.Patch.PatchInfoAnd ( PatchInfoAnd, info )
+import Darcs.Patch.PatchInfoAnd ( PatchInfoAnd, info, conscientiously )
 import Darcs.Patch.Set
     ( Origin
     , PatchSet(..)
@@ -123,6 +125,7 @@ import Darcs.Patch.Witnesses.Ordered
     ( RL(..), FL(..), (:>)(..), reverseRL, mapRL, (+<+) )
 import Darcs.Patch.Witnesses.Sealed
     ( Sealed2(..), seal, seal2, unseal2, unseal )
+import Darcs.Util.Printer ( text, ($$) )
 import Darcs.Patch.ApplyMonad ( ApplyMonad(..) )
 
 import Darcs.Util.DateMatcher ( parseDateMatcher )
@@ -166,9 +169,11 @@ data MatchFlag
     | AfterPatch String
     | UpToPatch String
     | OneHash String
+    | SeveralHash String
     | AfterHash String
     | UpToHash String
     | OneTag String
+    | SeveralTag String
     | AfterTag String
     | UpToTag String
     | LastN Int
@@ -266,11 +271,14 @@ helpOnMatchers =
    "The C notation for logic operators (!, && and ||) can also be used.",
    "",
    "    --patches=regex is a synonym for --matches='name regex'",
-   "    --hash=HASH is a synonym for --matches='hash HASH'",
+   "    --hashes=HASH is a synonym for --matches='hash HASH'",
    "    --from-patch and --to-patch are synonyms for",
    "      --from-match='name... and --to-match='name...",
-   "    --from-patch and --to-match can be unproblematically combined:",
+   "    --from-hash and --to-hash are synonyms for",
+   "      --from-match='hash...' and --to-match='hash...'",
+   "    sensible combinations of --from-* and --to-* options are possible:",
    "      `darcs log --from-patch='html.*docu' --to-match='date 20040212'`",
+   "      `darcs log --from-hash=368089c6969 --to-patch='^fix.*renamed or moved\\.$'`",
    "",
    "The following primitive Boolean expressions are supported:"
    ,""]
@@ -296,9 +304,6 @@ primitiveMatchers =
  , ("name", "REGEX", "match REGEX against patch name"
           , ["issue17", "\"^[Rr]esolve issue17\\>\""]
           , namematch )
- , ("tag", "STRING", "check literal STRING is equal to tag name"
-           , ["2.16.5.1", "\"done fixing issue1999\""]
-           , exacttagmatch )
  , ("author", "REGEX", "match REGEX against patch author"
             , ["\"David Roundy\"", "droundy", "droundy@darcs.net"]
             , authormatch )
@@ -332,15 +337,13 @@ quoted = between (char '"') (char '"')
          <?> "string"
 
 datematch, hashmatch, authormatch, exactmatch, namematch, logmatch,
-  hunkmatch, touchmatch, exacttagmatch :: String -> MatchFun
+  hunkmatch, touchmatch :: String -> MatchFun
 
 namematch r =
   MatchFun $ \(Sealed2 hp) ->
     isJust $ matchRegex (mkRegex r) $ justName (ident hp)
 
 exactmatch r = MatchFun $ \(Sealed2 hp) -> r == justName (ident hp)
-
-exacttagmatch r = MatchFun $ \(Sealed2 hp) -> Just r == piTag (ident hp)
 
 authormatch a =
   MatchFun $ \(Sealed2 hp) ->
@@ -459,7 +462,9 @@ nonrangeMatcher (OneTag t:_) = strictJust $ tagmatch t
 nonrangeMatcher (OnePatch p:_) = strictJust $ patchmatch p
 nonrangeMatcher (OneHash h:_) = strictJust $ hashmatch' h
 nonrangeMatcher (SeveralPattern m:_) = strictJust $ matchPattern m
+nonrangeMatcher (SeveralTag t:_) = strictJust $ tagmatch t
 nonrangeMatcher (SeveralPatch p:_) = strictJust $ patchmatch p
+nonrangeMatcher (SeveralHash h:_) = strictJust $ hashmatch' h
 nonrangeMatcher (_:fs) = nonrangeMatcher fs
 
 -- | @firstMatcher@ returns the left bound of the matched interval.
@@ -523,7 +528,7 @@ hasIndexRange (_:fs) = hasIndexRange fs
 -- | @matchFirstPatchset fs ps@ returns the part of @ps@ before its
 -- first matcher, ie the one that comes first dependencywise. Hence,
 -- patches in @matchFirstPatchset fs ps@ are the context for the ones
--- we want.
+-- we don't want.
 matchFirstPatchset :: MatchableRP p
                    => [MatchFlag] -> PatchSet p wStart wX
                    -> Maybe (SealedPatchSet p wStart)
@@ -643,17 +648,6 @@ getMatchingTag m ps =
     PatchSet NilRL _ -> throw $ userError $ "Couldn't find a tag matching " ++ show m
     PatchSet ps' _ -> seal $ PatchSet ps' NilRL
 
--- | Return the patches in a 'PatchSet' up to the given 'PatchSetMatch'.
-matchOnePatchset
-  :: MatchableRP p
-  => PatchSet p Origin wR
-  -> PatchSetMatch
-  -> IO (SealedPatchSet p Origin)
-matchOnePatchset ps (IndexMatch   n   ) = return $ patchSetDrop (n - 1) ps
-matchOnePatchset ps (PatchMatch   m   ) = return $ matchAPatchset m ps
-matchOnePatchset ps (TagMatch     m   ) = return $ getMatchingTag m ps
-matchOnePatchset ps (ContextMatch path) = readContextFile ps (toFilePath path)
-
 -- | Rollback (i.e. apply the inverse) of what remains of a 'PatchSet' after we
 -- extract a 'PatchSetMatch'. This is the counterpart of 'getOnePatchset' and
 -- is used to create a matching state. In particular, if the match is --index=n
@@ -688,7 +682,7 @@ applyInvToMatcher m (PatchSet (ts :<: Tagged ps t _) NilRL) =
   applyInvToMatcher m (PatchSet ts (ps :<: t))
 applyInvToMatcher m (PatchSet xs (ps :<: p))
   | applyMatcher m p = return ()
-  | otherwise = unapply p >> applyInvToMatcher m (PatchSet xs ps)
+  | otherwise = applyInvp p >> applyInvToMatcher m (PatchSet xs ps)
 
 -- | @applyNInv@ n ps applies the inverse of the last @n@ patches of @ps@.
 applyNInv :: (MatchableRP p, ApplyMonad (ApplyState p) m)
@@ -698,7 +692,20 @@ applyNInv _ (PatchSet NilRL NilRL) = throw $ userError "Index out of range"
 applyNInv n (PatchSet (ts :<: Tagged ps t _) NilRL) =
   applyNInv n (PatchSet ts (ps :<: t))
 applyNInv n (PatchSet xs (ps :<: p)) =
-  unapply p >> applyNInv (n - 1) (PatchSet xs ps)
+  applyInvp p >> applyNInv (n - 1) (PatchSet xs ps)
+
+-- | @applyInvp@ tries to get the patch that's in a 'PatchInfoAnd
+-- patch', and to apply its inverse. If we fail to fetch the patch
+-- then we share our sorrow with the user.
+applyInvp :: (Apply p, ApplyMonad (ApplyState p) m)
+          => PatchInfoAnd p wX wY -> m ()
+applyInvp = unapply . fromHopefully
+    where fromHopefully = conscientiously $ \e ->
+                     text "Sorry, patch not available:"
+                     $$ e
+                     $$ text ""
+                     $$ text "If you think what you're trying to do is ok then"
+                     $$ text "report this as a bug on the darcs-user list."
 
 -- | matchingHead returns the repository up to some tag. The tag t is the last
 -- tag such that there is a patch after t that is matched by the user's query.

@@ -1,5 +1,5 @@
 {-# LANGUAGE MultiParamTypeClasses, OverloadedStrings, UndecidableInstances #-}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# OPTIONS_GHC -fno-warn-orphans -fno-warn-missing-methods #-}
 module Darcs.Patch.Prim.FileUUID.Apply ( hunkEdit, ObjectMap(..) ) where
 
 import Darcs.Prelude
@@ -12,7 +12,7 @@ import qualified Data.Map as M
 import Darcs.Patch.Apply ( Apply(..) )
 import Darcs.Patch.ApplyMonad
     ( ApplyMonad(..), ApplyMonadTrans(..)
-    , ApplyMonadOperations
+    , ToTree(..), ApplyMonadOperations
     )
 import Darcs.Patch.Prim.Class ( PrimApply(..) )
 import Darcs.Patch.Prim.FileUUID.Core ( Prim(..), Hunk(..), HunkMove(..) )
@@ -39,6 +39,8 @@ instance RepairToFL Prim where
 instance PrimApply Prim where
   applyPrimFL NilFL = return ()
   applyPrimFL (p :>: ps) = apply p >> applyPrimFL ps
+
+instance ToTree ObjectMap -- TODO
 
 addObject :: Name -> UUID -> UUID -> DirContent -> Either String DirContent
 addObject name obj dirid dir
@@ -110,13 +112,6 @@ type instance ApplyMonadOperations ObjectMap = ApplyMonadObjectMap
 
 instance MonadThrow m => ApplyMonad ObjectMap (StateT (ObjectMap m) m) where
   type ApplyMonadBase (StateT (ObjectMap m) m) = m
-  readFilePS i = do
-    load <- gets getObject
-    mobj <- lift $ load i
-    case mobj of
-      Just (Blob readBlob _) -> lift readBlob
-      Just _ -> throwM $ userError $ "readFilePS " ++ show i ++ ": object is not a file"
-      Nothing -> throwM $ userError $ "readFilePS " ++ show i ++ ": no such file"
 
 liftEither :: MonadThrow m => Either String a -> m a
 liftEither (Left e) = throwM $ userError e

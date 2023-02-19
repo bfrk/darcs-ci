@@ -9,6 +9,7 @@ serve_http() {
     index-file.names           = ()
 EOF
     trap "finish_http \"$PWD\"" EXIT
+    PATH=${PATH}:/sbin:/usr/sbin
     lighttpd -f light.conf || exit 200
     ps `cat light.pid` > /dev/null 2>&1 || exit 200
     baseurl="http://localhost:$lightpid"

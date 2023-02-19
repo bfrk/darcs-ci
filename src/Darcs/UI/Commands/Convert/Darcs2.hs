@@ -139,7 +139,7 @@ convertDarcs2 = DarcsCommand
     }
   where
     basicOpts = O.newRepo ^ O.setScriptsExecutable ^ O.withWorkingDir
-    advancedOpts = O.remoteDarcs ^ O.patchIndexNo ^ O.umask ^ O.patchFormat
+    advancedOpts = O.remoteDarcs ^ O.patchIndexNo ^ O.compress ^ O.umask ^ O.patchFormat
     opts = basicOpts `withStdOpts` advancedOpts
 
 toDarcs2 :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
@@ -210,7 +210,8 @@ toDarcs2 _ opts' args = do
 
       _ <- applyAll opts _repo $ progressFL "Converting patch" patches
       void $
-        finalizeRepositoryChanges _repo (updatePending opts) (O.dryRun ? opts)
+        finalizeRepositoryChanges _repo (updatePending opts) (O.compress ? opts)
+          (O.dryRun ? opts)
       when (parseFlags O.setScriptsExecutable opts == O.YesSetScriptsExecutable)
         R.setScriptsExecutable
 
@@ -227,7 +228,7 @@ toDarcs2 _ opts' args = do
              -> IO (W2 (Repository 'RW p) wY)
     applyOne opts (W2 _repo) x = do
       _repo <- tentativelyAddPatch_ (updatePristine opts) _repo
-        (verbosity ? opts) (updatePending opts) x
+        (O.compress ? opts) (verbosity ? opts) (updatePending opts) x
       _repo <- applyToWorking _repo (verbosity ? opts) (effect x)
       return (W2 _repo)
 

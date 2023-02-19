@@ -75,13 +75,13 @@ mkdir -p b.d/bb.d
 touch a.d/aa.d/aaa.d/baz
 touch a.d/aa.d/aaa.d/bar
 darcs add -v a.d/aa.d/aaa.d/bar a.d/aa.d/aaa.d/baz b.d/bb.d 2> log
-not grep -F ".d" log
+test ! -s log # no output
 
 # Make sure that darcs doesn't complain about duplicate adds when adding parent dirs.
 mkdir c.d
 touch c.d/baz
 darcs add -v c.d/baz c.d 2> log
-not grep -F ".d" log
+test ! -s log # no output
 
 # Make sure that add output looks good when adding files in subdir
 mkdir d.d
@@ -99,21 +99,27 @@ rm -rf temp1
 darcs init temp1
 cd temp1
 
+empty='not test -s'
+nonempty='test -s'
+
 rm -f foo
-not darcs add foo >stdout 2>stderr
-not grep foo stdout
-grep foo stderr # error message about foo not existing
+darcs add foo >stdout 2>stderr && exit 1 || true
+$empty stdout
+$nonempty stderr
 
-touch foo
+>foo
 darcs add foo >stdout 2>stderr
-grep foo stdout  # confirmation message of added file
-not grep foo stderr
+$nonempty stdout  # confirmation message of added file
+$empty stderr
 
-not darcs add foo 2>stderr
-grep 'not added' stderr # error message about some files not being added
+darcs add foo >stdout 2>stderr && exit 1 || true
+$empty stdout
+$nonempty stderr
 
 rm foo
-not darcs add foo 2>stderr
-grep 'not added' stderr # error message about some files not being added
+darcs add foo >stdout 2>stderr && exit 1 || true
+$empty stdout
+$nonempty stderr
 
 cd ..
+rm -rf temp1

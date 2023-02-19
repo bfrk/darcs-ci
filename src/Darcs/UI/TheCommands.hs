@@ -22,9 +22,7 @@ import Darcs.UI.Commands.Add ( add )
 import Darcs.UI.Commands.Amend ( amend, amendrecord )
 import Darcs.UI.Commands.Annotate ( annotate )
 import Darcs.UI.Commands.Apply ( apply )
-import Darcs.UI.Commands.Branch ( branchCommand )
 import Darcs.UI.Commands.Clone ( clone, get, put )
-import Darcs.UI.Commands.Compare ( compareCommand )
 import Darcs.UI.Commands.Convert ( convert )
 import Darcs.UI.Commands.Diff ( diffCommand )
 import Darcs.UI.Commands.Dist ( dist )
@@ -62,13 +60,11 @@ commandControlList =
     [ commandGroup "Most used/starting out:"
     , normalCommand initialize
     , normalCommand add
-    , normalCommand whatsnew
-    , normalCommand status
+    , normalCommand whatsnew, hiddenCommand status
     , normalCommand record, hiddenCommand commit
     , normalCommand clone, hiddenCommand get, hiddenCommand put
     , normalCommand pull
     , normalCommand push
-    , normalCommand branchCommand
     , commandGroup "Preparing patches before recording:"
     , normalCommand move, hiddenCommand mv
     , normalCommand remove, hiddenCommand unadd, hiddenCommand rm
@@ -77,7 +73,6 @@ commandControlList =
     , normalCommand log, hiddenCommand changes
     , normalCommand annotate
     , normalCommand diffCommand
-    , normalCommand compareCommand
     , normalCommand showCommand
     , normalCommand test
     , commandGroup "Undoing and correcting:"

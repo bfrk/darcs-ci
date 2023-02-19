@@ -1,4 +1,4 @@
-#!/bin/env bash
+#!/usr/bin/env bash
 # A test for issue 538 - that an executable test script will run successfully if
 # it is recorded with --set-scripts-executable.
 

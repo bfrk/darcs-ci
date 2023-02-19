@@ -12,11 +12,17 @@
 -- mutates files. Unlink + recreate is fine though (in other words, the
 -- 'writePlainTree' implemented in this module is safe in this respect).
 module Darcs.Util.Tree.Plain
-    ( -- * Reading
+    ( -- * Obtaining Trees.
+    --
+    -- | Please note that Trees obtained this way will contain Stub
+    -- items. These need to be executed (they are IO actions) in order to be
+    -- accessed. Use 'expand' to do this. However, many operations are
+    -- perfectly fine to be used on a stubbed Tree (and it is often more
+    -- efficient to do everything that can be done before expanding a Tree).
       readPlainTree
-      -- * Writing
+
+    -- * Writing trees.
     , writePlainTree
-    , writePlainFile
     ) where
 
 import Control.Monad ( forM )
@@ -47,14 +53,6 @@ readPlainDir dir =
       st <- getSymbolicLinkStatus s
       return (s, st)
 
--- | Please note that 'Tree's obtained this way will contain 'Stub' items.
--- These need to be expanded (i.e. executed, they are IO actions) in order to
--- be accessed. Use 'expand' to do this. However, many operations are perfectly
--- fine to be used on a stubbed 'Tree' (and it is often more efficient to do
--- everything that can be done before expanding a 'Tree').
---
--- Also note that a more efficient way to read the working tree is to use the
--- index, see Darcs.Util.Index.
 readPlainTree :: FilePath -> IO (Tree IO)
 readPlainTree dir = do
   items <- readPlainDir dir
@@ -74,10 +72,9 @@ writePlainTree :: Tree IO -> FilePath -> IO ()
 writePlainTree t dir = do
   createDirectoryIfMissing True dir
   expand t >>= mapM_ write . list
-    where write (p, File b) = writePlainFile b (anchorPath dir p)
+    where write (p, File b) = write' p b
           write (p, SubTree _) =
               createDirectoryIfMissing True (anchorPath dir p)
           write _ = return ()
+          write' p b = readBlob b >>= BL.writeFile (anchorPath dir p)
 
-writePlainFile :: Blob IO -> FilePath -> IO ()
-writePlainFile b path = readBlob b >>= BL.writeFile path

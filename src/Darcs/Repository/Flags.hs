@@ -1,5 +1,6 @@
 module Darcs.Repository.Flags
-    ( RemoteDarcs (..)
+    ( Compression (..)
+    , RemoteDarcs (..)
     , remoteDarcs
     , Reorder (..)
     , Verbosity (..)
@@ -34,8 +35,10 @@ module Darcs.Repository.Flags
 
 import Darcs.Prelude
 
+import Darcs.Util.Cache ( Compression(..) )
 import Darcs.Util.Diff ( DiffAlgorithm(..) )
 import Darcs.Util.Global ( defaultRemoteDarcsCmd )
+
 
 data Verbosity = Quiet | NormalVerbosity | Verbose
     deriving ( Eq, Show )

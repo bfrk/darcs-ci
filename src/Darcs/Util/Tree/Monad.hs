@@ -2,17 +2,13 @@
 --
 --  BSD3
 
-{- | A monad transformer for 'Tree' mutation. The main idea is to simulate
-IO-ish manipulation of real filesystem (that's the state part of the monad),
-and to keep memory usage down by reasonably often dumping the intermediate
-data to disk and forgetting it.
-
-The implementation is configured by passing a procedure of type 'DumpItem'
-to 'runTreeMonad'.
-
-This module provides the readily configured 'virtualTreeIO' that never
-writes any changes, but may trigger filesystem reads as appropriate. -}
-
+-- | A monadic interface to Tree mutation. The main idea is to
+-- simulate IO-ish manipulation of real filesystem (that's the state part of
+-- the monad), and to keep memory usage down by reasonably often dumping the
+-- intermediate data to disk and forgetting it. The monad interface itself is
+-- generic, and a number of actual implementations can be used. This module
+-- provides just 'virtualTreeIO' that never writes any changes, but may trigger
+-- filesystem reads as appropriate.
 module Darcs.Util.Tree.Monad
     ( -- * 'TreeMonad'
       TreeMonad
@@ -66,18 +62,26 @@ data TreeState m = TreeState
   , maxage :: !Int64
   }
 
--- | A procedure for dumping a single 'TreeItem' to disk. If the implementation
--- uses item 'Hash'es, it is also responsible to ensure that its 'Hash' is
--- up-to-date. It is not allowed to make any changes to the actual content of
--- the 'TreeItem'.
-type DumpItem m = AnchoredPath -> TreeItem m -> m (TreeItem m)
+-- | The 'TreeMonad' is parameterized over two procedures that are called when
+-- we 'flush' a 'TreeItem' to disk: 'updateHash' is optional, if present it is
+-- used to calculate the hash of a 'TreeItem'; 'update' makes the actual file
+-- system changes. Neither is allowed to modify the content of any item!
+data TreeEnv m = TreeEnv
+  { updateHash :: Maybe (TreeItem m -> m Hash)
+  , update :: AnchoredPath -> TreeItem m -> TreeMonad m (TreeItem m)
+  }
 
 -- | A monad transformer that adds state of type 'TreeState' and an environment
--- of type 'DumpItem'.
-type TreeMonad m = RWST (DumpItem m) () (TreeState m) m
+-- of type 'AnchoredPath' (for the current directory).
+type TreeMonad m = RWST (TreeEnv m) () (TreeState m) m
 
 -- | 'TreeMonad' specialized to 'IO'
 type TreeIO = TreeMonad IO
+
+initialEnv :: Maybe (TreeItem m -> m Hash)
+           -> (AnchoredPath -> TreeItem m -> TreeMonad m (TreeItem m))
+           -> TreeEnv m
+initialEnv uh u = TreeEnv {updateHash = uh, update = u}
 
 initialState :: Tree m -> TreeState m
 initialState t =
@@ -89,17 +93,22 @@ flush = do changed' <- map fst . M.toList <$> gets changed
            modify $ \st -> st { changed = M.empty, changesize = 0 }
            forM_ (changed' ++ dirs' ++ [anchoredRoot]) flushItem
 
-runTreeMonad' :: Monad m => TreeMonad m a -> DumpItem m -> TreeState m -> m (a, Tree m)
+runTreeMonad' :: Monad m => TreeMonad m a -> TreeEnv m -> TreeState m -> m (a, Tree m)
 runTreeMonad' action initEnv initState = do
   (out, final, _) <- runRWST action initEnv initState
   return (out, tree final)
 
-runTreeMonad :: Monad m => TreeMonad m a -> Tree m -> DumpItem m -> m (a, Tree m)
-runTreeMonad action t dump = do
+runTreeMonad :: Monad m
+             => TreeMonad m a
+             -> Tree m
+             -> Maybe (TreeItem m -> m Hash)
+             -> (AnchoredPath -> TreeItem m -> TreeMonad m (TreeItem m))
+             -> m (a, Tree m)
+runTreeMonad action t uh u = do
   let action' = do x <- action
                    flush
                    return x
-  runTreeMonad' action' dump (initialState t)
+  runTreeMonad' action' (initialEnv uh u) (initialState t)
 
 -- | Run a 'TreeMonad' action without storing any changes. This is useful for
 -- running monadic tree mutations for obtaining the resulting 'Tree' (as opposed
@@ -107,7 +116,8 @@ runTreeMonad action t dump = do
 -- read and write -- reads are passed through to the actual filesystem, but the
 -- writes are held in memory in the form of a modified 'Tree'.
 virtualTreeMonad :: Monad m => TreeMonad m a -> Tree m -> m (a, Tree m)
-virtualTreeMonad action t = runTreeMonad action t (const return)
+virtualTreeMonad action t =
+  runTreeMonad action t Nothing (\_ x -> return x)
 
 -- | 'virtualTreeMonad' specialized to 'IO'
 virtualTreeIO :: TreeIO a -> Tree IO -> IO (a, Tree IO)
@@ -126,12 +136,7 @@ modifyItem path item = do
   size <- getsize item
   let change = case M.lookup path changed' of
         Nothing -> size
-        Just (oldsize, _) ->
-          -- modifyItem only ever increases the size of
-          -- the accumulated changes! Even if we apply
-          -- a large hunk and its inverse, we still have
-          -- to account for both changes (i.e. twice).
-          abs (size - oldsize)
+        Just (oldsize, _) -> size - oldsize
 
   modify $ \st -> st { tree = modifyTree (tree st) path item
                      , changed = M.insert path (size, age) (changed st)
@@ -154,15 +159,28 @@ replaceItem :: Monad m
 replaceItem path item = do
   modify $ \st -> st { tree = modifyTree (tree st) path (Just item) }
 
--- | Flush a single item to disk. This is the only procedure that uses the
--- Reader part of the environment (the procedure of type @'DumpItem' m@).
+-- | Flush a single item to disk. This is the only procedure that uses
+-- 'update' and 'updateHash' from the environment.
 flushItem :: forall m . Monad m => AnchoredPath -> TreeMonad m ()
 flushItem path = do
-  current <- gets tree
-  dumpItem <- ask
-  case find current path of
-    Nothing -> return () -- vanished, do nothing
-    Just item -> lift (dumpItem path item) >>= replaceItem path
+    current <- gets tree
+    env     <- ask
+    case find current path of
+      Nothing -> return () -- vanished, do nothing
+      Just item -> updateItem env item
+  where
+    updateItem env =
+      maybe return fixHash (updateHash env)
+        >=> update env path
+        >=> replaceItem path
+
+    fixHash :: (TreeItem m -> m Hash) -> TreeItem m -> TreeMonad m (TreeItem m)
+    fixHash uh f@(File (Blob con Nothing)) = do
+      hash <- lift $ uh f
+      return $ File $ Blob con (Just hash)
+    fixHash uh (SubTree s) | treeHash s == Nothing =
+      SubTree <$> lift (addMissingHashes uh s)
+    fixHash _ x = return x
 
 -- | If buffers are becoming large, sync, otherwise do nothing.
 flushSome :: Monad m => TreeMonad m ()

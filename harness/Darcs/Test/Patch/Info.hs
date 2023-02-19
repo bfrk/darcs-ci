@@ -22,11 +22,9 @@ module Darcs.Test.Patch.Info ( testSuite ) where
 import Prelude hiding ( pi )
 
 import Control.Applicative ( (<|>) )
-import qualified Data.ByteString as B
-import qualified Data.ByteString.Char8 as BC
-import qualified Data.ByteString.Short as BS
+import qualified Data.ByteString as B ( ByteString, pack )
+import qualified Data.ByteString.Char8 as BC ( pack, unpack )
 import Data.List ( sort , isPrefixOf, partition )
-import Data.String ( fromString )
 import Data.Maybe ( isNothing )
 import Data.Text as T ( find, any )
 import Data.Text.Encoding ( decodeUtf8With )
@@ -49,7 +47,7 @@ import Darcs.Test.TestOnly.Instance ()
 import Darcs.Util.Parser ( parse )
 import Darcs.Patch.Show ( ShowPatchFor(..) )
 import Darcs.Util.ByteString
-    ( decodeLocale, packStringToUTF8, unpackPSFromUTF8 )
+    ( decodeLocale, packStringToUTF8, unpackPSFromUTF8, linesPS )
 import Darcs.Util.Printer ( renderPS )
 
 testSuite :: Test
@@ -130,12 +128,13 @@ arbitraryUnencodedPatchInfo = do
     d <- arbitraryByteString `suchThat` validDatePS
     n <- arbitraryByteString `suchThat` validLogPS
     a <- arbitraryByteString `suchThat` validAuthorPS
-    l <- BS.split 10 `fmap` scale (* 2) arbitraryByteString
+    l <- linesPS `fmap` scale (* 2) arbitraryByteString
     junk <- generateJunk
     i <- arbitrary
-    return (PatchInfo d n a (l ++ [fromString junk]) i)
-  where
-    arbitraryByteString = BS.pack <$> listOf arbitrary
+    return (PatchInfo d n a (l ++ [BC.pack junk]) i)
+
+arbitraryByteString :: Gen B.ByteString
+arbitraryByteString = B.pack <$> listOf arbitrary
 
 -- | Test that anything produced by the 'patchinfo' function is valid UTF-8
 metadataEncodingTest :: Test
@@ -148,8 +147,7 @@ propMetadataEncoding (UTF8PatchInfo patchInfo) =
     && encodingOK (_piName patchInfo)
     && all encodingOK (_piLog patchInfo)
   where
-    encodingOK =
-      isNothing . T.find (=='\xfffd') . decodeUtf8With lenientDecode . BS.fromShort
+    encodingOK = isNothing . T.find (=='\xfffd') . decodeUtf8With lenientDecode
 
 -- | Test that metadata in patches are decoded as UTF-8 or locale depending on
 -- whether they're valid UTF-8.
@@ -163,11 +161,10 @@ propMetadataDecoding (UTF8OrNotPatchInfo patchInfo) =
     && map utf8OrLocale (_piLog patchInfo) `superset` piLog patchInfo
   where
     utf8OrLocale bs =
-      if isValidUTF8 bs
-        then unpackPSFromUTF8 (BS.fromShort bs)
-        else decodeLocale (BS.fromShort bs)
-    isValidUTF8 =
-      not . T.any (=='\xfffd') . decodeUtf8With lenientDecode . BS.fromShort
+      if isValidUTF8 bs then unpackPSFromUTF8 bs else decodeLocale bs
+
+isValidUTF8 :: B.ByteString -> Bool
+isValidUTF8 = not . T.any (=='\xfffd') . decodeUtf8With lenientDecode
 
 packUnpackTest :: Test
 packUnpackTest = testProperty "Testing UTF-8 packing and unpacking" $
@@ -215,8 +212,7 @@ shrinkPatchInfo pi =
     -- We need to be careful to preserve the junk lines to prevent creating
     -- two identical PatchInfos from different ones, which would break darcs' invariants
     -- and cause a genuine failure to be shrunk into a spurious one.
-    (junkLines, logLines) =
-      partition (isPrefixOf "Ignore-this:") . map (BC.unpack . BS.fromShort) . _piLog $ pi
+    (junkLines, logLines) = partition (isPrefixOf "Ignore-this:") . map BC.unpack . _piLog $ pi
 
 instance Arbitrary PatchInfo where
     arbitrary = arbitraryUnencodedPatchInfo

@@ -14,7 +14,6 @@ module Darcs.Util.Cache
     , cleanCaches
     , cleanCachesWithHint
     , fetchFileUsingCache
-    , relinkUsingCache
     , speculateFileUsingCache
     , speculateFilesUsingCache
     , writeFileUsingCache
@@ -26,10 +25,11 @@ module Darcs.Util.Cache
     , reportBadSources
     , closestWritableDirectory
     , dropNonRepos
+    , Compression(..)
     ) where
 
 import Control.Concurrent.MVar ( MVar, modifyMVar_, newMVar, readMVar )
-import Control.Monad ( filterM, forM_, liftM, unless, when, void )
+import Control.Monad ( filterM, forM_, liftM, mplus, unless, when )
 import qualified Data.ByteString as B ( ByteString )
 import Data.List ( intercalate, nub, sortBy )
 import Data.Maybe ( catMaybes, fromMaybe, listToMaybe )
@@ -63,7 +63,7 @@ import Darcs.Util.File
     , withTemp
     )
 import Darcs.Util.Global ( darcsdir, defaultRemoteDarcsCmd )
-import Darcs.Util.Lock ( gzWriteAtomicFilePS )
+import Darcs.Util.Lock ( gzWriteAtomicFilePS, writeAtomicFilePS )
 import Darcs.Util.Progress ( debugMessage, progressList )
 import Darcs.Util.URL ( isHttpUrl, isSshUrl, isValidLocalPath )
 import Darcs.Util.ValidHash
@@ -232,33 +232,12 @@ peekInCache (Ca cache) sh = cacheHasIt cache `catchall` return False
             ex <- doesFileExist $ hashedFilePath c subdir (encodeValidHash sh)
             if ex then return True else cacheHasIt cs
 
-finalErrorMessage :: Cache -> HashedDir -> FilePath -> String
-finalErrorMessage cache subdir filename =
-  "Couldn't fetch " ++ filename ++
-  "\nin subdir " ++ hashedDir subdir ++
-  " from sources:\n" ++ show cache ++
-  if subdir == HashedPristineDir
-    then "\nRun `darcs repair` to fix this problem."
-    else ""
-
--- | Ensure that all writable locations have a (hard link) copy of the
--- file with the given hash. If necessary, download the file.
-relinkUsingCache :: ValidHash h => Cache -> h -> IO ()
-relinkUsingCache cache hash = do
-    copyFileUsingCache ActuallyCopy cache subdir filename >>= \case
-      Just path -> mapM_ (relink path) (cacheEntries cache)
-      Nothing -> fail $ finalErrorMessage cache subdir filename
-  where
-    filename = encodeValidHash hash
-    subdir = dirofValidHash hash
-    relink path = tryLinking path filename subdir
-
 -- | Add pipelined downloads to the (low-priority) queue, for the rest it is a noop.
 speculateFileUsingCache :: ValidHash h => Cache -> h -> IO ()
 speculateFileUsingCache c hash = do
     let filename = encodeValidHash hash
     debugMessage $ "Speculating on " ++ filename
-    void $ copyFileUsingCache OnlySpeculate c (dirofValidHash hash) filename
+    copyFileUsingCache OnlySpeculate c (dirofValidHash hash) filename
 
 -- | Do 'speculateFilesUsingCache' for files not already in a writable cache
 -- position.
@@ -271,18 +250,6 @@ speculateFilesUsingCache cache hs = do
 data OrOnlySpeculate = ActuallyCopy
                      | OnlySpeculate
                      deriving ( Eq, Show )
-
-data CopyResult
-  = NoWritableLocation
-  | AlreadyExists FilePath
-  | StickItHere FilePath
-
-instance Semigroup CopyResult where
-  AlreadyExists f <> _ = AlreadyExists f
-  _ <> AlreadyExists f = AlreadyExists f
-  StickItHere f <> _ = StickItHere f
-  _ <> StickItHere f = StickItHere f
-  _ <> _ = NoWritableLocation
 
 -- | If the first parameter of type 'OrOnlySpeculate' is 'ActuallyCopy', try to
 -- ensure that a file with the given name (hash) exists in a writable location
@@ -301,35 +268,29 @@ instance Semigroup CopyResult where
 -- 'speculateFileOrUrl' and try only the first non-writable location (which
 -- makes sense since 'speculateFileOrUrl' is asynchronous and thus can't fail
 -- in any interesting way).
-copyFileUsingCache
-  :: OrOnlySpeculate -> Cache -> HashedDir -> FilePath -> IO (Maybe FilePath)
+copyFileUsingCache :: OrOnlySpeculate -> Cache -> HashedDir -> FilePath -> IO ()
 copyFileUsingCache oos (Ca cache) subdir f = do
     debugMessage $ unwords ["copyFileUsingCache:", show oos, hashedDir subdir, f]
-    cacheLoc cache >>= \case
-      NoWritableLocation -> return Nothing
-      AlreadyExists r -> return $ Just r
-      StickItHere r -> do
-        createDirectoryIfMissing True (dropFileName r)
-        filterBadSources cache >>= sfuc r
-        return (Just r)
-        `catchall`
-        return Nothing
+    Just stickItHere <- cacheLoc cache
+    createDirectoryIfMissing True (dropFileName stickItHere)
+    filterBadSources cache >>= sfuc stickItHere
+    `catchall`
+    return ()
   where
     -- Return last writeable cache/repo location for file 'f'.
     -- Usually returns the global cache unless `--no-cache` is passed.
     -- Throws exception if file already exists in a writable location.
-    cacheLoc [] = return NoWritableLocation
+    cacheLoc [] = return Nothing
     cacheLoc (c : cs)
         | not $ writable c = cacheLoc cs
         | otherwise = do
             let attemptPath = hashedFilePath c subdir f
             ex <- doesFileExist attemptPath
             if ex
-                then
-                    return $ AlreadyExists attemptPath
+                then fail "File already present in writable location."
                 else do
                     othercache <- cacheLoc cs
-                    return $ othercache <> StickItHere attemptPath
+                    return $ othercache `mplus` Just attemptPath
     -- Do the actual copy, or hard link, or put file in download queue. This
     -- tries to find the file in all non-writable locations, in order, unless
     -- we have OnlySpeculate.
@@ -412,7 +373,7 @@ fetchFileUsingCachePrivate :: ValidHash h => FromWhere -> Cache -> h
                            -> IO (FilePath, B.ByteString)
 fetchFileUsingCachePrivate fromWhere (Ca cache) hash = do
     when (fromWhere == Anywhere) $
-        void $ copyFileUsingCache ActuallyCopy (Ca cache) subdir filename
+        copyFileUsingCache ActuallyCopy (Ca cache) subdir filename
     filterBadSources cache >>= ffuc
   where
     filename = encodeValidHash hash
@@ -426,9 +387,15 @@ fetchFileUsingCachePrivate fromWhere (Ca cache) hash = do
             debugMessage $
               "In fetchFileUsingCachePrivate I'm directly grabbing file contents from "
               ++ cacheFile
-            x <- fetchFileContent cacheFile False
-            -- FIXME: create links in caches
-            return (cacheFile, x)
+            x <- gzFetchFilePS cacheFile Cachable
+            if not $ checkHash hash x
+                then do
+                    x' <- fetchFilePS cacheFile Cachable
+                    unless (checkHash hash x') $ do
+                        hPutStrLn stderr $ "Hash failure in " ++ cacheFile
+                        fail $ "Hash failure in " ++ cacheFile
+                    return (cacheFile, x')
+                else return (cacheFile, x) -- FIXME: create links in caches
             `catchall` do
                 -- something bad happened, check if cache became unaccessible
                 -- and try other ones
@@ -436,7 +403,17 @@ fetchFileUsingCachePrivate fromWhere (Ca cache) hash = do
                 filterBadSources cs >>= ffuc
         | writable c = do
             debugMessage $ "About to gzFetchFilePS from " ++ show cacheFile
-            x <- fetchFileContent cacheFile True
+            x1 <- gzFetchFilePS cacheFile Cachable
+            debugMessage "gzFetchFilePS done."
+            x <- if not $ checkHash hash x1
+                     then do
+                        x2 <- fetchFilePS cacheFile Cachable
+                        unless (checkHash hash x2) $ do
+                            hPutStrLn stderr $ "Hash failure in " ++ cacheFile
+                            removeFile cacheFile
+                            fail $ "Hash failure in " ++ cacheFile
+                        return x2
+                     else return x1
             mapM_ (tryLinking cacheFile filename subdir) cs `catchall` return ()
             return (cacheFile, x)
             `catchall` do
@@ -462,24 +439,13 @@ fetchFileUsingCachePrivate fromWhere (Ca cache) hash = do
         | otherwise = ffuc cs
         where
           cacheFile = hashedFilePath c subdir filename
-          fetchFileContent path wr = do
-            content <- gzFetchFilePS path Cachable
-            if checkHash hash content
-              then return content
-              else do
-                -- This is quite defensive. If the file has the initial two
-                -- ID bytes that identify it as gzipped and even correctly
-                -- unzips, how great are the chances that interpreting it as
-                -- a plain unzipped file succeeds? I am missing a justification
-                -- for this complication here...
-                content' <- fetchFilePS path Cachable
-                unless (checkHash hash content') $ do
-                  hPutStrLn stderr $ "Hash failure in " ++ path
-                  when wr $ removeFile path
-                  fail $ "Hash failure in " ++ path
-                return content'
 
-    ffuc [] = fail $ finalErrorMessage (Ca cache) subdir filename
+    ffuc [] = fail ("Couldn't fetch " ++ filename ++ "\nin subdir "
+                          ++ hashedDir subdir ++ " from sources:\n"
+                          ++ show (Ca cache)
+                          ++ if subdir == HashedPristineDir
+                             then "\nRun `darcs repair` to fix this problem."
+                             else "")
 
 tryLinking :: FilePath -> FilePath -> HashedDir -> CacheLoc -> IO ()
 tryLinking source filename subdir c =
@@ -494,12 +460,16 @@ createCache (Cache Directory _ d) subdir filename =
     createDirectoryIfMissing True (d </> hashedDir subdir </> bucketFolder filename)
 createCache _ _ _ = return ()
 
+data Compression = NoCompression
+                 | GzipCompression
+    deriving ( Eq, Show )
+
 -- | Write file content, except if it is already in the cache, in
 -- which case merely create a hard link to that file. The returned value
 -- is the size and hash of the content.
 writeFileUsingCache
-  :: ValidHash h => Cache -> B.ByteString -> IO h
-writeFileUsingCache (Ca cache) content = do
+  :: ValidHash h => Cache -> Compression -> B.ByteString -> IO h
+writeFileUsingCache (Ca cache) compr content = do
     debugMessage $ "writeFileUsingCache "++filename
     (fn, _) <- fetchFileUsingCachePrivate LocalOnly (Ca cache) hash
     mapM_ (tryLinking fn filename subdir) cache
@@ -518,7 +488,9 @@ writeFileUsingCache (Ca cache) content = do
         | otherwise = do
             createCache c subdir filename
             let cacheFile = hashedFilePath c subdir filename
-            gzWriteAtomicFilePS cacheFile content
+            case compr of
+              NoCompression -> writeAtomicFilePS cacheFile content
+              GzipCompression -> gzWriteAtomicFilePS cacheFile content
             -- create links in all other writable locations
             debugMessage $ "writeFileUsingCache remaining sources:\n"++show (Ca cs)
             mapM_ (tryLinking cacheFile filename subdir) cs `catchall` return ()

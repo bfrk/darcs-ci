@@ -30,6 +30,7 @@ import Darcs.Repository
     , applyToWorking
     , considerMergeToWorking
     , finalizeRepositoryChanges
+    , readPristine
     , readPatches
     , addToPending
     , unrecordedChanges
@@ -52,11 +53,13 @@ import Darcs.UI.Commands
     )
 import Darcs.UI.Completion ( noArgs )
 import Darcs.UI.Flags
-    ( diffingOpts
+    ( compress
+    , diffingOpts
     , isInteractive
     , umask
     , useCache
     , verbosity
+    , withContext
     )
 import Darcs.UI.Flags ( DarcsFlag )
 import Darcs.UI.Options ( (?), (^) )
@@ -94,6 +97,7 @@ patchSelOpts flags = S.PatchSelectionOptions
     , S.interactive = isInteractive True flags
     , S.selectDeps = O.PromptDeps -- option not supported, use default
     , S.withSummary = O.NoSummary -- option not supported, use default
+    , S.withContext = withContext ? flags
     }
 
 unrevert :: DarcsCommand
@@ -114,6 +118,7 @@ unrevert = DarcsCommand
     unrevertBasicOpts
       = O.interactive -- True
       ^ O.repoDir
+      ^ O.withContext
       ^ O.diffAlgorithm
     unrevertAdvancedOpts = O.umask
     unrevertOpts = unrevertBasicOpts `withStdOpts` unrevertAdvancedOpts
@@ -123,17 +128,18 @@ unrevertCmd _ opts [] =
  withRepoLock (useCache ? opts) (umask ? opts) $ RepoJob $ \_repository -> do
   us <- readPatches _repository
   Sealed them <- readUnrevert us
+  pristine <- readPristine _repository
   unrecorded <- unrecordedChanges (diffingOpts opts) _repository Nothing
   Sealed pw <- considerMergeToWorking _repository "unrevert"
                       YesAllowConflictsAndMark
                       NoExternalMerge NoWantGuiPause
-                      (verbosity ? opts) NoReorder
+                      (compress ? opts) (verbosity ? opts) NoReorder
                       (diffingOpts opts)
                       (findCommon us them)
   let selection_config =
         selectionConfigPrim
             First "unrevert" (patchSelOpts opts)
-            Nothing Nothing
+            Nothing Nothing (Just pristine)
   (to_unrevert :> to_keep) <- runInvertibleSelection pw selection_config
   addToPending _repository (diffingOpts opts) to_unrevert
   recorded <- readPatches _repository
@@ -145,7 +151,8 @@ unrevertCmd _ opts [] =
     Just (to_keep' :> _) -> writeUnrevert recorded to_keep'
   withSignalsBlocked $ do
     _repository <-
-      finalizeRepositoryChanges _repository YesUpdatePending (O.dryRun ? opts)
+      finalizeRepositoryChanges _repository YesUpdatePending
+        (compress ? opts) (O.dryRun ? opts)
     unless (O.yes (O.dryRun ? opts)) $
       void $ applyToWorking _repository (verbosity ? opts) to_unrevert
   putFinished opts "unreverting"

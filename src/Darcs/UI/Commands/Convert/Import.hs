@@ -36,6 +36,7 @@ import Data.IORef (modifyIORef, newIORef)
 import Data.Maybe (fromMaybe)
 import Data.Word (Word8)
 
+import System.Directory (doesFileExist)
 import System.FilePath.Posix ((</>))
 import System.IO (stdin)
 
@@ -53,7 +54,7 @@ import Darcs.Patch.Witnesses.Ordered
 import Darcs.Patch.Witnesses.Sealed ( Sealed(..), unFreeLeft )
 
 import Darcs.Patch.Info ( PatchInfo, patchinfo )
-import Darcs.Patch.Prim ( canonizeFL )
+import Darcs.Patch.Prim ( sortCoalesceFL )
 
 import Darcs.Repository
     ( EmptyRepository(..)
@@ -67,10 +68,10 @@ import Darcs.Repository
     , repoCache
     , revertRepositoryChanges
     , withUMaskFlag
-    , writePristine
     )
 import Darcs.Repository.Diff (treeDiff)
 import Darcs.Repository.Hashed (addToTentativeInventory)
+import Darcs.Repository.Paths (tentativePristinePath)
 import Darcs.Repository.Prefs (FileType(..))
 import Darcs.Repository.State (readPristine)
 
@@ -107,7 +108,7 @@ import Darcs.Util.DateTime
     , startOfTime
     )
 import Darcs.Util.Global (darcsdir)
-import Darcs.Util.Hash ( sha256 )
+import Darcs.Util.Hash (encodeBase16, sha256)
 import Darcs.Util.Lock (withNewDirectory)
 import Darcs.Util.Path
     ( AbsolutePath
@@ -128,6 +129,7 @@ import Darcs.Util.Tree
     , readBlob
     , treeHasDir
     , treeHasFile
+    , treeHash
     )
 import Darcs.Util.Tree.Hashed (darcsAddMissingHashes, hashedTreeIO)
 import qualified Darcs.Util.Tree.Monad as TM
@@ -173,6 +175,7 @@ convertImport = DarcsCommand
     advancedOpts
       = O.diffAlgorithm
       ^ O.patchIndexNo
+      ^ O.compress
       ^ O.umask
       ^ O.withPrefsTemplates
     opts = basicOpts `withStdOpts` advancedOpts
@@ -232,20 +235,22 @@ fastImport _ opts [outrepo] =
     -- TODO implement --dry-run, which would be read-only?
     _repo <- revertRepositoryChanges _repo (updatePending opts)
     marks <-
-      fastImport' _repo (O.diffAlgorithm ? opts) emptyMarks
+      fastImport' _repo (O.compress ? opts) (O.diffAlgorithm ? opts) emptyMarks
     cleanRepository _repo
     _repo <-
-      finalizeRepositoryChanges _repo (updatePending opts) (O.dryRun ? opts)
+      finalizeRepositoryChanges _repo (updatePending opts)
+        (O.compress ? opts) (O.dryRun ? opts)
     createPristineDirectoryTree _repo "." (withWorkingDir ? opts)
     return marks
 fastImport _ _ _ = fail "I need exactly one output repository."
 
 fastImport' :: forall p wU wR . (RepoPatch p, ApplyState p ~ Tree)
             => Repository 'RW p wU wR
+            -> O.Compression
             -> O.DiffAlgorithm
             -> Marks
             -> IO ()
-fastImport' repo diffalg marks = do
+fastImport' repo compression diffalg marks = do
     pristine <- readPristine repo
     marksref <- newIORef marks
     let initial = Toplevel Nothing $ BC.pack "refs/branches/master"
@@ -275,11 +280,13 @@ fastImport' repo diffalg marks = do
 
         addtag author msg =
           do info_ <- makeinfo author msg True
-             deps <- liftIO $ getUncovered `fmap` readPatches repo
+             gotany <- liftIO $ doesFileExist tentativePristinePath
+             deps <- if gotany then liftIO $ getUncovered `fmap` readPatches repo
+                               else return []
              let patch :: Named p wA wA
                  patch = NamedP info_ deps NilFL
              liftIO $
-                 addToTentativeInventory (repoCache repo) (n2pia patch)
+                 addToTentativeInventory (repoCache repo) compression (n2pia patch)
 
         -- processing items
 
@@ -312,7 +319,7 @@ fastImport' repo diffalg marks = do
                       -- Either missing (not possible) or non-empty.
                       _ -> return ()
 
-        -- generate Hunk primitive patches from diffing
+        -- generate a Hunk primitive patch from diffing
         diffCurrent :: State p -> TreeIO (State p)
         diffCurrent (InCommit mark ancestors branch start ps info_) = do
           current <- updateHashes
@@ -328,11 +335,15 @@ fastImport' repo diffalg marks = do
           return s
 
         process (Toplevel _ _) End = do
-          -- lets dump the right tree, without _darcs
           tree' <- (liftIO . darcsAddMissingHashes) =<< updateHashes
+          modify $ \s -> s { tree = tree' } -- lets dump the right tree, without _darcs
+          let root =
+                case treeHash tree' of
+                  Nothing -> error "tree has no hash!"
+                  Just hash -> encodeBase16 hash
           liftIO $ do
-            _ <- writePristine repo tree'
             putStrLn "\\o/ It seems we survived. Enjoy your new repo."
+            B.writeFile tentativePristinePath $ BC.concat [BC.pack "pristine:", root]
           return Done
 
         process (Toplevel n b) (Tag tag what author msg) = do
@@ -434,12 +445,11 @@ fastImport' repo diffalg marks = do
               liftIO $ putStrLn $ "WARNING: Linearising non-linear ancestry " ++ show list
 
           {- current <- updateHashes -} -- why not?
-          (prims :: FL (PrimOf p) cX cY) <-
-            return $ canonizeFL diffalg $ reverseRL ps
+          (prims :: FL (PrimOf p) cX cY)  <- return $ sortCoalesceFL $ reverseRL ps
           let patch :: Named p cX cY
               patch = infopatch info_ prims
           liftIO $
-              addToTentativeInventory (repoCache repo) (n2pia patch)
+              addToTentativeInventory (repoCache repo) compression (n2pia patch)
           case mark of
             Nothing -> return ()
             Just n -> case getMark marks n of
@@ -448,7 +458,7 @@ fastImport' repo diffalg marks = do
           process (Toplevel mark branch) x
 
         process state obj = do
-          liftIO $ putStrLn $ show obj
+          liftIO $ print obj
           fail $ "Unexpected object in state " ++ show state
 
         extractNames :: CopyRenameNames

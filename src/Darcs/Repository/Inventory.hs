@@ -1,9 +1,10 @@
 module Darcs.Repository.Inventory
     ( module Darcs.Repository.Inventory.Format
-    , readPatchesFromInventoryFile
+    , readPatchesUsingSpecificInventory
     , readPatchesFromInventory
+    , readPatchesFromInventoryEntries
     , readSinglePatch
-    , readOneInventory
+    , readInventoryPrivate
     , writeInventory
     , writePatchIfNecessary
     , writeHashFile
@@ -34,6 +35,7 @@ import Darcs.Patch.Show ( ShowPatchFor(..) )
 import Darcs.Patch.Witnesses.Ordered ( RL(..), mapRL )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(..), mapSeal, seal, unseal )
 import Darcs.Patch.Witnesses.Unsafe ( unsafeCoerceP )
+import Darcs.Repository.Flags ( Compression )
 import Darcs.Repository.InternalTypes ( Repository, repoCache, repoLocation )
 import Darcs.Repository.Inventory.Format
 import Darcs.Util.Cache
@@ -48,12 +50,11 @@ import Darcs.Util.Printer ( Doc, renderPS, renderString, text, ($$) )
 import Darcs.Util.Progress ( debugMessage, finishedOneIO )
 
 -- | Read a 'PatchSet' starting with a specific inventory inside a 'Repository'.
-readPatchesFromInventoryFile
-  :: (PatchListFormat p, ReadPatch p)
-  => FilePath
-  -> Repository rt p wU wR
-  -> IO (PatchSet p Origin wS)
-readPatchesFromInventoryFile invPath repo = do
+readPatchesUsingSpecificInventory :: (PatchListFormat p, ReadPatch p)
+                                  => FilePath
+                                  -> Repository rt p wU wR
+                                  -> IO (PatchSet p Origin wS)
+readPatchesUsingSpecificInventory invPath repo = do
   let repodir = repoLocation repo
   Sealed ps <-
     catch
@@ -108,8 +109,8 @@ readPatchesFromInventory cache = parseInv
 
     readTaggedInventory :: InventoryHash -> IO Inventory
     readTaggedInventory invHash = do
-        (fileName, inventory) <- fetchFileUsingCache cache invHash
-        case parseInventory inventory of
+        (fileName, pristineAndInventory) <- fetchFileUsingCache cache invHash
+        case parseInventory pristineAndInventory of
           Right r -> return r
           Left e -> fail $ unlines [unwords ["parse error in file", fileName],e]
 
@@ -148,8 +149,8 @@ readPatchesFromInventoryEntries cache ris = read_patches (reverse ris)
     speculateAndParse h is i = speculate h is >> readSinglePatch cache i h
 
     speculate :: PatchHash -> [InventoryEntry] -> IO ()
-    speculate patch_hash is = do
-        already_got_one <- peekInCache cache patch_hash
+    speculate pHash is = do
+        already_got_one <- peekInCache cache pHash
         unless already_got_one $
             speculateFilesUsingCache cache (map snd is)
 
@@ -175,12 +176,6 @@ readSinglePatch cache i h = do
             , e
             ]
 
-readOneInventory :: ReadPatch p
-                 => Cache -> FilePath -> IO (Sealed (RL (PatchInfoAndG p) wX))
-readOneInventory cache path = do
-  Inventory _ invEntries <- readInventoryPrivate path
-  readPatchesFromInventoryEntries cache invEntries
-
 -- | Read an 'Inventory' from a file. Fails with an error message if
 -- file is not there or cannot be parsed.
 readInventoryPrivate :: FilePath -> IO Inventory
@@ -190,15 +185,15 @@ readInventoryPrivate path = do
       Right r -> return r
       Left e -> fail $ unlines [unwords ["parse error in file", path],e]
 
-writeInventory :: RepoPatch p => String -> Cache
+writeInventory :: RepoPatch p => String -> Cache -> Compression
                -> PatchSet p Origin wX -> IO InventoryHash
-writeInventory tediousName cache = go
+writeInventory tediousName cache compr = go
   where
     go :: RepoPatch p => PatchSet p Origin wX -> IO InventoryHash
     go (PatchSet ts ps) = do
-      entries <- sequence $ mapRL (writePatchIfNecessary cache) ps
+      entries <- sequence $ mapRL (writePatchIfNecessary cache compr) ps
       content <- write_ts ts entries
-      writeHashFile cache content
+      writeHashFile cache compr content
     write_ts NilRL entries = return $ showInventoryPatches (reverse entries)
     write_ts (tts :<: Tagged tps t maybeHash) entries = do
       -- if the Tagged has a hash, then we know that it has already been
@@ -206,7 +201,7 @@ writeInventory tediousName cache = go
       parenthash <- maybe (go (PatchSet tts tps)) return maybeHash
       let parenthash_str = encodeValidHash parenthash
       finishedOneIO tediousName parenthash_str
-      tag_entry <- writePatchIfNecessary cache t
+      tag_entry <- writePatchIfNecessary cache compr t
       return $
         text ("Starting with inventory:\n" ++ parenthash_str) $$
         showInventoryPatches (tag_entry : reverse entries)
@@ -215,19 +210,19 @@ writeInventory tediousName cache = go
 -- patch info and hash. However, if we patch already contains a hash, assume it
 -- has already been written to disk at some point and merely return the info
 -- and hash.
-writePatchIfNecessary :: RepoPatch p => Cache
+writePatchIfNecessary :: RepoPatch p => Cache -> Compression
                       -> PatchInfoAnd p wX wY -> IO InventoryEntry
-writePatchIfNecessary c hp = infohp `seq`
+writePatchIfNecessary c compr hp = infohp `seq`
     case extractHash hp of
         Right h -> return (infohp, h)
         Left p ->
           (infohp,) <$>
-            writeHashFile c (showPatch ForStorage p)
+            writeHashFile c compr (showPatch ForStorage p)
   where
     infohp = info hp
 
 -- | Wrapper around 'writeFileUsingCache' that takes a 'Doc' instead of a
 -- 'ByteString'.
-writeHashFile :: ValidHash h => Cache -> Doc -> IO h
-writeHashFile c d = writeFileUsingCache c (renderPS d)
+writeHashFile :: ValidHash h => Cache -> Compression -> Doc -> IO h
+writeHashFile c compr d = writeFileUsingCache c compr (renderPS d)
 

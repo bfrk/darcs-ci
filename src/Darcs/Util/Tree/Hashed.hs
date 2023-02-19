@@ -27,15 +27,15 @@ module Darcs.Util.Tree.Hashed
 
 import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString.Lazy as BL
-import qualified Data.Set as S
 
+import Control.Monad.State.Strict ( liftIO )
 import Data.List ( sortBy )
-import Data.Maybe ( fromMaybe )
 
 import Darcs.Prelude
 
 import Darcs.Util.Cache
     ( Cache
+    , Compression(..)
     , fetchFileUsingCache
     , writeFileUsingCache
     )
@@ -205,61 +205,64 @@ writeDarcsHashed tree' cache =
 
 -- | Create a hashed file from a 'Cache' and file content. In case the file
 -- exists it is kept untouched and is assumed to have the right content.
+-- TODO
+-- Corrupt files should be probably renamed out of the way automatically or
+-- something (probably when they are being read though).
 fsCreateHashedFile :: Cache -> BL.ByteString -> IO PristineHash
 fsCreateHashedFile cache content =
-  writeFileUsingCache cache (BL.toStrict content)
+  -- FIXME pass Compression as an argument as we do elsewhere
+  writeFileUsingCache cache GzipCompression (BL.toStrict content)
 
 fsReadHashedFile :: Cache -> PristineHash -> IO (FilePath, BC.ByteString)
 fsReadHashedFile = fetchFileUsingCache
 
--- | Run a 'TreeIO' @action@ in a hashed setting. Any changes will be written
--- out to the cache. Please note that actual filesystem files are never removed.
+-- | Run a 'TreeIO' @action@ in a hashed setting. The @initial@ tree is assumed
+-- to be fully available from the @cache@, and any changes will be written
+-- out to same. Please note that actual filesystem files are never removed.
 hashedTreeIO :: TreeIO a -- ^ action
              -> Tree IO -- ^ initial
              -> Cache
              -> IO (a, Tree IO)
-hashedTreeIO action tree cache = runTreeMonad action tree (const dumpItem)
+hashedTreeIO action t cache = runTreeMonad action t (Just darcsHash) updateItem
   where
-    dumpItem (File b) = File <$> dumpFile b
-    dumpItem (Stub unstub _) = SubTree <$> (unstub >>= dumpTree)
-    dumpItem (SubTree s) = SubTree <$> dumpTree s
+    updateItem _ (File b) = File <$> updateFile b
+    updateItem _ (SubTree s) = SubTree <$> updateSub s
+    updateItem _ x = return x
 
     -- This code is somewhat tricky. The original Tree may have come from
     -- anywhere e.g. a plain Tree. So when we modify the content of a
     -- file, we not only write a new hashed file, but also modify the
     -- Blob itself, so that the embedded read action read this new hashed
     -- file.
-    dumpFile :: Blob IO -> IO (Blob IO)
-    dumpFile (Blob getBlob mhash) = do
-      content <- getBlob
-      let hash = fromMaybe (sha256 content) mhash
-      debugMessage $ "hashedTreeIO.dumpFile: old hash=" ++ encodeHash hash
-      let getBlob' =
+    -- FIXME this assumes that each Blob contains a valid hash; it would
+    -- be safer not to rely on this and instead re-calculate the hash.
+    updateFile (Blob _ Nothing) =
+      error "expected Blob with hash"
+    updateFile b@(Blob _ !(Just h)) = do
+      liftIO $ debugMessage $ "hashedTreeIO.updateFile: old hash=" ++ encodeHash h
+      content <- liftIO $ readBlob b
+      let nblob = Blob rblob (Just h)
+          rblob =
             BL.fromStrict . snd <$>
-            fsReadHashedFile cache (fromHash hash)
-      nhash <- fsCreateHashedFile cache content
-      debugMessage $ "hashedTreeIO.dumpFile: new hash=" ++ encodeValidHash nhash
-      return $ Blob getBlob' (Just hash)
-
-    dumpTree :: Tree IO -> IO (Tree IO)
-    dumpTree t = do
-      debugMessage $ "hashedTreeIO.dumpTree: old hash=" ++ showHash (treeHash t)
-      t' <- darcsAddMissingHashes t
-      nhash <- fsCreateHashedFile cache (darcsFormatDir t')
-      debugMessage $ "hashedTreeIO.dumpTree: new hash=" ++ encodeValidHash nhash
-      return t'
+            fsReadHashedFile cache (fromHash h)
+      nhash <- liftIO $ fsCreateHashedFile cache content
+      liftIO $ debugMessage $ "hashedTreeIO.updateFile: new hash=" ++ encodeValidHash nhash
+      return nblob
+    updateSub s = do
+      let !hash = treeHash s
+      liftIO $ debugMessage $ "hashedTreeIO.updateSub: old hash=" ++ showHash hash
+      nhash <- liftIO $ fsCreateHashedFile cache (darcsFormatDir s)
+      liftIO $ debugMessage $ "hashedTreeIO.updateSub: new hash=" ++ encodeValidHash nhash
+      return s
 
 -- | Return all 'PristineHash'es reachable from the given root set, which must
 -- consist of directory hashes only.
 followPristineHashes :: Cache -> [PristineHash] -> IO [PristineHash]
-followPristineHashes cache = fmap S.toList . follow S.empty
+followPristineHashes cache = followAll
   where
-    follow done [] = return done
-    follow done (root:roots)
-      | root `S.member` done = follow done roots
-      | otherwise = do
-        x <- readDarcsHashedDir cache root
-        let subTrees = [ ph | (TreeType, _, ph) <- x ]
-            blobs    = [ ph | (BlobType, _, ph) <- x ]
-            done'    = done `S.union` S.fromList (root:blobs)
-        follow done' (subTrees ++ roots)
+    followAll roots = concat <$> mapM followOne roots
+    followOne root = do
+      x <- readDarcsHashedDir cache root
+      let subs   = [ ph | (TreeType, _, ph) <- x ]
+          hashes = root : [ ph | (_, _, ph) <- x ]
+      (hashes ++) <$> followAll subs

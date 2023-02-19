@@ -9,15 +9,18 @@ import qualified Data.ByteString as B (null, ByteString)
 import Data.Maybe ( isJust, listToMaybe )
 import Data.List ( sort, intercalate, nub )
 
-import Darcs.Patch.Apply ( ObjectIdOfPatch )
 import Darcs.Patch.FileHunk ( FileHunk(..), IsHunk(..) )
 import Darcs.Patch.Inspect ( PatchInspect(listTouchedFiles) )
 import Darcs.Patch.Invert ( Invert(..) )
-import Darcs.Patch.Prim.Class ( PrimMangleUnravelled(..) )
+import Darcs.Patch.Prim.Class
+    ( PrimConstruct(primFromHunk)
+    , PrimMangleUnravelled(..)
+    )
 import Darcs.Patch.Prim.V1.Core ( Prim )
-import Darcs.Patch.Prim.V1.Apply ()
 import Darcs.Patch.Witnesses.Ordered ( FL(..), (+>+), mapFL_FL_M )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(..), mapSeal, unseal )
+
+import Darcs.Util.Path ( AnchoredPath )
 
 -- | The state of a single file as far as we know it. 'Nothing'
 -- means we don't know the content of a particular line.
@@ -29,8 +32,8 @@ unknownFileState = FileState (repeat Nothing)
 
 -- | Note that @applyHunk p . applyHunk (invert p) /= id@: it converts
 -- undefined lines ('Nothing') to defined ones ('Just' the old content of @p@).
-applyHunk :: FileHunk xd oid wX wY -> FileState wX -> FileState wY
-applyHunk (FileHunk _ _ line old new) = FileState . go . content
+applyHunk :: FileHunk wX wY -> FileState wX -> FileState wY
+applyHunk (FileHunk _ line old new) = FileState . go . content
   where
     go mls =
       case splitAt (line - 1) mls of
@@ -38,39 +41,35 @@ applyHunk (FileHunk _ _ line old new) = FileState . go . content
           concat [before, map Just new, drop (length old) rest]
 
 -- | Iterate 'applyHunk'.
-applyHunks :: FL (FileHunk xd oid) wX wY -> FileState wX -> FileState wY
+applyHunks :: FL FileHunk wX wY -> FileState wX -> FileState wY
 applyHunks NilFL = id
 applyHunks (p:>:ps) = applyHunks ps . applyHunk p
 
--- TODO The only remaining dependency on Prim.V1 is the constraint
--- ExtraData prim ~ (). We should generalize it so we can make use of the
--- ExtraData that isHunk for Prim.Named puts in there, i.e. mangle the
--- PrimPatchIds and show them in the conflict markup.
+
 instance PrimMangleUnravelled Prim where
   mangleUnravelled pss = do
       hunks <- onlyHunks pss
       filename <- listToMaybe (filenames pss)
-      return $ mapSeal fromHunk $ mangleHunks filename hunks
+      return $ mapSeal ((:>: NilFL) . primFromHunk) $ mangleHunks filename hunks
     where
       -- | The names of all touched files.
       filenames = nub . concatMap (unseal listTouchedFiles)
 
       -- | Convert every prim in the input to a 'FileHunk', or fail.
-      onlyHunks
-        :: IsHunk prim
-        => [Sealed (FL prim wX)]
-        -> Maybe [Sealed (FL (FileHunk (ExtraData prim) (ObjectIdOfPatch prim)) wX)]
+      onlyHunks :: forall prim wX. IsHunk prim
+                => [Sealed (FL prim wX)]
+                -> Maybe [Sealed (FL FileHunk wX)]
       onlyHunks = mapM toHunk where
+        toHunk :: Sealed (FL prim wA) -> Maybe (Sealed (FL FileHunk wA))
         toHunk (Sealed ps) = fmap Sealed $ mapFL_FL_M isHunk ps
 
       -- | Mangle a list of hunks, returning a single hunk.
       -- Note: the input list consists of 'FL's because when commuting conflicts
       -- to the head we may accumulate dependencies. In fact, the patches in all
       -- of the given (mutually conflicting) 'FL's should coalesce to a single hunk.
-      mangleHunks
-        :: oid -> [Sealed (FL (FileHunk () oid) wX)] -> Sealed (FileHunk () oid wX)
+      mangleHunks :: AnchoredPath -> [Sealed (FL FileHunk wX)] -> Sealed (FileHunk wX)
       mangleHunks _ [] = error "mangleHunks called with empty list of alternatives"
-      mangleHunks oid ps = Sealed (FileHunk () oid l old new)
+      mangleHunks path ps = Sealed (FileHunk path l old new)
         where
           oldf    = foldl oldFileState unknownFileState ps
           newfs   = map (newFileState oldf) ps
@@ -90,11 +89,11 @@ instance PrimMangleUnravelled Prim where
 
       -- | Apply the patches and their inverse. This turns all lines touched
       -- by the 'FL' of patches into defined lines with their "old" values.
-      oldFileState :: FileState wX -> Sealed (FL (FileHunk xd oid) wX) -> FileState wX
+      oldFileState :: FileState wX -> Sealed (FL FileHunk wX) -> FileState wX
       oldFileState mls (Sealed ps) = applyHunks (ps +>+ invert ps) mls
 
       -- | This is @flip 'applyHunks'@ under 'Sealed'.
-      newFileState :: FileState wX -> Sealed (FL (FileHunk xd oid) wX) -> Sealed FileState
+      newFileState :: FileState wX -> Sealed (FL FileHunk wX) -> Sealed FileState
       newFileState mls (Sealed ps) = Sealed (applyHunks ps mls)
 
       -- Index of the first line touched by any of the FileStates (1-based).

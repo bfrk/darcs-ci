@@ -188,7 +188,8 @@ fileEmpty f = do
      -- Crude way to make it inconsistent and return false:
      else assertNot $ FileEx f
 
--- | Replace a filename by another in all paths.
+-- | Replaces a filename by another in all paths. Returns True if the repository
+--   is consistent, False if it is not.
 doSwap :: AnchoredPath -> AnchoredPath -> PatchCheck ()
 doSwap f f' = modify map_sw
   where sw (FileEx a) | f  `isPrefix` a = FileEx $ movedirfilename f f' a
@@ -203,10 +204,10 @@ doSwap f f' = modify map_sw
         map_sw (P ks nots) = P (map sw ks) (map sw nots)
 
 -- | Assert a property about the repository. If the property is already present
--- in the repo state, nothing changes, otherwise it is added to the list of
--- properties that hold for the repo state. If the property is in the list of
--- properties that do not hold for the repo, an inconsistency exception is
--- thrown.
+-- in the repo state, nothing changes, and the function returns True. If it is
+-- not present yet, it is added to the repo state, and the function is True. If
+-- the property is already in the list of properties that do not hold for the
+-- repo, the state becomes inconsistent, and the function returns false.
 assert :: Prop -> PatchCheck ()
 assert p = do
     P ks nots <- get
@@ -216,8 +217,8 @@ assert p = do
              then isValid
              else put (P (p:ks) nots)
 
--- | Like 'assert', but negatively: state that some property must not hold for
--- the current repo.
+-- | Like @assert@, but negatively: state that some property must not hold for
+--   the current repo.
 assertNot :: Prop -> PatchCheck ()
 assertNot p = do
     P ks nots <- get
@@ -229,12 +230,14 @@ assertNot p = do
 
 -- | Remove a property from the list of properties that do not hold for this
 -- repo (if it's there), and add it to the list of properties that hold.
+-- Returns False if the repo is inconsistent, True otherwise.
 changeToTrue :: Prop -> PatchCheck ()
 changeToTrue p = modify filter_nots
   where filter_nots (P ks nots) = P (p:ks) (filter (p /=) nots)
 
 -- | Remove a property from the list of properties that hold for this repo (if
 -- it's in there), and add it to the list of properties that do not hold.
+-- Returns False if the repo is inconsistent, True otherwise.
 changeToFalse :: Prop -> PatchCheck ()
 changeToFalse p = do
     modify filter_ks

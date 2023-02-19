@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # echo 'Comment this line out and run the script by hand'; exit 200
 
 # . $(dirname $0)/../lib
@@ -10,7 +10,7 @@
 REMOTE_DARCS=$(which darcs)
 
 # ================ Setting up remote repositories ===============
-${SSH} ${REMOTE} "
+${SSH} ${REMOTE} /bin/sh <<EOF
 rm -rf ${REMOTE_DIR}
 mkdir ${REMOTE_DIR}
 cd ${REMOTE_DIR}
@@ -35,7 +35,7 @@ cd ..
 
 darcs clone testrepo testrepo-push
 darcs clone testrepo testrepo-send
-"
+EOF
 
 # ================ Settings ===============
 echo ${DARCS_SSH_FLAGS}
@@ -104,6 +104,28 @@ ${SSH} ${REMOTE} "[ -f ${REMOTE_DIR}/x/y/testrepo-clone/a ]"
 not darcs clone . ${DARCS_SSH_FLAGS} ${REMOTE}:${REMOTE_DIR}/x/y 2> errlog
 grep "Cannot create remote directory" errlog
 not darcs clone . ${DARCS_SSH_FLAGS} ${REMOTE}:${REMOTE_DIR}/x/y/testrepo-clone 2> errlog
+grep "Cannot create remote directory" errlog
+
+# now with trailing slash in target
+darcs clone . ${DARCS_SSH_FLAGS} ${REMOTE}:${REMOTE_DIR}/foo/testrepo-clone/
+# check that the clone was successful
+${SSH} ${REMOTE} "[ -d ${REMOTE_DIR}/foo/testrepo-clone/_darcs ]"
+${SSH} ${REMOTE} "[ -f ${REMOTE_DIR}/foo/testrepo-clone/a ]"
+# check that it fails with proper error message if remote dir exists
+not darcs clone . ${DARCS_SSH_FLAGS} ${REMOTE}:${REMOTE_DIR}/foo/ 2> errlog
+grep "Cannot create remote directory" errlog
+not darcs clone . ${DARCS_SSH_FLAGS} ${REMOTE}:${REMOTE_DIR}/foo/testrepo-clone/ 2> errlog
+grep "Cannot create remote directory" errlog
+
+# now with ssh:// URI
+darcs clone . ${DARCS_SSH_FLAGS} ssh://${REMOTE}/${REMOTE_DIR}/bar/testrepo-clone/
+# check that the clone was successful
+${SSH} ${REMOTE} "[ -d ${REMOTE_DIR}/bar/testrepo-clone/_darcs ]"
+${SSH} ${REMOTE} "[ -f ${REMOTE_DIR}/bar/testrepo-clone/a ]"
+# check that it fails with proper error message if remote dir exists
+not darcs clone . ${DARCS_SSH_FLAGS} ssh://${REMOTE}/${REMOTE_DIR}/bar/ 2> errlog
+grep "Cannot create remote directory" errlog
+not darcs clone . ${DARCS_SSH_FLAGS} ssh://${REMOTE}/${REMOTE_DIR}/bar/testrepo-clone/ 2> errlog
 grep "Cannot create remote directory" errlog
 
 cd ..

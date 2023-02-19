@@ -79,7 +79,7 @@ import Darcs.Util.Progress ( debugMessage )
 import Darcs.Util.Printer ( Doc, formatWords, formatText, text, vsep, ($$), ($+$) )
 import Darcs.Util.Path ( AbsolutePath )
 import Darcs.Util.Workaround ( getCurrentDirectory )
-import Darcs.Util.URL ( SshFilePath(..), isSshUrl, splitSshUrl )
+import Darcs.Util.URL ( SshFilePath(..), isSshUrl, splitSshUrl, sshCanonRepo )
 import Darcs.Util.Exec ( exec, Redirect(..), )
 
 cloneDescription :: String
@@ -249,7 +249,7 @@ cloneCmd _ _ _ = fail "You must provide 'clone' with either one or two arguments
 cloneToSSH :: [DarcsFlag] -> Maybe String
 cloneToSSH fs = case O.newRepo ? fs of
   Nothing -> Nothing
-  Just r -> if isSshUrl r then Just r else Nothing
+  Just r -> if isSshUrl r then Just (sshCanonRepo $ splitSshUrl r) else Nothing
 
 mkRemoteDirectory :: Bool -> String -> FilePath -> IO ()
 mkRemoteDirectory recursive sshUhost path = do

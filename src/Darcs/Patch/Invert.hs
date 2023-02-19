@@ -1,5 +1,5 @@
 module Darcs.Patch.Invert
-       ( Invert(..), invertFL, invertRL
+       ( Invert(..), invertFL, invertRL, dropInverses
        )
        where
 
@@ -7,6 +7,7 @@ import Darcs.Prelude
 
 import Darcs.Patch.Witnesses.Ordered
     ( FL(..), RL(..), reverseFL, reverseRL, (:>)(..) )
+import Darcs.Patch.Witnesses.Eq ( EqCheck(IsEq), Eq2((=\/=)) )
 
 -- | The 'invert' operation must be self-inverse, i.e. an involution:
 --
@@ -30,3 +31,13 @@ instance Invert p => Invert (RL p) where
 
 instance Invert p => Invert (p :> p) where
   invert (a :> b) = invert b :> invert a
+
+-- | Delete the first subsequence of patches that is followed by
+-- an inverse subsequence, if one exists. If not return 'Nothing'.
+dropInverses :: (Invert p, Eq2 p) => FL p wX wY -> Maybe (FL p wX wY)
+dropInverses (x :>: y :>: z)
+  | IsEq <- invert x =\/= y = Just z
+  | otherwise = do
+      yz <- dropInverses (y :>: z)
+      dropInverses (x :>: yz)
+dropInverses _ = Nothing

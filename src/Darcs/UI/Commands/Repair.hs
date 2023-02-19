@@ -34,7 +34,7 @@ import Darcs.UI.Commands
 import Darcs.UI.Completion ( noArgs )
 import Darcs.UI.Flags
     ( DarcsFlag, verbosity, umask, useIndex
-    , useCache, diffAlgorithm, quiet
+    , useCache, compress, diffAlgorithm, quiet
     )
 import Darcs.UI.Options ( DarcsOption, oid, (?), (^) )
 import qualified Darcs.UI.Options.All as O
@@ -48,9 +48,8 @@ import Darcs.Repository.Repair
 import Darcs.Repository
     ( withRepository, RepoJob(..)
     , withRepoLock, writePristine
-    , finalizeRepositoryChanges
     )
-import Darcs.Repository.Hashed ( writeTentativeInventory )
+import Darcs.Repository.Hashed ( finalizeRepositoryChanges, writeTentativeInventory )
 import Darcs.Repository.Pending ( setTentativePending )
 
 import Darcs.Patch ( displayPatch )
@@ -116,10 +115,11 @@ repairCmd opts
       bad_replay <- replayRepository
         (diffAlgorithm ? opts)
         repo
+        (compress ? opts)
         (verbosity ? opts) $ \RepositoryConsistency {..} -> do
           maybeDo fixedPatches $ \ps -> do
             putInfo opts "Writing out repaired patches..."
-            writeTentativeInventory repo ps
+            writeTentativeInventory repo (compress ? opts) ps
           maybeDo fixedPristine $ \(tree, Sealed diff) -> do
             putVerbose opts $ "Pristine differences:" $$ displayPatch diff
             putInfo opts "Fixing pristine tree..."
@@ -135,7 +135,8 @@ repairCmd opts
       if bad_replay || not index_ok
         then do
           void $
-            finalizeRepositoryChanges repo YesUpdatePending (O.dryRun ? opts)
+            finalizeRepositoryChanges repo YesUpdatePending
+              (compress ? opts) (O.dryRun ? opts)
         else
           putInfo opts "The repository is already consistent, no changes made."
 
@@ -163,7 +164,7 @@ check = DarcsCommand
 checkCmd :: [DarcsFlag] -> IO ()
 checkCmd opts = withRepository (useCache ? opts) $ RepoJob $ \repository -> do
   RepositoryConsistency {..} <-
-    replayRepositoryInTemp (diffAlgorithm ? opts) repository (verbosity ? opts)
+    replayRepositoryInTemp (diffAlgorithm ? opts) repository (compress ? opts) (verbosity ? opts)
   maybeDo fixedPatches $ \_ ->
     putInfo opts "Found broken patches."
   maybeDo fixedPristine $ \(_, Sealed diff) -> do

@@ -7,12 +7,13 @@ import Darcs.Prelude
 
 import Control.Monad ( when, unless )
 import Control.Monad.Trans ( liftIO )
-import Control.Exception ( catch, IOException )
+import Control.Exception ( catch, finally, IOException )
 import Data.List ( sort, (\\) )
 import System.Directory
     ( createDirectoryIfMissing
     , getCurrentDirectory
     , setCurrentDirectory
+    , withCurrentDirectory
     )
 
 import Darcs.Patch.PatchInfoAnd ( PatchInfoAnd, hopefully, info )
@@ -32,12 +33,13 @@ import Darcs.Patch.Set ( Origin, PatchSet(..), Tagged(..), patchSet2FL )
 import Darcs.Patch ( RepoPatch, PrimOf, isInconsistent )
 
 import Darcs.Repository.Diff( treeDiff )
-import Darcs.Repository.Flags ( Verbosity(..), DiffAlgorithm )
+import Darcs.Repository.Flags ( Verbosity(..), Compression, DiffAlgorithm )
 import Darcs.Repository.Hashed ( readPatches, writeAndReadPatch )
-import Darcs.Repository.InternalTypes ( Repository, repoCache )
+import Darcs.Repository.InternalTypes ( Repository, repoCache, repoLocation )
 import Darcs.Repository.Paths ( pristineDirPath )
 import Darcs.Repository.Pending ( readPending )
 import Darcs.Repository.Prefs ( filetypeFunction )
+import Darcs.Repository.Pristine ( cleanPristineDir, readHashedPristineRoot )
 import Darcs.Repository.State
     ( readPristine
     , readIndex
@@ -64,9 +66,10 @@ import Darcs.Util.Index( treeFromIndex )
 applyAndFixPatchSet
   :: forall rt p wU wR. (RepoPatch p, ApplyState p ~ Tree)
   => Repository rt p wU wR
+  -> Compression
   -> PatchSet p Origin wR
   -> TreeIO (PatchSet p Origin wR, Bool)
-applyAndFixPatchSet r s = do
+applyAndFixPatchSet r compr s = do
     liftIO $ beginTedious k
     liftIO $ tediousSize k $ lengthFL $ patchSet2FL s
     result <- case s of
@@ -93,16 +96,17 @@ applyAndFixPatchSet r s = do
         Just err -> liftIO $ putDocLn err
         Nothing -> return ()
       liftIO $ finishedOneIO k $ renderString $ displayPatchInfo $ info p
-      p1 <- liftIO $ writeAndReadPatch (repoCache r) p
       (ps', ps_ok) <- applyAndFixPatches ps
       case mp' of
-        Nothing -> return (p1 :>: ps', ps_ok)
+        Nothing -> return (p :>: ps', ps_ok)
         Just (e, p') ->
           liftIO $ do
             putStrLn e
             -- FIXME While this is okay semantically, it means we can't
             -- run darcs check in a read-only repo
-            p'' <- writeAndReadPatch (repoCache r) p'
+            p'' <-
+              withCurrentDirectory (repoLocation r) $
+              writeAndReadPatch (repoCache r) compr p'
             return (p'' :>: ps', False)
 
 data RepositoryConsistency p wR = RepositoryConsistency
@@ -123,9 +127,10 @@ replayRepository'
   => DiffAlgorithm
   -> Cache
   -> Repository rt p wU wR
+  -> Compression
   -> Verbosity
   -> IO (RepositoryConsistency p wR)
-replayRepository' dflag cache repo verbosity = do
+replayRepository' dflag cache repo compr verbosity = do
   let putVerbose s = when (verbosity == Verbose) $ putDocLn s
       putInfo s = unless (verbosity == Quiet) $ putDocLn s
 
@@ -147,7 +152,7 @@ replayRepository' dflag cache repo verbosity = do
 
   putVerbose $ text "Checking content of recorded patches..."
   ((newpatches, patches_ok), newpris) <-
-    hashedTreeIO (applyAndFixPatchSet repo patches) emptyTree cache
+    hashedTreeIO (applyAndFixPatchSet repo compr patches) emptyTree cache
 
   putVerbose $ text "Checking pristine..."
   ftf <- filetypeFunction
@@ -172,13 +177,19 @@ replayRepository' dflag cache repo verbosity = do
       unless (verbosity == Quiet) $ putStrLn e
       return (x, False)
 
+cleanupRepositoryReplay :: Repository rt p wU wR -> IO ()
+cleanupRepositoryReplay r = do
+  current <- readHashedPristineRoot r
+  cleanPristineDir (repoCache r) [current]
+
 replayRepositoryInTemp
   :: (RepoPatch p, ApplyState p ~ Tree)
   => DiffAlgorithm
   -> Repository rt p wU wR
+  -> Compression
   -> Verbosity
   -> IO (RepositoryConsistency p wR)
-replayRepositoryInTemp dflag r verb = do
+replayRepositoryInTemp dflag r compr verb = do
   repodir <- getCurrentDirectory
   {- The reason we use withDelayedDir here, instead of withTempDir, is that
   replayRepository' may return a new pristine that is read from the 
@@ -190,19 +201,22 @@ replayRepositoryInTemp dflag r verb = do
   -}
   withDelayedDir "darcs-check" $ \tmpDir -> do
     setCurrentDirectory repodir
-    replayRepository' dflag (mkDirCache (toFilePath tmpDir)) r verb
+    replayRepository' dflag (mkDirCache (toFilePath tmpDir)) r compr verb
 
 replayRepository
   :: (RepoPatch p, ApplyState p ~ Tree)
   => DiffAlgorithm
   -> Repository rt p wU wR
+  -> Compression
   -> Verbosity
   -> (RepositoryConsistency p wR -> IO a)
   -> IO a
-replayRepository dflag r verb job = do
-  createDirectoryIfMissing False pristineDirPath
-  st <- replayRepository' dflag (repoCache r) r verb
-  job st
+replayRepository dflag r compr verb f =
+  run `finally` cleanupRepositoryReplay r
+    where run = do
+            createDirectoryIfMissing False pristineDirPath
+            st <- replayRepository' dflag (repoCache r) r compr verb
+            f st
 
 checkIndex
   :: (RepoPatch p, ApplyState p ~ Tree)

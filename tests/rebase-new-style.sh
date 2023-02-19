@@ -56,6 +56,7 @@ optimize reorder
 optimize enable-patch-index
 optimize disable-patch-index
 optimize compress
+optimize uncompress
 optimize relink
 mark-conflicts
 repair

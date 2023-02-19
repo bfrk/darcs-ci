@@ -60,9 +60,3 @@ oldCurrentDirPath = makeDarcsdirPath "current"
 oldCheckpointDirPath = makeDarcsdirPath "checkpoints"
 oldInventoryPath = makeDarcsdirPath "inventory"
 oldTentativeInventoryPath = makeDarcsdirPath "tentative_inventory"
-
--- | Location of branch files
-branchPath = makeDarcsdirPath "branch"
-tentativeBranchPath = makeDarcsdirPath "branch.tentative"
-branchesDirPath = makeDarcsdirPath "branches"
-tentativeBranchesDirPath = makeDarcsdirPath "branches.tentative"

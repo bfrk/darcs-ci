@@ -45,7 +45,7 @@ import Darcs.UI.Flags
     , fixUrl, getOutput
     , changesReverse, verbosity,  dryRun, umask, useCache, selectDeps
     , remoteRepos, reorder, setDefault
-    , hasXmlOutput
+    , withContext, hasXmlOutput
     , isInteractive, quiet
     )
 import Darcs.UI.Options ( parseFlags, (?), (^) )
@@ -220,6 +220,7 @@ pull = DarcsCommand
       ^ O.diffAlgorithm
     advancedOpts
       = O.repoCombinator
+      ^ O.compress
       ^ O.remoteRepos
       ^ O.setScriptsExecutable
       ^ O.umask
@@ -360,4 +361,5 @@ pullPatchSelOpts flags = S.PatchSelectionOptions
     , S.interactive = isInteractive True flags
     , S.selectDeps = selectDeps ? flags
     , S.withSummary = O.withSummary ? flags
+    , S.withContext = withContext ? flags
     }

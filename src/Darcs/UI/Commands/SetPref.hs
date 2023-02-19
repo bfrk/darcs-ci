@@ -124,6 +124,7 @@ setprefCmd _ opts [pref,val] =
   changePrefval pref old val
   putStrLn $ "Changing value of "++pref++" from '"++old++"' to '"++val++"'"
   addToPending repository (diffingOpts opts) (changepref pref old val :>: NilFL)
-  void $ finalizeRepositoryChanges repository YesUpdatePending (O.dryRun ? opts)
+  void $ finalizeRepositoryChanges repository YesUpdatePending
+    (O.compress ? opts) (O.dryRun ? opts)
 setprefCmd _ _ _ = error "impossible case"
 

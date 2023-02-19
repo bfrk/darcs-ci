@@ -61,18 +61,18 @@ matchOneNontag =  match <> patch <> hash
 
 -- | Used by: rebase pull/apply, send, push, pull, apply, fetch
 matchSeveral :: MatchOption
-matchSeveral = matches <> patches <> tags <> hash
+matchSeveral = matches <> patches <> tags <> hashes
 
 matchLast :: MatchOption
 matchLast = last
 
 -- | Used by: rebase unsuspend/reify
 matchSeveralOrFirst :: MatchOption
-matchSeveralOrFirst = mconcat [ matchTo, last, matches, patches, tags, hash ]
+matchSeveralOrFirst = mconcat [ matchTo, last, matches, patches, tags, hashes ]
 
 -- | Used by: unrecord, obliterate, rebase suspend, rollback
 matchSeveralOrLast :: MatchOption
-matchSeveralOrLast = mconcat [ matchFrom, last, matches, patches, tags, hash ]
+matchSeveralOrLast = mconcat [ matchFrom, last, matches, patches, tags, hashes ]
 
 -- | Used by: diff
 matchOneOrRange :: MatchOption
@@ -85,7 +85,7 @@ matchRange = mconcat [ matchTo, matchFrom, last, indexes ]
 -- | Used by: log
 matchSeveralOrRange :: MatchOption
 matchSeveralOrRange = mconcat
-  [ matchTo, matchFrom, last, indexes, matches, patches, tags, hash ]
+  [ matchTo, matchFrom, last, indexes, matches, patches, tags, hashes ]
 
 matchTo :: MatchOption
 matchTo = toMatch <> toPatch <> toHash <> toTag
@@ -94,9 +94,14 @@ matchFrom :: MatchOption
 matchFrom = fromMatch <> fromPatch <> fromHash <> fromTag
 
 matchAny :: MatchOption
-matchAny = mconcat [ toMatch, toPatch, toHash, toTag,
-  fromMatch, fromPatch, fromHash, fromTag,
-  tag, tags, patch, patches, hash, match, matches, index, indexes, context, last ]
+matchAny =
+  mconcat
+    [ toMatch, toPatch, toHash, toTag
+    , fromMatch, fromPatch, fromHash, fromTag
+    , match, patch, hash, tag
+    , matches, patches, hashes, tags
+    , index, indexes, context, last
+    ]
 
 -- * Primitive matching options
 
@@ -104,7 +109,7 @@ toMatch, toPatch, toHash, toTag,
   fromMatch, fromPatch, fromHash, fromTag,
   tag, tags,
   patch, patches,
-  hash,
+  hash, hashes,
   match, matches,
   index, indexes,
   context, last :: MatchOption
@@ -128,7 +133,7 @@ toHash = OptSpec {..} where
   oparse k fs = k [ UpToHash s | F.UpToHash s <- fs ]
   ocheck _ = []
   odesc = [ strArg [] ["to-hash"] F.UpToHash "HASH"
-    "select changes up to a patch with HASH" ]
+    "select changes up to a patch whose hash prefix matches HASH" ]
 
 context = OptSpec {..} where
   ounparse k mfs = k [ F.Context p | Context p <- mfs ]
@@ -163,7 +168,7 @@ fromHash = OptSpec {..} where
   oparse k fs = k [ AfterHash s | F.AfterHash s <- fs ]
   ocheck _ = []
   odesc = [ strArg [] ["from-hash"] F.AfterHash "HASH"
-    "select changes starting with a patch with HASH" ]
+    "select changes starting with a patch whose hash prefix matches HASH" ]
 
 fromTag = OptSpec {..} where
   ounparse k mfs = k [ F.AfterTag s | AfterTag s <- mfs ]
@@ -179,10 +184,10 @@ tag = OptSpec {..} where
   odesc = [ strArg ['t'] ["tag"] F.OneTag "REGEXP" "select tag matching REGEXP" ]
 
 tags = OptSpec {..} where
-  ounparse k mfs = k [ F.OneTag s | OneTag s <- mfs ]
-  oparse k fs = k [ OneTag s | F.OneTag s <- fs ]
+  ounparse k mfs = k [ F.SeveralTag s | SeveralTag s <- mfs ]
+  oparse k fs = k [ SeveralTag s | F.SeveralTag s <- fs ]
   ocheck _ = []
-  odesc = [ strArg ['t'] ["tags"] F.OneTag "REGEXP" "select tags matching REGEXP" ]
+  odesc = [ strArg ['t'] ["tags"] F.SeveralTag "REGEXP" "select tags matching REGEXP" ]
 
 patch = OptSpec {..} where
   ounparse k mfs = k [ F.OnePatch s | OnePatch s <- mfs ]
@@ -203,7 +208,14 @@ hash = OptSpec {..} where
   oparse k fs = k [ OneHash s | F.OneHash s <- fs ]
   ocheck _ = []
   odesc = [ strArg ['h'] ["hash"] F.OneHash "HASH"
-    "select a single patch with HASH" ]
+    "select a single patch whose hash prefix matches HASH" ]
+
+hashes = OptSpec {..} where
+  ounparse k mfs = k [ F.SeveralHash s | SeveralHash s <- mfs ]
+  oparse k fs = k [ SeveralHash s | F.SeveralHash s <- fs ]
+  ocheck _ = []
+  odesc = [ strArg ['h'] ["hashes"] F.SeveralHash "HASH"
+    "select patches whose hash prefix matches HASH" ]
 
 match = OptSpec {..} where
   ounparse k mfs = k [ F.OnePattern s | OnePattern s <- mfs ]

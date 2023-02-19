@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 ## Test for issue2383 hunk-edit/last-regrets being able to put darcs into a
 ## state that it can't apply the recorded patch
 ##

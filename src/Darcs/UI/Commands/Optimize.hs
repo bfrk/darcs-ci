@@ -40,13 +40,13 @@ import Darcs.Repository.Prefs ( getPreflist, globalCacheDir )
 import Darcs.Repository
     ( Repository
     , AccessType(RW)
+    , repoCache
     , repoLocation
     , withRepoLock
     , RepoJob(..)
     , readPatches
     , reorderInventory
     , cleanRepository
-    , writePristine
     )
 import Darcs.Repository.Job ( withOldRepoLock )
 import Darcs.Repository.Traverse ( specialPatches )
@@ -63,11 +63,15 @@ import Darcs.Repository.Paths
     , patchesDirPath
     , pristineDir
     , pristineDirPath
+    , tentativePristinePath
     )
 import Darcs.Repository.Packs ( createPacks )
-import Darcs.Patch.Witnesses.Ordered ( lengthRL )
+import Darcs.Patch.Witnesses.Ordered
+     ( mapFL
+     , bunchFL
+     , lengthRL
+     )
 import Darcs.Patch ( RepoPatch )
-import Darcs.Patch.Invertible ( mkInvertible )
 import Darcs.Patch.Set
     ( patchSet2RL
     , patchSet2FL
@@ -79,7 +83,9 @@ import Darcs.Util.Printer ( Doc, formatWords, wrapText, ($+$) )
 import Darcs.Util.Lock
     ( maybeRelink
     , gzWriteAtomicFilePS
+    , writeAtomicFilePS
     , removeFileMayNotExist
+    , writeBinFile
     )
 import Darcs.Util.File ( doesDirectoryReallyExist )
 import Darcs.Util.Exception ( catchall )
@@ -107,7 +113,6 @@ import Darcs.Repository.Flags
     )
 import Darcs.Patch.Progress ( progressFL )
 import Darcs.Util.Cache ( allHashedDirs, bucketFolder, cleanCaches, mkDirCache )
-import Darcs.Repository ( UpdatePending(NoUpdatePending), finalizeRepositoryChanges )
 import Darcs.Repository.Format
     ( identifyRepoFormat
     , createRepoFormat
@@ -120,9 +125,9 @@ import Darcs.Repository.Hashed
     ( writeTentativeInventory
     , finalizeTentativeChanges
     )
-import Darcs.Repository.InternalTypes ( unsafeCoerceR )
 import Darcs.Repository.Pristine
-    ( applyToTentativePristine
+    ( ApplyDir(ApplyNormal)
+    , applyToTentativePristineCwd
     )
 
 import Darcs.Util.Tree
@@ -134,6 +139,7 @@ import Darcs.Util.Tree
     )
 import Darcs.Util.Path ( AbsolutePath, realPath, toFilePath )
 import Darcs.Util.Tree.Plain( readPlainTree )
+import Darcs.Util.Tree.Hashed ( writeDarcsHashed )
 
 optimizeDescription :: String
 optimizeDescription = "Optimize the repository."
@@ -158,6 +164,7 @@ optimize = SuperCommand {
                               normalCommand optimizeEnablePatchIndex,
                               normalCommand optimizeDisablePatchIndex,
                               normalCommand optimizeCompress,
+                              normalCommand optimizeUncompress,
                               normalCommand optimizeRelink,
                               normalCommand optimizeUpgrade,
                               normalCommand optimizeGlobalCache
@@ -201,7 +208,6 @@ optimizeCleanCmd _ opts _ =
     withRepoLock (useCache ? opts) (umask ? opts) $
     RepoJob $ \repository -> do
       cleanRepository repository
-      _ <- finalizeRepositoryChanges repository NoUpdatePending O.NoDryRun
       putInfo opts "Done cleaning repository!"
 
 optimizeUpgrade :: DarcsCommand
@@ -213,7 +219,7 @@ optimizeUpgrade = common
     , commandPrereq = amInRepository
     , commandCommand = optimizeUpgradeCmd
     , commandOptions =
-        withStdOpts commonBasicOpts commonAdvancedOpts
+        withStdOpts commonBasicOpts (commonAdvancedOpts ^ O.compress)
     }
 
 optimizeHttp :: DarcsCommand
@@ -240,21 +246,37 @@ optimizeCompress = common
     , commandCommand = optimizeCompressCmd
     }
 
+optimizeUncompress :: DarcsCommand
+optimizeUncompress = common
+    { commandName = "uncompress"
+    , commandHelp = optimizeHelpCompression
+    , commandDescription = "uncompress patches and inventories"
+    , commandCommand = optimizeUncompressCmd
+    }
+
 optimizeCompressCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 optimizeCompressCmd _ opts _ =
     withRepoLock (useCache ? opts) (umask ? opts) $
     RepoJob $ \repository -> do
       cleanRepository repository
-      optimizeCompression opts
+      optimizeCompression O.GzipCompression opts
       putInfo opts "Done optimizing by compression!"
 
-optimizeCompression :: [DarcsFlag] -> IO ()
-optimizeCompression opts = do
-    putInfo opts "Optimizing compression of patches..."
+optimizeUncompressCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
+optimizeUncompressCmd _ opts _ =
+    withRepoLock (useCache ? opts) (umask ? opts) $
+    RepoJob $ \repository -> do
+      cleanRepository repository
+      optimizeCompression O.NoCompression opts
+      putInfo opts "Done optimizing by uncompression!"
+
+optimizeCompression :: O.Compression -> [DarcsFlag] -> IO ()
+optimizeCompression compression opts = do
+    putInfo opts "Optimizing (un)compression of patches..."
     do_compress patchesDirPath
-    putInfo opts "Optimizing compression of inventories..."
+    putInfo opts "Optimizing (un)compression of inventories..."
     do_compress inventoriesDirPath
-    putInfo opts "Optimizing compression of pristine..."
+    putInfo opts "Optimizing (un)compression of pristine..."
     do_compress pristineDirPath
     where
       do_compress f = do
@@ -263,7 +285,10 @@ optimizeCompression opts = do
           then withCurrentDirectory f $ do
                  fs <- filter (`notElem` specialPatches) <$> listDirectory "."
                  mapM_ do_compress fs
-          else gzReadFilePS f >>= gzWriteAtomicFilePS f
+          else gzReadFilePS f >>=
+               case compression of
+                 O.GzipCompression -> gzWriteAtomicFilePS f
+                 O.NoCompression -> writeAtomicFilePS f
 
 optimizeEnablePatchIndex :: DarcsCommand
 optimizeEnablePatchIndex = common
@@ -320,7 +345,7 @@ optimizeReorder = common
     , commandDescription = "reorder the patches in the repository"
     , commandCommand = optimizeReorderCmd
     , commandOptions =
-        withStdOpts basicOpts commonAdvancedOpts
+        withStdOpts basicOpts (commonAdvancedOpts ^ O.compress)
     }
   where
     basicOpts = commonBasicOpts ^ O.optimizeDeep
@@ -329,7 +354,7 @@ optimizeReorderCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] ->
 optimizeReorderCmd _ opts _ =
     withRepoLock (useCache ? opts) (umask ? opts) $
     RepoJob $ \repository -> do
-      reorderInventory repository (O.optimizeDeep ? opts)
+      reorderInventory repository (O.compress ? opts) (O.optimizeDeep ? opts)
       putInfo opts "Done reordering!"
 
 optimizeRelink :: DarcsCommand
@@ -370,13 +395,15 @@ optimizeHelpClean = formatWords
 optimizeHelpCompression :: Doc
 optimizeHelpCompression =
   formatWords
-  [ "Patches, inventories, and pristine files are compressed with zlib"
-  , "(RFC 1951) to reduce storage (and download) size."
-  , "Older darcs versions allowed to store them"
-  , "uncompressed, and darcs is still able to"
-  , "read those files if they are not compressed. The `darcs optimize compress`"
-  , "commands can be used to ensure existing files in the current"
-  , "repository are compressed."
+  [ "By default patches are compressed with zlib (RFC 1951) to reduce"
+  , "storage (and download) size.  In exceptional circumstances, it may be"
+  , "preferable to avoid compression.  In this case the `--dont-compress`"
+  , "option can be used (e.g. with `darcs record`) to avoid compression."
+  ]
+  $+$ formatWords
+  [ "The `darcs optimize uncompress` and `darcs optimize compress`"
+  , "commands can be used to ensure existing patches in the current"
+  , "repository are respectively uncompressed or compressed."
   ]
 
 optimizeHelpRelink :: Doc
@@ -431,14 +458,15 @@ optimizeUpgradeCmd _ opts _ = do
 actuallyUpgradeFormat
   :: (RepoPatch p, ApplyState p ~ Tree)
   => [DarcsFlag] -> Repository 'RW p wU wR -> IO ()
-actuallyUpgradeFormat _opts _repository = do
+actuallyUpgradeFormat opts _repository = do
   -- convert patches/inventory
   patches <- readPatches _repository
   let k = "Hashing patch"
   beginTedious k
   tediousSize k (lengthRL $ patchSet2RL patches)
   let patches' = progressPatchSet k patches
-  writeTentativeInventory _repository patches'
+  let compress = O.compress ? opts
+  writeTentativeInventory _repository compress patches'
   endTedious k
   -- convert pristine by applying patches
   -- the faster alternative would be to copy pristine, but the apply method
@@ -447,11 +475,13 @@ actuallyUpgradeFormat _opts _repository = do
   let patchesToApply = progressFL "Applying patch" $ patchSet2FL patches'
   createDirectoryIfMissing False pristineDirPath
   -- We ignore the returned root hash, we don't use it.
-  _ <- writePristine _repository emptyTree
-  -- we must coerce here because we just emptied out pristine
-  applyToTentativePristine (unsafeCoerceR _repository) O.NormalVerbosity (mkInvertible patchesToApply)
+  _ <- writeDarcsHashed emptyTree (repoCache _repository)
+  writeBinFile tentativePristinePath ""
+  sequence_ $
+    mapFL (applyToTentativePristineCwd (repoCache _repository) ApplyNormal) $
+    bunchFL 100 patchesToApply
   -- now make it official
-  finalizeTentativeChanges _repository
+  finalizeTentativeChanges _repository compress
   writeRepoFormat (createRepoFormat PatchFormat1 WithWorkingDir) formatPath
   -- clean out old-fashioned junk
   debugMessage "Cleaning out old-fashioned repository files..."

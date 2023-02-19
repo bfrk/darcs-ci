@@ -15,6 +15,7 @@
 -- Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 module Darcs.Repository.InternalTypes
     ( Repository
+    , PristineType(..)
     , AccessType(..)
     , SAccessType(..)
     , repoAccessType
@@ -23,6 +24,7 @@ module Darcs.Repository.InternalTypes
     , repoFormat
     , repoLocation
     , withRepoDir
+    , repoPristineType
     , unsafeCoerceRepoType
     , unsafeCoercePatchType
     , unsafeCoerceR
@@ -40,6 +42,12 @@ import Darcs.Util.Path ( AbsoluteOrRemotePath, toPath )
 import System.Directory ( withCurrentDirectory )
 import Unsafe.Coerce ( unsafeCoerce )
 
+data PristineType
+  = NoPristine
+  | PlainPristine
+  | HashedPristine
+    deriving ( Show, Eq )
+
 data AccessType = RO | RW deriving (Eq)
 
 data SAccessType (rt :: AccessType) where
@@ -54,18 +62,13 @@ data SAccessType (rt :: AccessType) where
 -- [@wU@] the witness for the unrecorded state (what's in the working tree now).
 -- [@wR@] the witness for the recorded state of the repository,
 --        (what darcs get would retrieve).
--- Note that none of the accessors are exported.
-data Repository (rt :: AccessType) (p :: * -> * -> *) wU wR = Repo
-  { location :: !String
-  , format :: !RepoFormat
-  , cache :: Cache
-  , access :: (SAccessType rt)
-  }
+data Repository (rt :: AccessType) (p :: * -> * -> *) wU wR =
+  Repo !String !RepoFormat !PristineType Cache (SAccessType rt)
 
 type role Repository nominal nominal nominal nominal
 
 repoLocation :: Repository rt p wU wR -> String
-repoLocation = location
+repoLocation (Repo loc _ _ _ _) = loc
 
 -- | Perform an action with the current working directory set to the
 -- 'repoLocation'.
@@ -73,16 +76,19 @@ withRepoDir :: Repository rt p wU wR -> IO a -> IO a
 withRepoDir repo = withCurrentDirectory (repoLocation repo)
 
 repoFormat :: Repository rt p wU wR -> RepoFormat
-repoFormat = format
+repoFormat (Repo _ fmt _ _ _) = fmt
+
+repoPristineType :: Repository rt p wU wR -> PristineType
+repoPristineType (Repo _ _ pr _ _) = pr
 
 repoCache :: Repository rt p wU wR -> Cache
-repoCache = cache
+repoCache (Repo _ _ _ c _) = c
 
 modifyCache :: (Cache -> Cache) -> Repository rt p wU wR -> Repository rt p wU wR
-modifyCache g r@(Repo {cache = c}) = r { cache = g c }
+modifyCache g (Repo l f p c a) = Repo l f p (g c) a
 
 repoAccessType :: Repository rt p wU wR -> SAccessType rt
-repoAccessType = access
+repoAccessType (Repo _ _ _ _ s) = s
 
 unsafeCoerceRepoType :: Repository rt p wU wR -> Repository rt' p wU wR
 unsafeCoerceRepoType = unsafeCoerce
@@ -97,10 +103,10 @@ unsafeCoerceU :: Repository rt p wU wR -> Repository rt p wU' wR
 unsafeCoerceU = unsafeCoerce
 
 unsafeStartTransaction :: Repository 'RO p wU wR -> Repository 'RW p wU wR
-unsafeStartTransaction r@(Repo { access = SRO }) = r { access = SRW }
+unsafeStartTransaction (Repo l f p c SRO) = Repo l f p c SRW
 
 unsafeEndTransaction :: Repository 'RW p wU wR -> Repository 'RO p wU wR
-unsafeEndTransaction r@(Repo { access = SRW }) = r { access = SRO }
+unsafeEndTransaction (Repo l f p c SRW) = Repo l f p c SRO
 
-mkRepo :: AbsoluteOrRemotePath -> RepoFormat -> Cache -> Repository 'RO p wU wR
-mkRepo p f c = Repo { location = toPath p, format = f, cache = c, access = SRO }
+mkRepo :: AbsoluteOrRemotePath -> RepoFormat -> PristineType -> Cache -> Repository 'RO p wU wR
+mkRepo p f pr c = Repo (toPath p) f pr c SRO

@@ -21,7 +21,9 @@ module Darcs.Repository
     , AccessType(..)
     , repoLocation
     , repoFormat
+    , repoPristineType
     , repoCache
+    , PristineType(..)
     , HashedDir(..)
     , Cache
     , CacheLoc(..)
@@ -52,7 +54,7 @@ module Darcs.Repository
     , tentativelyAddPatches
     , tentativelyRemovePatches
     , setTentativePending
-    , tentativelyRemoveFromPending
+    , tentativelyRemoveFromPW
     , withManualRebaseUpdate
     , tentativelyMergePatches
     , considerMergeToWorking
@@ -78,6 +80,7 @@ module Darcs.Repository
     , readPristine
     , readUnrecorded
     , unrecordedChanges
+    , readPendingAndWorking
     , filterOutConflicts
     , readPristineAndPending
     ) where
@@ -86,6 +89,7 @@ import Darcs.Repository.State
     ( readPristine
     , readUnrecorded
     , unrecordedChanges
+    , readPendingAndWorking
     , readPristineAndPending
     , filterOutConflicts
     , unsafeAddToPending
@@ -108,18 +112,16 @@ import Darcs.Repository.Hashed
     , tentativelyAddPatch
     , tentativelyAddPatches
     , tentativelyRemovePatches
+    , revertRepositoryChanges
+    , finalizeRepositoryChanges
     , reorderInventory
     )
 import Darcs.Repository.Pristine
     ( createPristineDirectoryTree
     , writePristine
     )
-import Darcs.Repository.Transaction
-    ( revertRepositoryChanges
-    , finalizeRepositoryChanges
-    )
 import Darcs.Repository.Traverse ( cleanRepository )
-import Darcs.Repository.Pending ( setTentativePending, tentativelyRemoveFromPending )
+import Darcs.Repository.Pending ( setTentativePending, tentativelyRemoveFromPW )
 import Darcs.Repository.Working
     ( applyToWorking
     , setScriptsExecutable
@@ -150,9 +152,11 @@ import Darcs.Util.Cache
 import Darcs.Repository.InternalTypes
     ( Repository
     , AccessType(..)
+    , PristineType(..)
     , modifyCache
     , repoLocation
     , repoFormat
+    , repoPristineType
     , repoCache
     )
 import Darcs.Repository.Clone
