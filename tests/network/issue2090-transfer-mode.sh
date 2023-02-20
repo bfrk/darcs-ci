@@ -49,6 +49,6 @@ cd ..
 
 rm -rf S
 darcs clone $REMOTE:$REMOTE_DIR/R S --debug > log 2>&1
-COUNT=$(grep -c '^Exec.*darcs.*transfer-mode' log)
+COUNT=$(grep -c '^Exec: "ssh" .* "darcs" "transfer-mode"' log)
 # with issue2090, this was 6!
 test $COUNT -eq 1

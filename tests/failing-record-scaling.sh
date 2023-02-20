@@ -26,12 +26,15 @@
 . lib                  # Load some portability helpers.
 which strace || exit 200        # This test requires strace(1).
 
+# This test is bogus. Record does indeed access _darcs/inventories,
+# namely to store the tentative version of hashed_inventory. This does
+# not mean it accesses any other old inventory (it does not).
+
 rm -rf R                        # Another script may have left a mess.
 darcs init      --repo R        # Create our test repo.
 touch R/a-unique-filename
-strace -eopen -oR/trace \
-  darcs record  --repo R -lam 'A unique commit message.'
+strace -eopenat -oR/trace \
+  darcs record  --repo R -l a-unique-filename -am 'A unique commit message.'
 grep a-unique-filename R/trace
 grep _darcs/hashed_inventory R/trace
 not grep _darcs/inventories/ R/trace
-rm -rf R                        # Clean up after ourselves.

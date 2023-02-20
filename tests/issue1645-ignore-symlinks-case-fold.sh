@@ -56,16 +56,16 @@ rm cs-test cs-Test # move file and symlink out of the way for real tests
 touch non-recorded-file2
 ln -s ./non-recorded-file2 ./Non-Recorded-File2
 ln -s "`pwd`"/non-recorded-file2 ./Non-ReCoRdEd-File2
-darcs w -l >log 2>&1                                             # should report only "non-recorded-file"
-darcs rec -alm "added ./non-recorded-file2" >>log 2>&1            # should add only file, not symlink
-darcs changes -s --patches="added ./non-recorded-file2" >>log 2>&1  # should report only file, not symlink
+darcs w -l >log                                                  # should report only "non-recorded-file"
+darcs rec -alm "added ./non-recorded-file2" >>log                 # should add only file, not symlink
+darcs changes -s --patches="added ./non-recorded-file2" >>log       # should report only file, not symlink
 not grep -vE "(^patch|^Author|^ *$|^\+|[0-9]:[0-9][0-9]:[0-9]|./non-recorded-file2)" log
 rm Non-Recorded-File2 ./Non-ReCoRdEd-File2
 
 # Case 16: case-folding link to recorded file
 ln -s ./recorded-file ./Recorded-File
 ln -s "`pwd`"/recorded-file ./ReCorded-File
-not darcs w -l >log 2>&1                                         # expecting "No changes!"
-not darcs rec -alm "should not happen" >>log 2>&1                # expecting "No changes!" as well
+not darcs w -l >log                                              # expecting "No changes!"
+not darcs rec -alm "should not happen" >>log                     # expecting "No changes!" as well
 not grep -vE "(^ *$|^\+|No changes!)" log
 rm Recorded-File ReCorded-File

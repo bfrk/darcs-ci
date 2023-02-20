@@ -3,10 +3,10 @@
 . lib
 . httplib
 
-check_remote_http https://hub.darcs.net/darcs/darcs-screened
+check_remote_http http://darcs.net
 
 # Demonstrates issue385 and others
-darcs log --repo=https://hub.darcs.net/darcs/darcs-screened GNUmakefile --last 30
+darcs log --repo=http://darcs.net GNUmakefile --last 30
 
 # Test things mentioned in issue2461:
 
@@ -19,9 +19,9 @@ mkdir ro
 chmod a-w ro
 cd ro
 # and try again (with less patches to fetch)
-darcs log --repo=https://hub.darcs.net/darcs/darcs-screened GNUmakefile --last 3
+darcs log --repo=http://darcs.net GNUmakefile --last 3
 # an absolute path should give an error
-not darcs log --repo=https://hub.darcs.net/darcs/darcs-screened /GNUmakefile --last 3
+not darcs log --repo=http://darcs.net /GNUmakefile --last 3
 # also test that it works without any filename arguments
-darcs log --repo=https://hub.darcs.net/darcs/darcs-screened --last 1
+darcs log --repo=http://darcs.net --last 1
 cd ..

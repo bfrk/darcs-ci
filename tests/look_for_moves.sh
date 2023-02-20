@@ -12,11 +12,11 @@ darcs init
 touch foo
 darcs record -lam add_file
 mv foo foo2
-darcs wh --summary --look-for-moves >log 2>&1
+darcs wh --summary --look-for-moves >log
 cat > log.expected <<EOF
  ./foo -> ./foo2
 EOF
-diff -u log log.expected
+diff -u log log.expected >&2
 rm log log.expected
 darcs record -am move_file --look-for-moves
 darcs wh --look-for-moves --look-for-adds  >log 2>&1
@@ -29,7 +29,7 @@ darcs init
 mkdir foo
 darcs record -lam add_dir
 mv foo foo2
-darcs wh --summary --look-for-moves >log 2>&1
+darcs wh --summary --look-for-moves >log
 cat > log.expected <<EOF
  ./foo -> ./foo2
 EOF
@@ -47,7 +47,7 @@ touch foo
 darcs record -lam add_file
 mv foo foo2
 touch foo
-darcs wh --summary --look-for-moves >log 2>&1
+darcs wh --summary --look-for-moves >log
 cat > log.expected <<EOF
  ./foo -> ./foo2
 EOF
@@ -118,7 +118,7 @@ mkdir dir
 mv foo dir
 darcs record -lam add_files
 mv dir dir2
-darcs wh --summary --look-for-moves > log 2>&1
+darcs wh --summary --look-for-moves > log
 cat > log.expected <<EOF
  ./dir -> ./dir2
 EOF
@@ -149,7 +149,7 @@ darcs record -lam add_files_and_dirs
 mv dir dir.tmp
 mv dir2 dir
 mv dir.tmp dir2
-darcs wh --summary --look-for-moves > log 2>&1
+darcs wh --summary --look-for-moves > log
 cat > log.expected <<EOF
  ./dir/foo -> ./dir2/foo
  ./dir2/foo2 -> ./dir/foo2
@@ -164,7 +164,7 @@ touch foo
 darcs record -lam add_files_and_dirs
 darcs mv foo foo2
 mv foo2 foo3
-darcs wh --summary --look-for-moves > log 2>&1
+darcs wh --summary --look-for-moves > log
 cat > log.expected <<EOF
  ./foo -> ./foo3
 EOF
@@ -181,7 +181,7 @@ darcs init
 touch foo
 darcs record -lam add_files_and_dirs
 mv foo foo~
-darcs wh --summary --look-for-moves > log 2>&1
+darcs wh --summary --look-for-moves > log
 cat > log.expected <<EOF
 R ./foo
 EOF

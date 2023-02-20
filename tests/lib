@@ -4,10 +4,12 @@
 
 # I would use the builtin !, but that has the wrong semantics
 not () {
+  set +x
   if "$@" || test $? = "4"; then
     # fail the test if command succeeds or returns 4
     exit 1
   fi
+  set -x
 }
 
 # trick: OS-detection (if needed)
