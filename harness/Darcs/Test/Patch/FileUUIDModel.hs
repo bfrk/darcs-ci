@@ -7,7 +7,6 @@ module Darcs.Test.Patch.FileUUIDModel
   , repoApply
   , emptyFile
   , emptyDir
-  , nullRepo
   , root, rootId
   , repoObjects, repoIds
   , aFilename, aDirname
@@ -39,7 +38,6 @@ import Data.Maybe ( fromJust )
 import Test.QuickCheck
   ( Arbitrary(..)
   , Gen, choose, vectorOf, frequency, oneof )
--- import Text.Show.Pretty ( ppShow )
 
 ----------------------------------------------------------------------
 -- * Model definition
@@ -73,11 +71,6 @@ objectMap m = ObjectMap { getObject = get, putObject = put, listObjects = list }
         put k o = return $ objectMap (M.insert k o m)
         get k = return $ M.lookup k m
 
-{-
-emptyRepo :: FileUUIDModel wX
-emptyRepo = FileUUIDModel (objectMap $ M.singleton rootId emptyDir)
--}
-
 emptyFile :: (Monad m) => Object m
 emptyFile = Blob (return B.empty) Nothing
 
@@ -86,9 +79,6 @@ emptyDir = Directory M.empty
 
 ----------------------------------------------------------------------
 -- * Queries
-
-nullRepo :: FileUUIDModel wX -> Bool
-nullRepo repo = repoIds repo == [rootId]
 
 rootId :: UUID
 rootId = UUID "ROOT"
@@ -114,9 +104,6 @@ isEmpty (Blob f _) = B.null $ unFail f
 
 nonEmptyRepoObjects :: FileUUIDModel wX -> [(UUID, Object Fail)]
 nonEmptyRepoObjects = filter (not . isEmpty . snd) . repoObjects
-
-----------------------------------------------------------------------
--- * Comparing repositories
 
 ----------------------------------------------------------------------
 -- * QuickCheck generators
@@ -210,7 +197,7 @@ instance RepoModel FileUUIDModel where
                   dirsNo <- frequency [(3, return 1), (1, return 0)]
                   aRepo filesNo dirsNo
   repoApply (FileUUIDModel state) patch = FileUUIDModel <$> applyToState patch state
-  showModel = show -- ppShow
+  showModel = show
   eqModel r1 r2 = nonEmptyRepoObjects r1 == nonEmptyRepoObjects r2
 
 instance Arbitrary (Sealed FileUUIDModel) where

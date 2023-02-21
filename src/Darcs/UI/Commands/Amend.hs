@@ -90,6 +90,7 @@ import Darcs.Repository
     , readPatches
     , tentativelyRemoveFromPW
     )
+import Darcs.Repository.Pending ( readTentativePending, writeTentativePending )
 import Darcs.Repository.Prefs ( getDefaultRepo )
 import Darcs.UI.SelectChanges
     ( WhichChanges(..)
@@ -266,6 +267,8 @@ addChangesToPatch cfg _repository context oldp chs pending working =
   if nullFL chs && not (hasEditMetadata cfg)
     then putInfo cfg "You don't want to record anything!"
     else do
+      -- remember the old pending for the amend --unrecord case, see below
+      Sealed old_pending <- readTentativePending _repository
       -- If a rebase is in progress, we want to manually update the rebase
       -- state, using the amendments directly as rebase fixups. This is
       -- necessary because otherwise we will first remove the original patch
@@ -317,7 +320,10 @@ addChangesToPatch cfg _repository context oldp chs pending working =
         ("you have a bad patch: '" ++ patchDesc newp ++ "'")
         "amend it"
         (Just failmsg)
-      tentativelyRemoveFromPW _repository chs pending working
+      if O.amendUnrecord ? cfg then
+        writeTentativePending _repository $ invert chs +>+ old_pending
+      else
+        tentativelyRemoveFromPW _repository chs pending working
       _repository <-
         finalizeRepositoryChanges _repository YesUpdatePending (O.compress ? cfg)
           (O.dryRun ? cfg) `clarifyErrors` failmsg

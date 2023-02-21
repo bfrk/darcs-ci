@@ -72,8 +72,9 @@ instance Check Prim where
    -- This is stupid but was designed that way ages ago:
    -- empty hunks commute with everything, so the file need
    -- not even exist, nor the line in the file.
-   -- Perhaps we should avoid generating empty hunks.
-   checkPatch (FP _ (Hunk _ [] [])) = isValid
+   -- We nowadays strictly avoid generating empty hunks, in
+   -- darcs itself as well as in the test case generators.
+   checkPatch (FP _ (Hunk _ [] [])) = error "encountered empty hunk"
    checkPatch (FP f (Hunk line old new)) = do
        fileExists f
        mapM_ (deleteLine f line) old

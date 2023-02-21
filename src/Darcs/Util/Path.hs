@@ -421,7 +421,7 @@ parent :: AnchoredPath -> Maybe AnchoredPath
 parent (AnchoredPath []) = Nothing
 parent (AnchoredPath x) = Just (AnchoredPath (init x))
 
--- | List all parents of a given path. foo/bar/baz -> [.,foo, foo/bar]
+-- | List all (proper) parents of a given path. foo/bar/baz -> [.,foo, foo/bar]
 parents :: AnchoredPath -> [AnchoredPath]
 parents (AnchoredPath []) = [] -- root has no parents
 parents (AnchoredPath xs) = map AnchoredPath $ inits $ init xs

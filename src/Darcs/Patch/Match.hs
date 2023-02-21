@@ -38,11 +38,7 @@
 -- (additionally including the 'OneIndex' flag --index=n), to denote
 -- selection of a full 'PatchSet' up to the latest matching patch. This
 -- works similar to 'secondMatcher' except for tag matches, which in this
--- case mean to select only the tag and all its dependencies. In other
--- words, the tag will be clean in the resulting 'PatchSet'.
---
--- (Implementation note: keep in mind that the PatchSet is written
--- backwards with respect to the timeline, ie., from right to left)
+-- case mean to select only the tag and all its dependencies.
 module Darcs.Patch.Match
     ( helpOnMatchers
     , matchFirstPatchset
@@ -106,7 +102,7 @@ import Darcs.Patch.Info ( justName, justAuthor, justLog, makePatchname,
 
 import qualified Data.ByteString.Char8 as BC
 
-import Darcs.Patch.PatchInfoAnd ( PatchInfoAnd, info, conscientiously )
+import Darcs.Patch.PatchInfoAnd ( PatchInfoAnd, info )
 import Darcs.Patch.Set
     ( Origin
     , PatchSet(..)
@@ -125,7 +121,6 @@ import Darcs.Patch.Witnesses.Ordered
     ( RL(..), FL(..), (:>)(..), reverseRL, mapRL, (+<+) )
 import Darcs.Patch.Witnesses.Sealed
     ( Sealed2(..), seal, seal2, unseal2, unseal )
-import Darcs.Util.Printer ( text, ($$) )
 import Darcs.Patch.ApplyMonad ( ApplyMonad(..) )
 
 import Darcs.Util.DateMatcher ( parseDateMatcher )
@@ -528,7 +523,7 @@ hasIndexRange (_:fs) = hasIndexRange fs
 -- | @matchFirstPatchset fs ps@ returns the part of @ps@ before its
 -- first matcher, ie the one that comes first dependencywise. Hence,
 -- patches in @matchFirstPatchset fs ps@ are the context for the ones
--- we don't want.
+-- we want.
 matchFirstPatchset :: MatchableRP p
                    => [MatchFlag] -> PatchSet p wStart wX
                    -> Maybe (SealedPatchSet p wStart)
@@ -682,7 +677,7 @@ applyInvToMatcher m (PatchSet (ts :<: Tagged ps t _) NilRL) =
   applyInvToMatcher m (PatchSet ts (ps :<: t))
 applyInvToMatcher m (PatchSet xs (ps :<: p))
   | applyMatcher m p = return ()
-  | otherwise = applyInvp p >> applyInvToMatcher m (PatchSet xs ps)
+  | otherwise = unapply p >> applyInvToMatcher m (PatchSet xs ps)
 
 -- | @applyNInv@ n ps applies the inverse of the last @n@ patches of @ps@.
 applyNInv :: (MatchableRP p, ApplyMonad (ApplyState p) m)
@@ -692,20 +687,7 @@ applyNInv _ (PatchSet NilRL NilRL) = throw $ userError "Index out of range"
 applyNInv n (PatchSet (ts :<: Tagged ps t _) NilRL) =
   applyNInv n (PatchSet ts (ps :<: t))
 applyNInv n (PatchSet xs (ps :<: p)) =
-  applyInvp p >> applyNInv (n - 1) (PatchSet xs ps)
-
--- | @applyInvp@ tries to get the patch that's in a 'PatchInfoAnd
--- patch', and to apply its inverse. If we fail to fetch the patch
--- then we share our sorrow with the user.
-applyInvp :: (Apply p, ApplyMonad (ApplyState p) m)
-          => PatchInfoAnd p wX wY -> m ()
-applyInvp = unapply . fromHopefully
-    where fromHopefully = conscientiously $ \e ->
-                     text "Sorry, patch not available:"
-                     $$ e
-                     $$ text ""
-                     $$ text "If you think what you're trying to do is ok then"
-                     $$ text "report this as a bug on the darcs-user list."
+  unapply p >> applyNInv (n - 1) (PatchSet xs ps)
 
 -- | matchingHead returns the repository up to some tag. The tag t is the last
 -- tag such that there is a patch after t that is matched by the user's query.

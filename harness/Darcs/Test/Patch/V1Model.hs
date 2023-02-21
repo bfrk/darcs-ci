@@ -5,7 +5,6 @@ module Darcs.Test.Patch.V1Model
   , makeRepo, emptyRepo
   , makeFile, emptyFile
   , emptyDir
-  , nullRepo
   , isFile, isDir
   , fileContent, dirContent
   , isEmpty

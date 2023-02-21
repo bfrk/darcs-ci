@@ -72,7 +72,7 @@ data TreeEnv m = TreeEnv
   }
 
 -- | A monad transformer that adds state of type 'TreeState' and an environment
--- of type 'AnchoredPath' (for the current directory).
+-- of type 'TreeEnv'.
 type TreeMonad m = RWST (TreeEnv m) () (TreeState m) m
 
 -- | 'TreeMonad' specialized to 'IO'

@@ -59,7 +59,7 @@ import Darcs.Patch.Named ( anonymous )
 import Darcs.Patch.Apply ( ApplyState, applyToTree, effectOnPaths )
 import Darcs.Patch.Witnesses.Ordered ( FL(..), (+>+)
                                      , (:>)(..), reverseRL, reverseFL
-                                     , mapFL, concatFL, toFL, nullFL )
+                                     , mapFL, concatFL, freeLeftToFL, nullFL )
 import Darcs.Patch.Witnesses.Eq ( EqCheck(IsEq, NotEq) )
 import Darcs.Patch.Witnesses.Unsafe ( unsafeCoerceP, unsafeCoercePEnd )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(Sealed), seal, unFreeLeft, mapSeal
@@ -633,7 +633,7 @@ getReplaces YesLookForReplaces diffalg _repo pending working = do
       flip runStateT pending $
         forM replaces $ \(path, a, b) ->
           doReplace defaultToks path (BC.unpack a) (BC.unpack b)
-    return (new_pending, mapSeal concatFL $ toFL patches)
+    return (new_pending, mapSeal concatFL $ freeLeftToFL patches)
   where
     modifiedTokens :: PrimOf p wX wY -> [(AnchoredPath, B.ByteString, B.ByteString)]
     modifiedTokens p = case isHunk p of

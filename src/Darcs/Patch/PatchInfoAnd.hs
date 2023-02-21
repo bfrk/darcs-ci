@@ -24,7 +24,6 @@ module Darcs.Patch.PatchInfoAnd
     , patchInfoAndPatch
     , fmapPIAP
     , fmapFLPIAP
-    , conscientiously
     , hopefully
     , info
     , hopefullyM
@@ -165,8 +164,7 @@ conscientiously er ~(PIAP pinf hp) =
       Right p -> p
       Left e -> throw $ PatchNotAvailable $ er (displayPatchInfo pinf $$ text e)
 
--- | @hopefullyM@ is a version of @hopefully@ which calls @fail@ in a
--- monad instead of erroring.
+-- | Return 'Just' the patch content or 'Nothing' if it is unavailable.
 hopefullyM :: PatchInfoAndG p wA wB -> Maybe (p wA wB)
 hopefullyM (PIAP _ hp) = case hopefully2either hp of
                               Right p -> return p
@@ -287,7 +285,7 @@ instance PatchInspect p => PatchInspect (PatchInfoAndG p) where
 instance Apply p => Apply (PatchInfoAndG p) where
     type ApplyState (PatchInfoAndG p) = ApplyState p
     apply = apply . hopefully
-    unapply = unapply .hopefully
+    unapply = unapply . hopefully
 
 instance ( ReadPatch p, Ident p, PatchId p ~ PatchInfo
          ) => ReadPatch (PatchInfoAndG p) where

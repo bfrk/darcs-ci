@@ -194,7 +194,7 @@ state U'':
          |
          U'
         / \
-    pw'  them''
+      pw' them''
       /     \
      T       U
     / \     /
@@ -311,9 +311,7 @@ tentativelyMergePatches_ mc _repo cmd allowConflicts externalMerge wantGuiPause
                           compression verbosity NoUpdatePending them
                 tentativelyAddPatches_ DontUpdatePristine r2
                     compression verbosity NoUpdatePending us'
-        -- reolutions are currently restricted to hunks so they will
-        -- be sifted out anyway
-        setTentativePending _repo (effect pw' {- +>+ resolution -})
+        setTentativePending _repo (effect pw' +>+ resolution)
     return $ seal (effect them''content +>+ resolution)
 
 tentativelyMergePatches :: (RepoPatch p, ApplyState p ~ Tree)

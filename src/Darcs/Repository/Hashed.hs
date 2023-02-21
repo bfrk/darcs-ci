@@ -129,7 +129,7 @@ import Darcs.Repository.Inventory
     , pokePristineHash
     , readInventoryPrivate
     , readPatchesFromInventoryEntries
-    , readPatchesUsingSpecificInventory
+    , readPatchesFromInventoryFile
     , showInventoryEntry
     , writeInventory
     , writePatchIfNecessary
@@ -237,8 +237,8 @@ readPatchesHashed :: (PatchListFormat p, ReadPatch p) => Repository rt p wU wR
                   -> IO (PatchSet p Origin wR)
 readPatchesHashed repo =
   case repoAccessType repo of
-    SRO -> readPatchesUsingSpecificInventory hashedInventoryPath repo
-    SRW -> readPatchesUsingSpecificInventory tentativeHashedInventoryPath repo
+    SRO -> readPatchesFromInventoryFile hashedInventoryPath repo
+    SRW -> readPatchesFromInventoryFile tentativeHashedInventoryPath repo
 
 -- | Read the tentative 'PatchSet' of a (hashed) 'Repository'.
 readTentativePatches :: (PatchListFormat p, ReadPatch p)

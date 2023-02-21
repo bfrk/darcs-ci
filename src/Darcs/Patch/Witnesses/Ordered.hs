@@ -70,13 +70,12 @@ module Darcs.Patch.Witnesses.Ordered
     , spanFL
     , spanFL_M
     , zipWithFL
-    , toFL
+    , freeLeftToFL
     , mapFL_FL_M
     , sequenceFL_
     , initsFL
     -- * 'RL' only
     , isShorterThanRL
-    , snocRLSealed
     , spanRL
     , breakRL
     , takeWhileRL
@@ -178,11 +177,11 @@ instance (Show2 a, Show2 b) => Show1 ((a :> b) wX)
 -- (non-haddock version)
 --      wZ
 --     :/\:
--- a3 /    \ a4
---   /      \
+--  a3 /  \ a4
+--    /    \
 --  wX      wY
---   \      /
--- a1 \    / a2
+--    \    /
+--  a1 \  / a2
 --     :\/:
 --      wZ
 -- 
@@ -295,10 +294,12 @@ filterRL _ NilRL = []
 filterRL f (xs :<: x) | f x = Sealed2 x : (filterRL f xs)
                       | otherwise = filterRL f xs
 
+-- | Concatenate two 'FL's. This traverses only the left hand side.
 (+>+) :: FL a wX wY -> FL a wY wZ -> FL a wX wZ
 NilFL +>+ ys = ys
 (x:>:xs) +>+ ys = x :>: xs +>+ ys
 
+-- | Concatenate two 'RL's. This traverses only the right hand side.
 (+<+) :: RL a wX wY -> RL a wY wZ -> RL a wX wZ
 xs +<+ NilRL = xs
 xs +<+ (ys:<:y) = xs +<+ ys :<: y
@@ -491,12 +492,13 @@ isShorterThanRL _ n | n <= 0 = False
 isShorterThanRL NilRL _ = True
 isShorterThanRL (xs:<:_) n = isShorterThanRL xs (n-1)
 
-snocRLSealed :: FlippedSeal (RL a) wY -> a wY wZ -> FlippedSeal (RL a) wZ
-snocRLSealed (FlippedSeal as) a = flipSeal $ as :<: a
-
-toFL :: [FreeLeft a] -> Sealed (FL a wX)
-toFL [] = Sealed NilFL
-toFL (x:xs) = case unFreeLeft x of Sealed y -> case toFL xs of Sealed ys -> Sealed (y :>: ys)
+freeLeftToFL :: [FreeLeft a] -> Sealed (FL a wX)
+freeLeftToFL [] = Sealed NilFL
+freeLeftToFL (x:xs) =
+  case unFreeLeft x of
+    Sealed y ->
+      case freeLeftToFL xs of
+        Sealed ys -> Sealed (y :>: ys)
 
 dropWhileFL :: (forall wX wY . a wX wY -> Bool) -> FL a wR wV -> FlippedSeal (FL a) wV
 dropWhileFL _ NilFL       = flipSeal NilFL

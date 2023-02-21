@@ -1,6 +1,6 @@
 module Darcs.Repository.Inventory
     ( module Darcs.Repository.Inventory.Format
-    , readPatchesUsingSpecificInventory
+    , readPatchesFromInventoryFile
     , readPatchesFromInventory
     , readPatchesFromInventoryEntries
     , readSinglePatch
@@ -50,11 +50,12 @@ import Darcs.Util.Printer ( Doc, renderPS, renderString, text, ($$) )
 import Darcs.Util.Progress ( debugMessage, finishedOneIO )
 
 -- | Read a 'PatchSet' starting with a specific inventory inside a 'Repository'.
-readPatchesUsingSpecificInventory :: (PatchListFormat p, ReadPatch p)
-                                  => FilePath
-                                  -> Repository rt p wU wR
-                                  -> IO (PatchSet p Origin wS)
-readPatchesUsingSpecificInventory invPath repo = do
+readPatchesFromInventoryFile
+  :: (PatchListFormat p, ReadPatch p)
+  => FilePath
+  -> Repository rt p wU wR
+  -> IO (PatchSet p Origin wS)
+readPatchesFromInventoryFile invPath repo = do
   let repodir = repoLocation repo
   Sealed ps <-
     catch
@@ -109,8 +110,8 @@ readPatchesFromInventory cache = parseInv
 
     readTaggedInventory :: InventoryHash -> IO Inventory
     readTaggedInventory invHash = do
-        (fileName, pristineAndInventory) <- fetchFileUsingCache cache invHash
-        case parseInventory pristineAndInventory of
+        (fileName, inventory) <- fetchFileUsingCache cache invHash
+        case parseInventory inventory of
           Right r -> return r
           Left e -> fail $ unlines [unwords ["parse error in file", fileName],e]
 

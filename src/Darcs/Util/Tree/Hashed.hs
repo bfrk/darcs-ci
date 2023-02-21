@@ -205,9 +205,6 @@ writeDarcsHashed tree' cache =
 
 -- | Create a hashed file from a 'Cache' and file content. In case the file
 -- exists it is kept untouched and is assumed to have the right content.
--- TODO
--- Corrupt files should be probably renamed out of the way automatically or
--- something (probably when they are being read though).
 fsCreateHashedFile :: Cache -> BL.ByteString -> IO PristineHash
 fsCreateHashedFile cache content =
   -- FIXME pass Compression as an argument as we do elsewhere

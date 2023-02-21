@@ -58,7 +58,7 @@ import Darcs.Repository.Prefs ( FileType(TextFile) )
 import Darcs.Util.Path ( AnchoredPath, displayPath )
 import Darcs.Util.Printer ( Doc, formatWords, vsep )
 import Darcs.Util.SignalHandler ( withSignalsBlocked )
-import Darcs.Patch.Witnesses.Ordered ( FL(..), (+>+), concatFL, toFL, nullFL )
+import Darcs.Patch.Witnesses.Ordered ( FL(..), (+>+), concatFL, freeLeftToFL, nullFL )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(..), mapSeal, FreeLeft, Gap(..), unFreeLeft, unseal )
 
 replaceDescription :: String
@@ -162,7 +162,7 @@ replaceCmd fps opts (old : new : args@(_ : _)) =
         mapM_ checkToken [ old, new ]
         working <- readUnrecorded _repository (O.useIndex ? opts) Nothing
         files <- filterM (exists working) paths
-        Sealed replacePs <- mapSeal concatFL . toFL <$>
+        Sealed replacePs <- mapSeal concatFL . freeLeftToFL <$>
             mapM (doReplace toks working) files
         withSignalsBlocked $ do
           -- Note: addToPending takes care of commuting the replace patch and

@@ -164,8 +164,7 @@ linesPS ps
 {-# INLINE unlinesPS #-}
 -- | Concatenate the inputs with '\n' bytes in interspersed.
 unlinesPS :: [B.ByteString] -> B.ByteString
-unlinesPS [] = B.empty
-unlinesPS x  = B.concat $ intersperse (BC.singleton '\n') x
+unlinesPS = B.concat . intersperse (BC.singleton '\n')
 
 -- properties of linesPS and unlinesPS
 
