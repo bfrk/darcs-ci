@@ -318,9 +318,8 @@ unsafePackedString = Doc . simplePrinter . PS
 invisiblePS :: B.ByteString -> Doc
 invisiblePS = invisiblePrintable . PS
 
--- | 'userchunkPS' creates a 'Doc' representing a user chunk from a 'B.ByteString'.
---
--- Rrrright. And what, please is that supposed to mean?
+-- | Create a 'Doc' representing a user chunk from a 'B.ByteString';
+-- see 'userchunk' for details.
 userchunkPS :: B.ByteString -> Doc
 userchunkPS = userchunkPrintable . PS
 
@@ -344,7 +343,18 @@ invisibleText = invisiblePrintable . S
 hiddenText :: String -> Doc
 hiddenText = hiddenPrintable . S
 
--- | 'userchunk' creates a 'Doc' containing a user chunk from a @String@
+-- | Create a 'Doc' containing a userchunk from a @String@.
+--
+-- Userchunks are used for printing arbitrary bytes stored in prim patches:
+--
+--  * old and new preference values in ChangePref prims
+--  * tokenChars, old token and new token in TokReplace prims
+--  * old and new content lines in Hunk prims
+--
+-- In colored mode they are printed such that trailing whitespace before the
+-- end of a line is made visible by marking the actual line ending with a red
+-- '$' char (unless DARCS_DONT_ESCAPE_TRAILING_SPACES or even
+-- DARCS_DONT_ESCAPE_ANYTHING are set in the environment).
 userchunk :: String -> Doc
 userchunk = userchunkPrintable . S
 
@@ -394,7 +404,7 @@ invisiblePrintable x = Doc $ \st -> invisibleP (printers st) x st
 hiddenPrintable :: Printable -> Doc
 hiddenPrintable x = Doc $ \st -> hiddenP (printers st) x st
 
--- | Creates... WTF is a userchunk???
+-- | Creates a userchunk from any 'Printable'; see 'userchunk' for details.
 userchunkPrintable :: Printable -> Doc
 userchunkPrintable x = Doc $ \st -> userchunkP (printers st) x st
 

@@ -68,7 +68,10 @@ data IdentifyRepo rt p wU wR
     | NonRepository String -- ^ safest guess
     | GoodRepository (Repository rt p wU wR)
 
--- | Tries to identify the repository in a given directory
+-- | Try to identify the repository at a given location, passed as a 'String'.
+-- If the lcation is ".", then we assume we are identifying the local repository.
+-- Otherwise we assume we are dealing with a remote repo, which could be a URL
+-- or an absolute path.
 maybeIdentifyRepository :: UseCache -> String -> IO (IdentifyRepo 'RO p wU wR)
 maybeIdentifyRepository useCache "." =
     do darcs <- doesDirectoryExist darcsdir

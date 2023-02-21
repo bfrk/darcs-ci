@@ -137,13 +137,13 @@ printDryRunMessageAndExit :: RepoPatch p
                           -> IO ()
 printDryRunMessageAndExit action v s d x interactive patches = do
     when (d == YesDryRun) $ do
-        putInfoX $ hsep [ "Would", text action, "the following changes:" ]
+        putInfoX $ hsep [ "Would", text action, "the following patches:" ]
         putDocLnWith fancyPrinters put_mode
         putInfoX $ text ""
         putInfoX $ text "Making no changes: this is a dry run."
         exitSuccess
     when (not interactive && s == YesSummary) $ do
-        putInfoX $ hsep [ "Will", text action, "the following changes:" ]
+        putInfoX $ hsep [ "Will", text action, "the following patches:" ]
         putDocLn put_mode
   where
     put_mode = if x == YesXml

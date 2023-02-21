@@ -237,19 +237,22 @@ unresolved conflicts in a repo.
 In general a 'Named' patch contains multiple changes ( a "changeset").
 Consider the named patches
 
+@
   Named A [] a
   Named B [] (b1;b2)
   Named C [] c
   Named D [A,B] _
+@
 
-where at the RepoPatch level a conflicts with b1 and c with b2. D depends
-explicitly on both A and B, so it fully covers the conflict between a and b1
-and thus we would be justified to consider that particular conflict as
-resolved. Unfortunately we cannot detect this at the Named patch level
-because RepoPatchV1 and V2 have no notion of patch identities. Thus, at the
-Named level the two underlying conflicts appear as a single large conflict
-between the three named patches A, B, and C, and this means that patch D
-does /not/ count as a (partial) resolution (even though it arguably should).
+where, at the RepoPatch level, @a@ conflicts with @b1@, and @c@ with @b2@.
+@D@ depends explicitly on both @A@ and @B@, so it fully covers the conflict
+between @a@ and @b1@ and thus we would be justified to consider that
+particular conflict as resolved. Unfortunately we cannot detect this at the
+Named patch level because RepoPatchV1 and V2 have no notion of patch
+identities. Thus, at the Named level the two underlying conflicts appear as
+a single large conflict between the three named patches @A@, @B@, and @C@,
+and this means that patch @D@ does /not/ count as a (partial) resolution
+(even though it arguably should).
 
 When we decide that a set of conflicting Named patches is resolved, we move
 the RepoPatches contained in them to the context of the resolution. For all
@@ -279,12 +282,12 @@ instance ( Commute p
       -- dependencies for the patches we have traversed. The third parameter
       -- is the context, which is only needed as input to 'findConflicting'.
       separate
-        :: S.Set PatchInfo
-        -> [S.Set PatchInfo]
-        -> RL (Named p) w0 w1
-        -> RL (Named p) w1 w2
-        -> FL p w2 w3
-        -> FL p w3 w4
+        :: S.Set PatchInfo    -- names of resolved Named patches so far
+        -> [S.Set PatchInfo]  -- transitive explicit dependencies so far
+        -> RL (Named p) w0 w1 -- context for Named patches
+        -> RL (Named p) w1 w2 -- Named patches under consideration
+        -> FL p w2 w3         -- result: resolved at RepoPatch layer so far
+        -> FL p w3 w4         -- result: unresolved at RepoPatch layer so far
         -> (FL p :> FL p) w1 w4
       separate acc_res acc_deps ctx (ps :<: p@(NamedP name deps contents)) resolved unresolved
         | name `S.member` acc_res || isConflicted p

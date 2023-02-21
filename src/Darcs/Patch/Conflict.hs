@@ -27,6 +27,8 @@ data ConflictDetails prim wX =
     conflictParts :: Unravelled prim wX
   }
 
+-- | For one conflict (a connected set of conflicting prims), store the
+-- conflicting parts and, if possible, their mangled version.
 mangleOrFail :: PrimMangleUnravelled prim
              => Unravelled prim wX -> ConflictDetails prim wX
 mangleOrFail parts =

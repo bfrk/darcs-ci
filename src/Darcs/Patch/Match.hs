@@ -38,7 +38,11 @@
 -- (additionally including the 'OneIndex' flag --index=n), to denote
 -- selection of a full 'PatchSet' up to the latest matching patch. This
 -- works similar to 'secondMatcher' except for tag matches, which in this
--- case mean to select only the tag and all its dependencies.
+-- case mean to select only the tag and all its dependencies. In other
+-- words, the tag will be clean in the resulting 'PatchSet'.
+--
+-- (Implementation note: keep in mind that the PatchSet is written
+-- backwards with respect to the timeline, ie., from right to left)
 module Darcs.Patch.Match
     ( helpOnMatchers
     , matchFirstPatchset

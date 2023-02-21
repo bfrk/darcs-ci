@@ -462,6 +462,8 @@ unsuspendCmd cmd reifyFixups _ opts _args =
 
               -- TODO should catch logfiles (fst value from updatePatchHeader)
               -- and clean them up as in AmendRecord
+              -- TODO should also ask user to supply explicit dependencies as
+              -- replacements for those that have been lost (if any, see above)
               p' <- snd <$> updatePatchHeader cmd
                       NoAskAboutDeps
                       (patchSelOpts True opts)

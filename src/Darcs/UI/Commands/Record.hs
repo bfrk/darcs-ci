@@ -238,7 +238,6 @@ recordCmd fps cfg args = do
       debugMessage "About to get the unrecorded changes."
       changes <-
         readPendingAndWorking (diffingOpts cfg) repository existing_files
-      debugMessage "I've got unrecorded changes."
       case changes of
           NilFL :> NilFL | not (O.askDeps ? cfg) -> do
               -- We need to grab any input waiting for us, since we
@@ -262,6 +261,7 @@ doRecord :: (RepoPatch p, ApplyState p ~ Tree)
          => Repository 'RW p wU wR -> Config -> Maybe [AnchoredPath]
          -> (FL (PrimOf p) :> FL (PrimOf p)) wR wU -> IO ()
 doRecord repository cfg files pw@(pending :> working) = do
+    debugMessage "I've got unrecorded changes."
     date <- getDate (O.pipe ? cfg)
     my_author <- getAuthor (O.author ? cfg) (O.pipe ? cfg)
     debugMessage "I'm slurping the repository."

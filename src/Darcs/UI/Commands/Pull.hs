@@ -257,23 +257,23 @@ fetchPatches :: (RepoPatch p, ApplyState p ~ Tree)
              -> IO (Sealed (Fork (PatchSet p)
                                  (FL (PatchInfoAnd p))
                                  (FL (PatchInfoAnd p)) Origin wR))
-fetchPatches o opts unfixedrepodirs@(_:_) jobname repository = do
+fetchPatches o opts unfixedrepourls@(_:_) jobname repository = do
   here <- getCurrentDirectory
-  repodirs <- (nub . filter (/= here)) `fmap` mapM (fixUrl o) unfixedrepodirs
+  repourls <- (nub . filter (/= here)) `fmap` mapM (fixUrl o) unfixedrepourls
   -- Test to make sure we aren't trying to pull from the current repo
-  when (null repodirs) $
+  when (null repourls) $
         fail "Can't pull from current repository!"
   old_default <- getPreflist "defaultrepo"
-  when (old_default == repodirs && not (hasXmlOutput opts)) $
+  when (old_default == repourls && not (hasXmlOutput opts)) $
       let pulling = case dryRun ? opts of
                       O.YesDryRun -> "Would pull"
                       O.NoDryRun -> "Pulling"
-      in  putInfo opts $ text pulling <+> "from" <+> hsep (map quoted repodirs) <> "..."
-  (Sealed them, Sealed compl) <- readRepos repository opts repodirs
-  addRepoSource (head repodirs) (dryRun ? opts) (remoteRepos ? opts)
+      in  putInfo opts $ text pulling <+> "from" <+> hsep (map quoted repourls) <> "..."
+  (Sealed them, Sealed compl) <- readRepos repository opts repourls
+  addRepoSource (head repourls) (dryRun ? opts) (remoteRepos ? opts)
       (setDefault False opts) (O.inheritDefault ? opts) (isInteractive True opts)
-  mapM_ (addToPreflist "repos") repodirs
-  unless (quiet opts || hasXmlOutput opts) $ mapM_ showMotd repodirs
+  mapM_ (addToPreflist "repos") repourls
+  unless (quiet opts || hasXmlOutput opts) $ mapM_ showMotd repourls
   us <- readPatches repository
   checkUnrelatedRepos (parseFlags O.allowUnrelatedRepos opts) us them
 

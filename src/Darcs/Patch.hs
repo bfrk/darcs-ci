@@ -77,6 +77,7 @@ module Darcs.Patch
     , listConflictedFiles
     , isInconsistent
     , module Darcs.Patch.RepoPatch
+    , module Darcs.Patch.PatchInfoAnd
     ) where
 
 
@@ -113,3 +114,8 @@ import Darcs.Patch.Summary
     , plainSummaryPrims
     )
 import Darcs.Patch.TokenReplace ( forceTokReplace )
+import Darcs.Patch.PatchInfoAnd
+    ( PatchInfoAnd
+    , hopefully
+    , info
+    )

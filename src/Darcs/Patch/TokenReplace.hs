@@ -37,9 +37,9 @@ breakOutToken tokChars input
 tryTokReplace :: String -> B.ByteString -> B.ByteString
               -> B.ByteString -> Maybe B.ByteString
 tryTokReplace tokChars old new
-  | B.null old = error "tryTokInternal called with empty old token"
-  | BC.any (not . isTokChar) old = error "tryTokInternal called with old non-token"
-  | BC.any (not . isTokChar) new = error "tryTokInternal called with new non-token"
+  | B.null old = error "tryTokReplace called with empty old token"
+  | BC.any (not . isTokChar) old = error "tryTokReplace called with old non-token"
+  | BC.any (not . isTokChar) new = error "tryTokReplace called with new non-token"
   | otherwise = fmap B.concat . loop 0
     where
       isTokChar = regChars tokChars
@@ -60,9 +60,9 @@ tryTokReplace tokChars old new
 forceTokReplace :: String -> B.ByteString -> B.ByteString
                 -> B.ByteString -> B.ByteString
 forceTokReplace tokChars old new
-  | B.null old = error "tryTokInternal called with empty old token"
-  | BC.any (not . isTokChar) old = error "tryTokInternal called with old non-token"
-  | BC.any (not . isTokChar) new = error "tryTokInternal called with new non-token"
+  | B.null old = error "forceTokReplace called with empty old token"
+  | BC.any (not . isTokChar) old = error "forceTokReplace called with old non-token"
+  | BC.any (not . isTokChar) new = error "forceTokReplace called with new non-token"
   | otherwise = B.concat . loop 0
     where
       isTokChar = regChars tokChars

@@ -20,6 +20,9 @@ import Darcs.Prelude
 
 import Darcs.Util.Hash ( Hash, decodeHash, encodeHash, sha256strict )
 
+-- | Semantically, this is the type of hashed objects. Git has a type tag
+-- inside the hashed file itself, whereas in Darcs the type is determined
+-- by the subdirectory.
 data HashedDir
   = HashedPristineDir
   | HashedPatchesDir
