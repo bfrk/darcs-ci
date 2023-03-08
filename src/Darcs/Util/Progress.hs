@@ -13,6 +13,8 @@ module Darcs.Util.Progress
       beginTedious
     , endTedious
     , tediousSize
+    , withProgress
+    , withSizedProgress
     , debugMessage
     , withoutProgress
     , progress
@@ -37,6 +39,7 @@ import Data.Map ( Map, empty, adjust, insert, delete, lookup )
 import Data.Maybe ( isJust )
 import Data.IORef ( IORef, newIORef, readIORef, writeIORef, modifyIORef )
 
+import System.Console.Terminal.Size ( hSize, width )
 import System.IO ( stdout, stderr, hFlush, hPutStr, hPutStrLn,
                    hSetBuffering, hIsTerminalDevice,
                    Handle, BufferMode(LineBuffering) )
@@ -80,34 +83,32 @@ printProgress :: String
               -> ProgressData
               -> IO ()
 printProgress k (ProgressData {sofar=s, total=Just t, latest=Just l}) =
-    myput output output
-  where
-    output = k ++ " " ++ show s ++ " done, " ++ show (t - s) ++ " queued. " ++ l
+    myput (k ++ " ... " ++ show s ++ " done, " ++ show (t - s) ++ " queued. " ++ l)
 printProgress k (ProgressData {latest=Just l}) =
-    myput (k ++ " " ++ l) k
+    myput (k ++ " ... " ++ l)
 printProgress k (ProgressData {sofar=s, total=Just t}) | t >= s =
-    myput (k ++ " " ++ show s ++ " done, " ++ show (t - s) ++ " queued")
-          (k ++ " " ++ show s)
+    myput (k ++ " ... " ++ show s ++ " done, " ++ show (t - s) ++ " queued")
 printProgress k (ProgressData {sofar=s}) =
-    myput (k ++ " " ++ show s) k
+    myput (k ++ " ... " ++ show s)
 
-
-myput :: String -> String -> IO ()
-myput l s = withDebugMode $ \debugMode ->
+-- TODO limit to width of terminal (and only if output device is one)
+myput :: String -> IO ()
+myput l = withDebugMode $ \debugMode ->
     if debugMode
       then putTiming >> hPutStrLn stderr l
-      else
-        if '\n' `elem` l
-          then myput (takeWhile (/= '\n') l) s
-          else putTiming >> if length l < 80
-                              then simpleput l
-                              else simpleput (take 80 s)
+      else putTiming >> simpleput l
 
 
 simpleput :: String -> IO ()
 simpleput = unsafePerformIO $ mkhPutCr stderr
 {-# NOINLINE simpleput #-}
 
+withProgress :: String -> (String -> IO a) -> IO a
+withProgress k = bracket (beginTedious k >> return k) endTedious
+
+withSizedProgress :: String -> Int -> (String -> IO a) -> IO a
+withSizedProgress k n =
+  bracket (beginTedious k >> tediousSize k n >> return k) endTedious
 
 -- | @beginTedious k@ starts a tedious process and registers it in
 -- '_progressData' with the key @k@. A tedious process is one for which we want
@@ -132,7 +133,7 @@ endTedious :: String -> IO ()
 endTedious k = whenProgressMode $ do
     p <- getProgressData k
     modifyIORef _progressData (second $ delete k)
-    when (isJust p) $ debugMessage $ "Done " ++ map toLower k
+    when (isJust p) $ simpleput $ k ++ " ... done"
 
 
 tediousSize :: String
@@ -236,13 +237,19 @@ mkhPutCr :: Handle
          -> IO (String -> IO ())
 mkhPutCr fe = do
     isTerm <- hIsTerminalDevice fe
+    limitToWidth <-
+      if isTerm then
+        hSize fe >>= \case
+          Just window -> return (take (width window - 1))
+          Nothing -> return id
+      else return id
     stdoutIsTerm <- hIsTerminalDevice stdout
     return $
         if isTerm
           then \s -> do
-              hPutStr fe $ '\r':s ++ "\r"
+              hPutStr fe $ '\r':limitToWidth s ++ "\r"
               hFlush fe
-              let spaces = '\r':replicate (length s) ' ' ++ "\r"
+              let spaces = '\r':limitToWidth ((replicate (length s)) ' ') ++ "\r"
               hPutStr fe spaces
               when stdoutIsTerm $ putStr spaces
           else \s -> unless (null s) $ do hPutStrLn fe s

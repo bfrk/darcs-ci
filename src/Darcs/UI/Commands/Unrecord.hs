@@ -47,6 +47,7 @@ import Darcs.Repository
     , applyToWorking
     , finalizeRepositoryChanges
     , readPatches
+    , addToPending
     , tentativelyRemovePatches
     , unrecordedChanges
     , withRepoLock
@@ -244,7 +245,8 @@ obliterateCmd cmdname _ opts _ =
                         -- for the bundle.
                         readPatches _repository >>= savetoBundle opts removed
                     _repository <- tentativelyRemovePatches _repository
-                        (compress ? opts) NoUpdatePending removed
+                        (compress ? opts) YesUpdatePending removed
+                    addToPending _repository (diffingOpts opts) $ invert $ p_after_pending
                     withSignalsBlocked $ do
                         _repository <- finalizeRepositoryChanges _repository
                                         YesUpdatePending (compress ? opts) (O.dryRun ? opts)

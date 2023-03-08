@@ -867,17 +867,23 @@ lastQuestion :: (Commute p, ShowPatch p, ShowContextPatch p, ApplyState p ~ Tree
              => InteractiveSelectionM p wX wY Bool
 lastQuestion = do
   jn <- asks jobname
-  theThings <-things
+  theThings <- things
   aThing <- thing
   let (basicOptions, advancedOptions) = optionsLast jn aThing
-  yorn <- liftIO . promptChar $
+  num <- numSelected
+  if num == 0 then do
+    liftIO $ putStrLn "Nothing selected."
+    return True
+  else do
+    yorn <- liftIO . promptChar $
             PromptConfig { pPrompt = "Do you want to "++capitalize jn++
                                       " these "++theThings++"?"
                          , pBasicCharacters = "yglqk"
                          , pAdvancedCharacters = "dan"
                          , pDefault = Just 'y'
                          , pHelp = "?h"}
-  case yorn of c | c `elem` "yda" -> return True
+    case yorn of
+               c | c `elem` "yda" -> return True
                  | c `elem` "qn" -> liftIO $
                                     do putStrLn $ jn ++" cancelled."
                                        exitSuccess
@@ -888,6 +894,13 @@ lastQuestion = do
                  liftIO . putStrLn $ helpFor "this confirmation prompt"
                     basicOptions advancedOptions
                  return False
+
+numSelected :: Commute p => InteractiveSelectionM p wX wY Int
+numSelected = do
+  w <- asks whichChanges
+  (first_chs :> _ :> last_chs) <- getChoices <$> gets choices
+  return $
+    if backward w then lengthFL last_chs else lengthFL first_chs
 
 -- | Shows the current patch as it should be seen by the user.
 printCurrent :: (ShowPatch p, ShowContextPatch p, ApplyState p ~ Tree)

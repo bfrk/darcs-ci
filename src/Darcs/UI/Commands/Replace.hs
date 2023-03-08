@@ -58,7 +58,14 @@ import Darcs.Repository.Prefs ( FileType(TextFile) )
 import Darcs.Util.Path ( AnchoredPath, displayPath )
 import Darcs.Util.Printer ( Doc, formatWords, vsep )
 import Darcs.Util.SignalHandler ( withSignalsBlocked )
-import Darcs.Patch.Witnesses.Ordered ( FL(..), (+>+), concatFL, freeLeftToFL, nullFL )
+import Darcs.Patch.Witnesses.Ordered
+    ( FL(..)
+    , concatFL
+    , consGapFL
+    , joinGapsFL
+    , nullFL
+    , (+>+)
+    )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(..), mapSeal, FreeLeft, Gap(..), unFreeLeft, unseal )
 
 replaceDescription :: String
@@ -162,7 +169,7 @@ replaceCmd fps opts (old : new : args@(_ : _)) =
         mapM_ checkToken [ old, new ]
         working <- readUnrecorded _repository (O.useIndex ? opts) Nothing
         files <- filterM (exists working) paths
-        Sealed replacePs <- mapSeal concatFL . freeLeftToFL <$>
+        Sealed replacePs <- mapSeal concatFL . unFreeLeft . joinGapsFL <$>
             mapM (doReplace toks working) files
         withSignalsBlocked $ do
           -- Note: addToPending takes care of commuting the replace patch and
@@ -189,7 +196,7 @@ replaceCmd fps opts (old : new : args@(_ : _)) =
         workReplaced <- maybeApplyToTree replacePatch work
         case workReplaced of
           Just _ -> do
-            return $ joinGap (:>:) (freeGap replacePatch) gapNilFL
+            return $ consGapFL replacePatch gapNilFL
           Nothing
             | O.forceReplace ? opts -> getForceReplace f toks work
             | otherwise -> putStrLn existsMsg >> return gapNilFL

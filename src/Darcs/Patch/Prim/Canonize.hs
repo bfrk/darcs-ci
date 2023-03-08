@@ -10,7 +10,7 @@ import Darcs.Patch.Prim.Class
     ( PrimConstruct(primFromHunk)
     , PrimCoalesce(sortCoalesceFL)
     )
-import Darcs.Patch.Witnesses.Ordered ( FL(..), mapFL_FL, concatFL )
+import Darcs.Patch.Witnesses.Ordered ( FL(..), joinGapsFL, mapFL_FL, concatFL )
 import Darcs.Patch.Witnesses.Sealed ( unseal, Gap(..), unFreeLeft )
 import Darcs.Patch.Witnesses.Unsafe ( unsafeCoercePEnd )
 import Darcs.Util.Diff ( DiffAlgorithm, getChanges )
@@ -28,9 +28,7 @@ makeHoley :: Gap w
           -> [(Int, [B.ByteString], [B.ByteString])]
           -> w (FL (FileHunk oid))
 makeHoley f line =
-  foldr
-    (joinGap (:>:) . (\(l, o, n) -> freeGap (FileHunk f (l + line) o n)))
-    (emptyGap NilFL)
+  joinGapsFL . map (\(l, o, n) -> freeGap (FileHunk f (l + line) o n))
 
 -- | It can sometimes be handy to have a canonical representation of a given
 -- patch.  We achieve this by defining a canonical form for each patch type,

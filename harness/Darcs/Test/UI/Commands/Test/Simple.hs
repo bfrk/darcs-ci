@@ -6,7 +6,8 @@ import qualified Darcs.Util.IndexedMonad as Indexed
 import Darcs.Patch.Commute ( Commute(..) )
 import Darcs.Patch.Invert ( Invert(..) )
 import Darcs.Patch.Set ( Origin )
-import Darcs.Patch.Witnesses.Ordered ( RL(..), FL(..), reverseFL, mapFL, (:>)(..) )
+import Darcs.Patch.Witnesses.Ordered
+  ( RL(..), FL(..), consGapFL, reverseFL, mapFL, (:>)(..) )
 import Darcs.Patch.Witnesses.Sealed
   ( Sealed(..), unseal, mapSeal, Sealed2(..)
   , FreeLeft, unFreeLeft, Gap(..)
@@ -170,7 +171,7 @@ genPatchSequence initialState patchStates =
     doGen :: Int -> TestingState -> [TestingState] -> FreeLeft (FL TrivialPatch)
     doGen _ _ [] = emptyGap NilFL
     doGen n startingState (nextState:states) =
-      joinGap (:>:) (freeGap (TrivialPatch n startingState nextState)) (doGen (n+1) nextState states)
+      consGapFL (TrivialPatch n startingState nextState) (doGen (n+1) nextState states)
 
 instance Invert TrivialPatch where
   invert (TrivialPatch num ov nv) = TrivialPatch num nv ov

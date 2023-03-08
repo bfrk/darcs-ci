@@ -25,7 +25,6 @@ import Control.Exception ( try, evaluate, SomeException )
 import System.IO.Unsafe
 
 import Darcs.Patch
-import Darcs.Patch.Annotate
 import Darcs.Patch.V1 ()
 import Darcs.Patch.V1.Core ( RepoPatchV1(..) )
 import qualified Darcs.Patch.V1.Prim as V1 ( Prim )
@@ -46,7 +45,7 @@ import Darcs.Test.Patch.WithState
 type Patch = RepoPatchV1 V1.Prim
 
 instance
-  (Annotate prim, ArbitraryPrim prim, PrimPatch prim, ApplyState prim ~ RepoState (ModelOf prim))
+  (ArbitraryPrim prim, PrimPatch prim, ApplyState prim ~ RepoState (ModelOf prim))
   => ArbitraryRepoPatch (RepoPatchV1 prim)
   where
 

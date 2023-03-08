@@ -49,7 +49,7 @@ import Darcs.Repository.Diff( treeDiff )
 import Darcs.Patch ( RepoPatch, PrimOf, PrimPatch, adddir, rmdir, addfile, rmfile,
                      listTouchedFiles )
 import Darcs.Patch.Apply( ApplyState )
-import Darcs.Patch.Witnesses.Ordered ( FL(..), (+>+), nullFL )
+import Darcs.Patch.Witnesses.Ordered ( FL(..), concatGapsFL, nullFL )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(..), Gap(..), FreeLeft, unFreeLeft )
 import Darcs.Repository.Prefs ( filetypeFunction, FileType )
 import Darcs.Util.Tree( Tree, TreeItem(..), explodePaths )
@@ -128,7 +128,7 @@ makeRemovePatch opts repository files = do
   case result of
     (_, _, _, patches) ->
       return $
-      unFreeLeft $ foldr (joinGap (+>+)) (emptyGap NilFL) $ reverse patches
+      unFreeLeft $ concatGapsFL $ reverse patches
   where
     removeOnePath (ftf, recorded, unrecorded, patches) f = do
       let recorded' = T.modifyTree recorded f Nothing

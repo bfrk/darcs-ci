@@ -16,7 +16,6 @@ import Darcs.Test.Patch.Merge.Checked ( CheckedMerge(..) )
 import Darcs.Test.Patch.RepoModel ( RepoState, ModelOf )
 import Darcs.Test.Patch.WithState ( PropagateShrink )
 import Darcs.Patch
-import Darcs.Patch.Annotate
 import Darcs.Patch.V2 ( RepoPatchV2 )
 import Darcs.Patch.V2.RepoPatch ( isDuplicate, RepoPatchV2(Normal) )
 import Darcs.Patch.Witnesses.Ordered
@@ -26,8 +25,7 @@ instance MightHaveDuplicate (RepoPatchV2 prim) where
 
 type instance ModelOf (RepoPatchV2 prim) = ModelOf prim
 
-instance ( Annotate prim
-         , ArbitraryPrim prim
+instance ( ArbitraryPrim prim
          , PrimPatch prim
          , ApplyState prim ~ RepoState (ModelOf prim)
          ) =>

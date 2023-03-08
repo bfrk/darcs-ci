@@ -70,7 +70,9 @@ module Darcs.Patch.Witnesses.Ordered
     , spanFL
     , spanFL_M
     , zipWithFL
-    , freeLeftToFL
+    , consGapFL
+    , concatGapsFL
+    , joinGapsFL
     , mapFL_FL_M
     , sequenceFL_
     , initsFL
@@ -93,10 +95,11 @@ import Darcs.Patch.Witnesses.Sealed
     ( FlippedSeal(..)
     , flipSeal
     , Sealed(..)
-    , FreeLeft
-    , unFreeLeft
     , Sealed2(..)
     , seal
+    , Gap(..)
+    , emptyGap
+    , joinGap
     )
 import Darcs.Patch.Witnesses.Eq ( Eq2(..), EqCheck(..) )
 
@@ -492,13 +495,14 @@ isShorterThanRL _ n | n <= 0 = False
 isShorterThanRL NilRL _ = True
 isShorterThanRL (xs:<:_) n = isShorterThanRL xs (n-1)
 
-freeLeftToFL :: [FreeLeft a] -> Sealed (FL a wX)
-freeLeftToFL [] = Sealed NilFL
-freeLeftToFL (x:xs) =
-  case unFreeLeft x of
-    Sealed y ->
-      case freeLeftToFL xs of
-        Sealed ys -> Sealed (y :>: ys)
+consGapFL :: Gap w => (forall wX wY. p wX wY) -> w (FL p) -> w (FL p)
+consGapFL p = joinGap (:>:) (freeGap p)
+
+joinGapsFL :: Gap w => [w p] -> w (FL p)
+joinGapsFL = foldr (joinGap (:>:)) (emptyGap NilFL)
+
+concatGapsFL :: Gap w => [w (FL p)] -> w (FL p)
+concatGapsFL = foldr (joinGap (+>+)) (emptyGap NilFL)
 
 dropWhileFL :: (forall wX wY . a wX wY -> Bool) -> FL a wR wV -> FlippedSeal (FL a) wV
 dropWhileFL _ NilFL       = flipSeal NilFL

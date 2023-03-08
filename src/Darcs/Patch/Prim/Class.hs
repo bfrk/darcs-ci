@@ -16,6 +16,7 @@ module Darcs.Patch.Prim.Class
 
 import Darcs.Prelude
 
+import Darcs.Patch.Annotate.Class ( Annotate )
 import Darcs.Patch.ApplyMonad ( ApplyMonad )
 import Darcs.Patch.FileHunk ( FileHunk, IsHunk )
 import Darcs.Patch.Format ( FileNameFormat, PatchListFormat )
@@ -42,7 +43,8 @@ import qualified Data.ByteString as B ( ByteString )
 
 
 type PrimPatch prim =
-    ( Apply prim
+    ( Annotate prim
+    , Apply prim
     , CleanMerge prim
     , Commute prim
     , Invert prim

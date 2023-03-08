@@ -44,7 +44,6 @@ import Darcs.Patch.Witnesses.Ordered
 import Darcs.Patch.Witnesses.Sealed
 import Darcs.Patch.Witnesses.Eq ( Eq2, unsafeCompare )
 import Darcs.Patch.Witnesses.Show
-import Darcs.Patch.Annotate ( Annotate )
 import Darcs.Patch.FromPrim ( PrimOf, FromPrim(..) )
 import Darcs.Patch.Prim ( PrimPatch, coalesce )
 import qualified Darcs.Patch.Prim.FileUUID as FileUUID ( Prim )
@@ -260,7 +259,6 @@ qc_V1P1 =
 
 qc_V2 :: forall prim wXx wYy.
          ( PrimPatch prim
-         , Annotate prim
          , Show1 (ModelOf prim)
          , ShrinkModel prim
          , PropagateShrink prim prim
@@ -287,7 +285,6 @@ qc_V2 _ =
 
 qc_V3 :: forall prim wXx wYy.
          ( PrimPatch prim
-         , Annotate prim
          , Show1 (ModelOf prim)
          , ShrinkModel prim
          , PropagateShrink prim prim

@@ -11,7 +11,6 @@ import Darcs.Test.Patch.RepoModel ( RepoState, ModelOf )
 import Darcs.Test.Patch.WithState ( PropagateShrink )
 
 import Darcs.Patch
-import Darcs.Patch.Annotate
 import Darcs.Patch.Prim.Named
 import Darcs.Patch.Prim.WithName
 import Darcs.Patch.V3 ( RepoPatchV3 )
@@ -25,7 +24,7 @@ instance MightHaveDuplicate (RepoPatchV3 prim) where
 type instance ModelOf (RepoPatchV3 prim) = ModelOf prim
 
 instance
-  (Annotate prim, ArbitraryPrim prim, PrimPatch prim, ApplyState prim ~ RepoState (ModelOf prim))
+  (ArbitraryPrim prim, PrimPatch prim, ApplyState prim ~ RepoState (ModelOf prim))
   => ArbitraryRepoPatch (RepoPatchV3 prim)
   where
 

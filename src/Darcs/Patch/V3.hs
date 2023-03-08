@@ -3,7 +3,6 @@ module Darcs.Patch.V3 ( RepoPatchV3 ) where
 
 import Darcs.Prelude
 
-import Darcs.Patch.Annotate ()
 import Darcs.Patch.FromPrim ( FromPrim(..) )
 import Darcs.Patch.Prim.Named
   ( PrimPatchId

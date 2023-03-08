@@ -44,7 +44,7 @@ import Darcs.UI.PatchHeader
 import Darcs.Repository
     ( Repository, RepoJob(..), AccessType(..), withRepoLock, withRepository
     , tentativelyAddPatches, finalizeRepositoryChanges
-    , tentativelyRemovePatches, readPatches
+    , tentativelyRemovePatches, readPatches, addToPending
     , setTentativePending, unrecordedChanges, applyToWorking
     )
 import Darcs.Repository.Flags ( UpdatePending(..), ExternalMerge(..) )
@@ -60,8 +60,9 @@ import Darcs.Repository.Resolution
     , rebaseResolution
     , announceConflicts
     )
+import Darcs.Repository.State ( updateIndex )
 
-import Darcs.Patch ( invert, effect, commute, RepoPatch, displayPatch )
+import Darcs.Patch ( PrimOf, invert, effect, commute, RepoPatch, displayPatch )
 import Darcs.Patch.Apply ( ApplyState )
 import Darcs.Patch.CommuteFn ( commuterIdFL )
 import Darcs.Patch.Info ( displayPatchInfo )
@@ -110,7 +111,6 @@ import Darcs.Patch.Witnesses.Ordered
     )
 import Darcs.Patch.Witnesses.Sealed
     ( Sealed(..), seal, unseal
-    , FlippedSeal(..)
     , Sealed2(..)
     )
 import Darcs.Patch.Witnesses.Unsafe ( unsafeCoerceP )
@@ -239,11 +239,13 @@ suspendCmd _ opts _args =
     runHijackT RequestHijackPermission
         $ mapM_ (getAuthor "suspend" False Nothing)
         $ mapFL info psToSuspend
-    _repository <- doSuspend opts _repository suspended psToSuspend
-    _repository <-
-      finalizeRepositoryChanges _repository YesUpdatePending
+    (_repository, Sealed toWorking) <-
+      doSuspend opts _repository suspended psToSuspend
+    withSignalsBlocked $ do
+      void $ finalizeRepositoryChanges _repository YesUpdatePending
         (compress ? opts) (O.dryRun ? opts)
-    return ()
+      unless (O.yes (O.dryRun ? opts)) $
+        void $ applyToWorking _repository (verbosity ? opts) toWorking
 
 doSuspend
     :: (RepoPatch p, ApplyState p ~ Tree)
@@ -251,18 +253,18 @@ doSuspend
     -> Repository 'RW p wU wR
     -> Suspended p wR
     -> FL (PatchInfoAnd p) wX wR
-    -> IO (Repository 'RW p wU wX)
+    -> IO (Repository 'RW p wU wX, Sealed (FL (PrimOf p) wU))
 doSuspend opts _repository suspended psToSuspend = do
-    pend <- unrecordedChanges (diffingOpts opts) _repository Nothing
-    FlippedSeal psAfterPending <-
+    unrec <- unrecordedChanges (diffingOpts opts) _repository Nothing
+    _ :> psAfterPending <-
         let effectPsToSuspend = effect psToSuspend in
-        case commute (effectPsToSuspend :> pend) of
-            Just (_ :> res) -> return (FlippedSeal res)
+        case commute (effectPsToSuspend :> unrec) of
+            Just unrec_susp' -> return unrec_susp'
             Nothing -> do
                 putVerbose opts $
                     let invPsEffect = invert effectPsToSuspend
                     in
-                    case (partitionConflictingFL invPsEffect pend, partitionConflictingFL pend invPsEffect) of
+                    case (partitionConflictingFL invPsEffect unrec, partitionConflictingFL unrec invPsEffect) of
                         (_ :> invSuspendedConflicts, _ :> pendConflicts) ->
                             let suspendedConflicts = invert invSuspendedConflicts in
                             redText "These changes in the suspended patches:" $$
@@ -273,17 +275,15 @@ doSuspend opts _repository suspended psToSuspend = do
                     ++ if (verbose opts) then "" else " Use --verbose to see the details."
 
     _repository <-
-      tentativelyRemovePatches _repository (compress ? opts) NoUpdatePending psToSuspend
+      tentativelyRemovePatches _repository (compress ? opts) YesUpdatePending psToSuspend
+    addToPending _repository (diffingOpts opts) $ invert $ psAfterPending
     new_suspended <-
       addToEditsToSuspended
         (O.diffAlgorithm ? opts)
         (mapFL_FL hopefully psToSuspend)
         suspended
     writeTentativeRebase _repository new_suspended
-    withSignalsBlocked $
-      unless (O.yes (O.dryRun ? opts)) $
-        void $ applyToWorking _repository (verbosity ? opts) (invert psAfterPending)
-    return _repository
+    return (_repository, Sealed (invert psAfterPending))
 
 unsuspend :: DarcsCommand
 unsuspend = DarcsCommand
@@ -718,9 +718,16 @@ applyPatchesForRebaseCmd cmdName opts _repository (Fork common us' to_be_applied
 
     suspended <- readTentativeRebase _repository
 
-    _repository <- doSuspend opts _repository suspended usToSuspend
+    (_repository, Sealed toWorking) <- doSuspend opts _repository suspended usToSuspend
     -- the new rebase patch containing the suspended patches is now in the repo
     -- and the suspended patches have been removed
+
+    -- We must apply the suspend to working because tentativelyMergePatches
+    -- calls unrecordedChanges. We also have to update the index, since that is
+    -- used to filter the working tree (unless --ignore-times is in effect).
+    updateIndex _repository
+    _repository <- withSignalsBlocked $ do
+        applyToWorking _repository (verbosity ? opts) toWorking
 
     Sealed pw <-
         tentativelyMergePatches

@@ -30,6 +30,7 @@
 -- Stability   : experimental
 -- Portability : portable
 
+{-# OPTIONS_GHC -Wno-orphans #-}
 module Darcs.Patch.Annotate
     (
       annotateFile
@@ -43,7 +44,7 @@ module Darcs.Patch.Annotate
 
 import Darcs.Prelude
 
-import Control.Monad.State ( modify, modify', when, gets, State, execState )
+import Control.Monad.State ( modify, modify', when, gets, execState )
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC
@@ -56,9 +57,10 @@ import Data.Maybe( isJust, mapMaybe )
 
 import qualified Darcs.Patch.Prim.FileUUID as FileUUID
 
+import Darcs.Patch.Annotate.Class
 import Darcs.Patch.Effect ( Effect(..) )
 import Darcs.Patch.FromPrim ( PrimOf(..) )
-import Darcs.Patch.Info ( PatchInfo(..), displayPatchInfo, piAuthor, makePatchname )
+import Darcs.Patch.Info ( displayPatchInfo, piAuthor, makePatchname )
 import Darcs.Patch.Invert ( Invert, invert )
 import Darcs.Patch.Named ( patchcontents )
 import Darcs.Patch.PatchInfoAnd( info, PatchInfoAnd, hopefully )
@@ -73,33 +75,6 @@ import Darcs.Util.ByteString ( linesPS, decodeLocale )
 data FileOrDirectory = File
                      | Directory
                        deriving (Show, Eq)
-
-type AnnotateResult = V.Vector (Maybe PatchInfo, B.ByteString)
-
-data Content2 f g
-  = FileContent (f (g B.ByteString))
-  | DirContent (f (g AnchoredPath))
-
-data Annotated2 f g = Annotated2
-    { annotated     :: !AnnotateResult
-    , current       :: !(Content2 f g)
-    , currentPath   :: (Maybe AnchoredPath)
-    , currentInfo   :: PatchInfo
-    }
-
-type Content = Content2 [] ((,) Int)
-type Annotated = Annotated2 [] ((,) Int)
-
-deriving instance Eq Content
-deriving instance Show Content
-
-deriving instance Eq Annotated
-deriving instance Show Annotated
-
-type AnnotatedM = State Annotated
-
-class Annotate p where
-  annotate :: p wX wY -> AnnotatedM ()
 
 -- |This constraint expresses what is needed for a repo patch to
 -- support the high-level interface to annotation
