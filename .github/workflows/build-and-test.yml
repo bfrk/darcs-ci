@@ -29,7 +29,7 @@ jobs:
 #           - 9.2.4
 #           - 9.4.2
         cabal:
-          - 3.8
+          - 3.6
         exclude:
           # can't build basement (indirect dependency)
           - os: ubuntu-18.04
