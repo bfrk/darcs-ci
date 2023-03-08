@@ -404,7 +404,7 @@ Library
                       System.Posix.IO
       cpp-options:    -DWIN32
       c-sources:      src/win32/send_email.c
-      build-depends:  Win32 >= 2.4.0 && < 2.7
+      build-depends:  Win32 >= 2.4.0 && < 2.14
     else
       build-depends:  unix >= 2.7.1.0 && < 2.8
 
@@ -552,7 +552,7 @@ test-suite darcs-test
 
   if os(windows)
     cpp-options:    -DWIN32
-    build-depends:  Win32 >= 2.4.0 && < 2.7
+    build-depends:  Win32
 
   build-depends:    darcs,
                     base,
