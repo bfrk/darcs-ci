@@ -69,9 +69,10 @@ jobs:
           cabal-store-${{ matrix.os }}-ghc-${{ matrix.ghc }}-
 
     - name: Configure
+      shell: bash
       run: |
         git clone https://github.com/bfrk/terminal-size
-        echo packages: . ./terminal-size > cabal.project
+        echo "packages: . ./terminal-size" > cabal.project
         cabal configure --enable-tests -fwarn-as-error
 
     - name: Build dependencies
