@@ -28,8 +28,8 @@ jobs:
 #           - 9.0.2
 #           - 9.2.4
 #           - 9.4.2
-        cabal:
-          - 3.6
+#         cabal:
+#           - 3.6
         exclude:
           # can't build basement (indirect dependency)
           - os: ubuntu-18.04
@@ -58,7 +58,7 @@ jobs:
       uses: haskell/actions/setup@v2
       with:
         ghc-version: ${{ matrix.ghc }}
-        cabal-version: ${{ matrix.cabal }}
+        # cabal-version: ${{ matrix.cabal }}
 
     - name: Cache cabal store
       uses: actions/cache@v3
