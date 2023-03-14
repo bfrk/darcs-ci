@@ -13,21 +13,21 @@ jobs:
         os:
 #           - ubuntu-18.04
 #           - ubuntu-20.04
-#          - ubuntu-22.04
+          - ubuntu-22.04
 #           - macOS-10.15
 #           - macOS-11
-#          - macOS-12
+          - macOS-12
 #           - windows-2019
           - windows-2022
         ghc:
-#           - 8.2.2
-#           - 8.4.4
+          - 8.2.2
+          - 8.4.4
           - 8.6.5
-#           - 8.8.2
-#           - 8.10.7
-#           - 9.0.2
-#           - 9.2.4
-#           - 9.4.2
+          - 8.8.2
+          - 8.10.7
+          - 9.0.2
+          - 9.2.4
+          - 9.4.2
         cabal:
           - latest
         exclude:
@@ -38,8 +38,10 @@ jobs:
           - os: ubuntu-22.04
             ghc: 8.2.2
     env:
-      runtests: false # ${{ matrix.ghc == '8.2.2' || matrix.ghc == '9.4.2' }}
-      tests-to-run: # e.g. -t=EXAMPLE
+      runtests: ${{ matrix.ghc == '8.2.2' || matrix.ghc == '9.4.2' }}
+      # for some reason this test randomly fails with darcs.net server
+      # timeouts or similar errors; works fine on my machine
+      tests-to-run: -t='!network/log'
       testcmd: cabal run -- darcs-test -j=6 -f=123 -i=yn -c=yn --hide
       ACTIONS_ALLOW_UNSECURE_COMMANDS: true
       # avoid occasional timeouts in test scripts that access darcs.net:
@@ -58,7 +60,7 @@ jobs:
       uses: haskell/actions/setup@v2
       with:
         ghc-version: ${{ matrix.ghc }}
-        # cabal-version: ${{ matrix.cabal }}
+        cabal-version: ${{ matrix.cabal }}
 
     - name: Cache cabal store
       uses: actions/cache@v3
@@ -69,11 +71,7 @@ jobs:
           cabal-store-${{ matrix.os }}-ghc-${{ matrix.ghc }}-
 
     - name: Configure
-      shell: bash
-      run: |
-        git clone https://github.com/bfrk/terminal-size
-        echo "packages: . ./terminal-size" > cabal.project
-        cabal configure --enable-tests -fwarn-as-error
+      run: cabal configure --enable-tests -fwarn-as-error
 
     - name: Build dependencies
       run: cabal build --only-dependencies
