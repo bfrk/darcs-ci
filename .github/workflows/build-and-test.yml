@@ -62,9 +62,6 @@ jobs:
         ghc-version: ${{ matrix.ghc }}
         cabal-version: ${{ matrix.cabal }}
 
-    - name: Cabal update
-      run: cabal update
-
     - name: Cache cabal store
       uses: actions/cache@v3
       with:
@@ -74,7 +71,9 @@ jobs:
           cabal-store-${{ matrix.os }}-ghc-${{ matrix.ghc }}-
 
     - name: Configure
-      run: cabal configure --enable-tests -fwarn-as-error
+      run: |
+        cabal update
+        cabal configure --enable-tests -fwarn-as-error
 
     - name: Build dependencies
       run: cabal build --only-dependencies
