@@ -76,7 +76,7 @@ jobs:
         cabal configure --enable-tests -fwarn-as-error
 
     - name: Build dependencies
-      run: cabal build --only-dependencies
+      run: cabal build --only-dependencies --disable-documentation
 
     - name: Cache dist-newstyle
       uses: actions/cache@v3
