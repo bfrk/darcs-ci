@@ -11,13 +11,13 @@ jobs:
       fail-fast: false
       matrix:
         os:
-          - ubuntu-18.04
-          - ubuntu-20.04
+#           - ubuntu-18.04
+#           - ubuntu-20.04
           - ubuntu-22.04
-          - macOS-10.15
-          - macOS-11
+#           - macOS-10.15
+#           - macOS-11
           - macOS-12
-          - windows-2019
+#           - windows-2019
           - windows-2022
         ghc:
           - 8.2.2
@@ -45,9 +45,7 @@ jobs:
     env:
       builddocs: ${{ matrix.ghc == '9.4.4' }}
       runtests: ${{ matrix.ghc == '8.4.4' || matrix.ghc == '9.4.4' }}
-      # for some reason this test randomly fails with darcs.net server
-      # timeouts or similar errors; works fine on my machine
-      tests-to-run: -t='!network/log'
+      tests-to-run: # e.g. -t=EXAMPLE
       testcmd: cabal run -- darcs-test -j=6 -f=123 -i=yn -c=yn --hide
       ACTIONS_ALLOW_UNSECURE_COMMANDS: true
       # avoid occasional timeouts in test scripts that access darcs.net:
