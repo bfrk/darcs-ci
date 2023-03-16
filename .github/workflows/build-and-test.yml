@@ -29,7 +29,7 @@ jobs:
           - 9.2.7
           - 9.4.4
         cabal:
-          - latest
+          - 3.6
         exclude:
           # can't build basement (indirect dependency)
           - os: ubuntu-18.04
@@ -39,7 +39,7 @@ jobs:
             ghc: 8.2.2
     env:
       builddocs: ${{ matrix.ghc == '9.4.4' }}
-      runtests: ${{ matrix.ghc == '8.2.2' || matrix.ghc == '9.4.4' }}
+      runtests: ${{ matrix.ghc == '8.4.4' || matrix.ghc == '9.4.4' }}
       # for some reason this test randomly fails with darcs.net server
       # timeouts or similar errors; works fine on my machine
       tests-to-run: -t='!network/log'
@@ -72,16 +72,14 @@ jobs:
           cabal-store-${{ matrix.os }}-ghc-${{ matrix.ghc }}-
 
     - name: Configure
-      run: |
-        cabal update
-        cabal configure --enable-tests -fwarn-as-error
+      run: cabal configure --enable-tests -fwarn-as-error
 
     - name: Build dependencies (with docs)
-      if: env.builddocs == 'false'
-      run: cabal build --only-dependencies
+      if: env.builddocs == 'true'
+      run: cabal build --only-dependencies --enable-documentation
 
     - name: Build dependencies (without docs)
-      if: env.builddocs == 'true'
+      if: env.builddocs == 'false'
       run: cabal build --only-dependencies --disable-documentation
 
     - name: Cache dist-newstyle
