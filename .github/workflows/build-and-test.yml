@@ -88,14 +88,6 @@ jobs:
         path: ${{ steps.setup-haskell-cabal.outputs.cabal-store }}
         key: cabal-store-${{ matrix.os }}-ghc-${{ matrix.ghc }}-${{ hashFiles('darcs.cabal', 'cabal.project') }}
 
-#     - name: Cache dist-newstyle
-#       uses: actions/cache@v3
-#       with:
-#         path: dist-newstyle/build
-#         key: dist-newstyle-${{ matrix.os }}-ghc-${{ matrix.ghc }}-${{ hashFiles('dist-newstyle/cache/plan.json','Setup.hs','*.cabal','cabal*','darcs/*','src/**','harness/**','shelly/src/**','release/*') }}
-#         restore-keys: |
-#           dist-newstyle-${{ matrix.os }}-ghc-${{ matrix.ghc }}
-
     - name: Build
       run: cabal build
 
