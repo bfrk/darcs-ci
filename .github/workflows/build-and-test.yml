@@ -26,8 +26,8 @@ jobs:
           - 8.8.2
           - 8.10.7
           - 9.0.2
-          - 9.2.4
-          - 9.4.2
+          - 9.2.7
+          - 9.4.4
         cabal:
           - latest
         exclude:
@@ -38,7 +38,8 @@ jobs:
           - os: ubuntu-22.04
             ghc: 8.2.2
     env:
-      runtests: ${{ matrix.ghc == '8.2.2' || matrix.ghc == '9.4.2' }}
+      builddocs: ${{ matrix.ghc == '9.4.4' }}
+      runtests: ${{ matrix.ghc == '8.2.2' || matrix.ghc == '9.4.4' }}
       # for some reason this test randomly fails with darcs.net server
       # timeouts or similar errors; works fine on my machine
       tests-to-run: -t='!network/log'
@@ -75,7 +76,12 @@ jobs:
         cabal update
         cabal configure --enable-tests -fwarn-as-error
 
-    - name: Build dependencies
+    - name: Build dependencies (with docs)
+      if: env.builddocs == 'false'
+      run: cabal build --only-dependencies
+
+    - name: Build dependencies (without docs)
+      if: env.builddocs == 'true'
       run: cabal build --only-dependencies --disable-documentation
 
     - name: Cache dist-newstyle
@@ -90,7 +96,7 @@ jobs:
       run: cabal build
 
     - name: Haddock
-      if: matrix.ghc != '8.2.2' && matrix.ghc != '8.4.4'
+      if: env.builddocs == 'true'
       run: cabal haddock lib:darcs
 
     - name: Run tests on Linux
