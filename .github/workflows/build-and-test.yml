@@ -29,7 +29,7 @@ jobs:
           - 9.2.7
           - 9.4.4
         cabal:
-          - 3.6
+          - 3.8
         exclude:
           # can't build basement (indirect dependency)
           - os: ubuntu-18.04
@@ -63,8 +63,8 @@ jobs:
         ghc-version: ${{ matrix.ghc }}
         cabal-version: ${{ matrix.cabal }}
 
-    - name: Cache cabal store
-      uses: actions/cache@v3
+    - name: Restore cabal store from cache
+      uses: actions/cache/restore@v3
       with:
         path: ${{ steps.setup-haskell-cabal.outputs.cabal-store }}
         key: cabal-store-${{ matrix.os }}-ghc-${{ matrix.ghc }}-${{ hashFiles('darcs.cabal', 'cabal.project') }}
@@ -82,13 +82,19 @@ jobs:
       if: env.builddocs == 'false'
       run: cabal build --only-dependencies --disable-documentation
 
-    - name: Cache dist-newstyle
-      uses: actions/cache@v3
+    - name: Save cabal store to cache
+      uses: actions/cache/save@v3
       with:
-        path: dist-newstyle/build
-        key: dist-newstyle-${{ matrix.os }}-ghc-${{ matrix.ghc }}-${{ hashFiles('dist-newstyle/cache/plan.json','Setup.hs','*.cabal','cabal*','darcs/*','src/**','harness/**','shelly/src/**','release/*') }}
-        restore-keys: |
-          dist-newstyle-${{ matrix.os }}-ghc-${{ matrix.ghc }}
+        path: ${{ steps.setup-haskell-cabal.outputs.cabal-store }}
+        key: cabal-store-${{ matrix.os }}-ghc-${{ matrix.ghc }}-${{ hashFiles('darcs.cabal', 'cabal.project') }}
+
+#     - name: Cache dist-newstyle
+#       uses: actions/cache@v3
+#       with:
+#         path: dist-newstyle/build
+#         key: dist-newstyle-${{ matrix.os }}-ghc-${{ matrix.ghc }}-${{ hashFiles('dist-newstyle/cache/plan.json','Setup.hs','*.cabal','cabal*','darcs/*','src/**','harness/**','shelly/src/**','release/*') }}
+#         restore-keys: |
+#           dist-newstyle-${{ matrix.os }}-ghc-${{ matrix.ghc }}
 
     - name: Build
       run: cabal build
