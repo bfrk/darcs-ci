@@ -40,7 +40,6 @@ import Darcs.Repository.Flags
     ( AllowConflicts(..)
     , ExternalMerge(..)
     , Reorder(..)
-    , UpdatePending(..)
     , WantGuiPause(..)
     )
 import Darcs.Repository.Unrevert ( readUnrevert, writeUnrevert )
@@ -151,8 +150,7 @@ unrevertCmd _ opts [] =
     Just (to_keep' :> _) -> writeUnrevert recorded to_keep'
   withSignalsBlocked $ do
     _repository <-
-      finalizeRepositoryChanges _repository YesUpdatePending
-        (compress ? opts) (O.dryRun ? opts)
+      finalizeRepositoryChanges _repository (compress ? opts) (O.dryRun ? opts)
     unless (O.yes (O.dryRun ? opts)) $
       void $ applyToWorking _repository (verbosity ? opts) to_unrevert
   putFinished opts "unreverting"

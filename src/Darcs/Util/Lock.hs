@@ -18,8 +18,6 @@
 module Darcs.Util.Lock
     ( withLock
     , withLockCanFail
-    , getLock
-    , releaseLock
     , environmentHelpLocks
     , withTempDir
     , withPermDir

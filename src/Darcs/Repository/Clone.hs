@@ -230,7 +230,7 @@ cloneRepository repourl mysimplename v useCache cloneKind um rdarcs sse remoteRe
        Just psm -> do
         putInfo v $ text "Going to specified version..."
         -- the following is necessary to be able to read _toRepo's patches
-        _toRepo <- revertRepositoryChanges _toRepo NoUpdatePending
+        _toRepo <- revertRepositoryChanges _toRepo
         patches <- readPatches _toRepo
         Sealed context <- getOnePatchset _toRepo psm
         Fork _ to_remove only_in_context <- return $ findCommon patches context
@@ -245,7 +245,7 @@ cloneRepository repourl mysimplename v useCache cloneKind um rdarcs sse remoteRe
             _toRepo <-
               tentativelyRemovePatches _toRepo GzipCompression NoUpdatePending to_remove
             _toRepo <-
-              finalizeRepositoryChanges _toRepo NoUpdatePending GzipCompression NoDryRun
+              finalizeRepositoryChanges _toRepo GzipCompression NoDryRun
             runDefault (unapply to_remove) `catch` \(e :: SomeException) ->
                 fail ("Couldn't undo patch in working tree.\n" ++ show e)
             when (sse == YesSetScriptsExecutable) $ setScriptsExecutablePatches to_remove
@@ -404,7 +404,7 @@ copyRepoOldFashioned fromrepository _toRepo verb withWorkingDir = do
   finalizeTentativeChanges _toRepo GzipCompression
   _toRepo <- return $ unsafeEndTransaction _toRepo
   -- apply all patches into current hashed repository
-  _toRepo <- revertRepositoryChanges _toRepo NoUpdatePending
+  _toRepo <- revertRepositoryChanges _toRepo
   local_patches <- readPatches _toRepo
   _ <- writePristine _toRepo emptyTree
   let patchesToApply = progressFL "Applying patch" $ patchSet2FL local_patches
@@ -412,7 +412,7 @@ copyRepoOldFashioned fromrepository _toRepo verb withWorkingDir = do
     mapFL (applyToTentativePristineCwd (repoCache _toRepo) ApplyNormal) $
     bunchFL 100 patchesToApply
   _toRepo <-
-    finalizeRepositoryChanges _toRepo NoUpdatePending GzipCompression NoDryRun
+    finalizeRepositoryChanges _toRepo GzipCompression NoDryRun
   putVerbose verb $ text "Writing pristine and working tree contents..."
   createPristineDirectoryTree _toRepo "." withWorkingDir
 

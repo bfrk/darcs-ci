@@ -54,7 +54,6 @@ import Darcs.Util.Printer ( Doc, formatWords, vsep )
 import Darcs.Util.SignalHandler ( withSignalsBlocked )
 import Darcs.Repository
     ( RepoJob(..)
-    , UpdatePending(..)
     , addToPending
     , finalizeRepositoryChanges
     , applyToWorking
@@ -177,7 +176,7 @@ revertCmd fps opts args =
                   recorded <- readPatches _repository
                   writeUnrevert recorded (deps +>>+ torevert')
               _repository <-
-                finalizeRepositoryChanges _repository YesUpdatePending
+                finalizeRepositoryChanges _repository
                   (O.compress ? opts) (O.dryRun ? opts)
               debugMessage "About to apply to the working tree."
               unless (O.yes (O.dryRun ? opts)) $

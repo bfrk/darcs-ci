@@ -54,7 +54,6 @@ import Darcs.Patch.Witnesses.Ordered
     )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(..), mapSeal, unseal )
 
-import Darcs.Repository.Flags ( UpdatePending(..) )
 import Darcs.Repository.InternalTypes
     ( AccessType(..)
     , Repository
@@ -207,21 +206,14 @@ updatePending x (y :>: ys) =
         Just (y' :> x') -> mapSeal (y' :>:) (updatePending x' ys)
         Nothing -> Sealed (x :>: y :>: ys) -- x is stuck, keep it there
 
--- | Replace the pending patch with the tentative pending, unless
--- we get @NoUpdatePending@.
-finalizePending :: Repository 'RW p wU wR
-                -> UpdatePending
-                -> IO ()
-finalizePending _ NoUpdatePending = return ()
-finalizePending _ YesUpdatePending =
-  renameFile tentativePendingPath pendingPath
+-- | Replace the pending patch with the tentative pending
+finalizePending :: Repository 'RW p wU wR -> IO ()
+finalizePending _ = renameFile tentativePendingPath pendingPath
 
-revertPending :: RepoPatch p
-              => Repository 'RO p wU wR
-              -> UpdatePending
-              -> IO ()
-revertPending _ NoUpdatePending = return ()
-revertPending r YesUpdatePending =
+-- | Copy the pending patch to the tentative pending, or write a new empty
+-- tentative pending if regular pending does not exist.
+revertPending :: RepoPatch p => Repository 'RO p wU wR -> IO ()
+revertPending r =
   copyFile pendingPath tentativePendingPath `catchDoesNotExistError`
     (readPending r >>= unseal (writeTentativePending (unsafeStartTransaction r)))
 

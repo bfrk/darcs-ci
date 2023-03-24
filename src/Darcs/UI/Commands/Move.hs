@@ -51,7 +51,6 @@ import Darcs.Repository
     , RepoJob(..)
     , unsafeAddToPending
     , finalizeRepositoryChanges
-    , UpdatePending(..)
     )
 import Darcs.Patch.Witnesses.Ordered ( FL(..), (+>+) )
 import Darcs.Patch.Witnesses.Sealed ( FreeLeft, emptyGap, freeGap, joinGap )
@@ -280,7 +279,7 @@ doMoves repository opts cur work moves = do
             (freeGap $ Darcs.Patch.move old new :>: NilFL)
       moveFileOrDir work old new
       unsafeAddToPending repository pendingDiff
-    void $ finalizeRepositoryChanges repository YesUpdatePending
+    void $ finalizeRepositoryChanges repository
       (O.compress ? opts) (O.dryRun ? opts)
 
 -- Take the recorded/ working trees and the old and intended new filenames;

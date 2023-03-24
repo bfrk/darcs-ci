@@ -30,7 +30,7 @@ import Darcs.Patch.Set ( emptyPatchSet, patchSet2FL )
 import Darcs.Patch.Split ( reversePrimSplitter )
 import Darcs.Patch.Witnesses.Ordered ( Fork(..), FL(..), (:>)(..), nullFL )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(..) )
-import Darcs.Repository.Flags ( AllowConflicts(..), Reorder(..), UpdatePending(..) )
+import Darcs.Repository.Flags ( AllowConflicts(..), Reorder(..) )
 import Darcs.Repository ( withRepoLock, RepoJob(..),
                           applyToWorking, readPatches,
                           finalizeRepositoryChanges, addToPending,
@@ -146,7 +146,7 @@ rollbackCmd fps opts args = withRepoLock (useCache ? opts)
         addToPending _repo (diffingOpts opts) pw
         withSignalsBlocked $ do
             _repo <-
-              finalizeRepositoryChanges _repo YesUpdatePending
+              finalizeRepositoryChanges _repo
                 (compress ? opts) (O.dryRun ? opts)
             unless (O.yes (O.dryRun ? opts)) $
               void $ applyToWorking _repo (verbosity ? opts) pw

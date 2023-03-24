@@ -315,7 +315,7 @@ doActualRecord _repository cfg name date my_author my_log logf deps chs
       "record it" (Just failuremessage)
     tentativelyRemoveFromPW _repository chs pending working
     _repository <-
-      finalizeRepositoryChanges _repository YesUpdatePending (O.compress ? cfg) (O.dryRun ? cfg)
+      finalizeRepositoryChanges _repository (O.compress ? cfg) (O.dryRun ? cfg)
       `clarifyErrors` failuremessage
     debugMessage "Syncing timestamps..."
     removeLogFile logf

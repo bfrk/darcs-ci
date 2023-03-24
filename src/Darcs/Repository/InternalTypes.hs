@@ -60,8 +60,10 @@ data SAccessType (rt :: AccessType) where
 -- [@rt@] the access type (whether we are in a transaction or not),
 -- [@p@]  the patch type,
 -- [@wU@] the witness for the unrecorded state (what's in the working tree now).
--- [@wR@] the witness for the recorded state of the repository,
---        (what darcs get would retrieve).
+-- [@wR@] the witness for
+--
+--        * the recorded state when outside a transaction, or
+--        * the tentative state when inside a transaction.
 data Repository (rt :: AccessType) (p :: * -> * -> *) wU wR =
   Repo !String !RepoFormat !PristineType Cache (SAccessType rt)
 
@@ -102,6 +104,17 @@ unsafeCoerceR = unsafeCoerce
 unsafeCoerceU :: Repository rt p wU wR -> Repository rt p wU' wR
 unsafeCoerceU = unsafeCoerce
 
+-- | Both 'unsafeStartTransaction' and 'unsafeEndTransaction' are "unsafe" in
+-- the sense that they merely "coerce" the type but do not actually perform the
+-- steps ('IO' actions) required to start or end a transaction (this is done by
+-- 'revertRepositoryChanges' and 'finalizeRepositoryChanges'). Technically this
+-- is not an actual coercion like with e.g. 'unsafeCoerceR', due to the
+-- singleton typed member, but in practical terms it is no less unsafe, because
+-- 'RO' vs. 'RW' changes whether @wR@ refers to the recorded or the tentative
+-- state, respectively. In particular, you will get different results if you
+-- are inside a transaction and read the patchset with a "coerced" Repository
+-- of access type 'RO. The same holds for other state that is modified in a
+-- transaction, like the pending patch or the rebase state.
 unsafeStartTransaction :: Repository 'RO p wU wR -> Repository 'RW p wU wR
 unsafeStartTransaction (Repo l f p c SRO) = Repo l f p c SRW
 

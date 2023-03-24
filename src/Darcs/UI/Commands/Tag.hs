@@ -162,7 +162,7 @@ tagCmd _ opts args =
     let mypatch = infopatch myinfo NilFL
     _ <- tentativelyAddPatch repository (compress ? opts) (verbosity ? opts) YesUpdatePending
              $ n2pia $ adddeps mypatch deps
-    _ <- finalizeRepositoryChanges repository YesUpdatePending (compress ? opts) (O.dryRun ? opts)
+    _ <- finalizeRepositoryChanges repository (compress ? opts) (O.dryRun ? opts)
     putFinished opts $ "tagging '"++name++"'"
   where
     get_name_log :: [String] -> IO (String, [String])

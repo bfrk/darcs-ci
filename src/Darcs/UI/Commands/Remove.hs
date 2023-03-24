@@ -38,7 +38,6 @@ import Darcs.Repository
     ( Repository
     , withRepoLock
     , RepoJob(..)
-    , UpdatePending(..)
     , addToPending
     , finalizeRepositoryChanges
     , readPristineAndPending
@@ -108,7 +107,7 @@ removeCmd fps opts relargs = do
         when (nullFL p && not (null paths)) $
             fail "No files were removed."
         addToPending repository (diffingOpts opts) p
-        void $ finalizeRepositoryChanges repository YesUpdatePending
+        void $ finalizeRepositoryChanges repository
             (O.compress ? opts) (O.dryRun ? opts)
         putInfo opts $ vcat $ map text $ ["Will stop tracking:"] ++
             map displayPath (listTouchedFiles p)

@@ -79,7 +79,6 @@ import Darcs.Repository.State
 import Darcs.Repository
     ( withRepoLock
     , RepoJob(..)
-    , UpdatePending(..)
     , addToPending
     , finalizeRepositoryChanges
     )
@@ -181,7 +180,7 @@ addFiles opts paths =
     when (nullFL ps && not (null paths)) $
         fail "No files were added"
     addToPending repository (diffingOpts opts) ps
-    void $ finalizeRepositoryChanges repository YesUpdatePending
+    void $ finalizeRepositoryChanges repository
       (O.compress ? opts) (O.dryRun ? opts)
     unless gotDryRun $ do
       putInfo opts $ vcat $

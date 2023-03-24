@@ -168,15 +168,12 @@ import Darcs.Repository.Unrevert
     , revertTentativeUnrevert
     )
 
-import Darcs.Util.AtExit ( atexit )
 import Darcs.Util.ByteString ( gzReadFilePS )
 import Darcs.Util.Cache ( Cache, fetchFileUsingCache )
 import Darcs.Util.File ( Cachable(Uncachable), copyFileOrUrl )
 import Darcs.Util.Hash ( SHA1, sha1Xor, sha1zero )
 import Darcs.Util.Lock
     ( appendDocBinFile
-    , getLock
-    , releaseLock
     , writeAtomicFilePS
     , writeDocBinFile
     )
@@ -416,11 +413,10 @@ removeFromTentativeInventory repo compr to_remove = do
 -- This includes inventories, pending, rebase, and the index.
 finalizeRepositoryChanges :: (RepoPatch p, ApplyState p ~ Tree)
                           => Repository 'RW p wU wR
-                          -> UpdatePending
                           -> Compression
                           -> DryRun
                           -> IO (Repository 'RO p wU wR)
-finalizeRepositoryChanges r updatePending compr dryrun
+finalizeRepositoryChanges r compr dryrun
     | formatHas HashedInventory (repoFormat r) =
         withRepoDir r $ do
           let r' = unsafeEndTransaction $ unsafeCoerceR r
@@ -429,7 +425,7 @@ finalizeRepositoryChanges r updatePending compr dryrun
             withSignalsBlocked $ do
                 finalizeTentativeRebase
                 finalizeTentativeChanges r compr
-                finalizePending r updatePending
+                finalizePending r
                 finalizeTentativeUnrevert
             debugMessage "Done finalizing changes..."
             ps <- readPatches r'
@@ -439,7 +435,6 @@ finalizeRepositoryChanges r updatePending compr dryrun
               `catchIOError` \e ->
                 hPutStrLn stderr $ "Cannot create or update patch index: "++ show e
             updateIndex r'
-          releaseLock lockPath
           return r'
     | otherwise = fail Old.oldRepoFailMsg
 
@@ -450,17 +445,14 @@ finalizeRepositoryChanges r updatePending compr dryrun
 -- It's therefore used before makign any changes to the repo.
 revertRepositoryChanges :: RepoPatch p
                         => Repository 'RO p wU wR
-                        -> UpdatePending
                         -> IO (Repository 'RW p wU wR)
-revertRepositoryChanges r upe
+revertRepositoryChanges r
   | formatHas HashedInventory (repoFormat r) =
       withRepoDir r $ do
-        lock <- getLock lockPath 30
-        atexit (releaseLock lock)
         checkIndexIsWritable
           `catchIOError` \e -> fail (unlines ["Cannot write index", show e])
         revertTentativeUnrevert
-        revertPending r upe
+        revertPending r
         revertTentativeChanges r
         let r' = unsafeCoerceR r
         revertTentativeRebase r'
@@ -559,7 +551,7 @@ upgradeOldStyleRebase repo compr = do
             $ removeFromFormat RebaseInProgress
             $ repoFormat repo)
             formatPath
-          _ <- finalizeRepositoryChanges repo NoUpdatePending compr NoDryRun
+          _ <- finalizeRepositoryChanges repo compr NoDryRun
           return ()
         _ -> do
           ePutDocLn

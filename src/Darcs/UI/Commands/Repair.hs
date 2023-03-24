@@ -39,7 +39,6 @@ import Darcs.UI.Flags
 import Darcs.UI.Options ( DarcsOption, oid, (?), (^) )
 import qualified Darcs.UI.Options.All as O
 
-import Darcs.Repository.Flags ( UpdatePending(..) )
 import Darcs.Repository.Paths ( indexPath )
 import Darcs.Repository.Repair
     ( replayRepository, checkIndex, replayRepositoryInTemp
@@ -135,7 +134,7 @@ repairCmd opts
       if bad_replay || not index_ok
         then do
           void $
-            finalizeRepositoryChanges repo YesUpdatePending
+            finalizeRepositoryChanges repo
               (compress ? opts) (O.dryRun ? opts)
         else
           putInfo opts "The repository is already consistent, no changes made."

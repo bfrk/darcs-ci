@@ -50,7 +50,7 @@ import Darcs.Patch
     , resolveConflicts
     )
 import Darcs.Patch.Apply( ApplyState )
-import Darcs.Patch.Conflict ( ConflictDetails(..), Mangled, Unravelled )
+import Darcs.Patch.Conflict ( Conflict, ConflictDetails(..), Mangled, Unravelled )
 import Darcs.Patch.Inspect ( listTouchedFiles )
 import Darcs.Patch.Merge ( mergeList )
 import Darcs.Patch.Prim ( PrimPatch )
@@ -103,7 +103,7 @@ standardResolution context interesting =
 -- | Like 'standardResolution' but it doesn't use the @instance (Named p)@
 -- because the traling list of patches may contain "fake" conflictors.
 rebaseResolution
-  :: (RepoPatch p)
+  :: (Conflict p, PrimPatch (PrimOf p))
   => RL (PatchInfoAnd p) wO wX
   -> RL (Named p) wX wY
   -> StandardResolution (PrimOf p) wY

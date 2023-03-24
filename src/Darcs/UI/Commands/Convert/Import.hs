@@ -86,7 +86,6 @@ import Darcs.UI.Commands.Convert.Util
     , emptyMarks
     , getMark
     , patchHash
-    , updatePending
     )
 import Darcs.UI.Commands.Util ( commonHelpWithPrefsTemplates )
 import Darcs.UI.Completion (noArgs)
@@ -233,13 +232,12 @@ fastImport _ opts [outrepo] =
       (useCache ? opts)
       (O.withPrefsTemplates ? opts)
     -- TODO implement --dry-run, which would be read-only?
-    _repo <- revertRepositoryChanges _repo (updatePending opts)
+    _repo <- revertRepositoryChanges _repo
     marks <-
       fastImport' _repo (O.compress ? opts) (O.diffAlgorithm ? opts) emptyMarks
     cleanRepository _repo
     _repo <-
-      finalizeRepositoryChanges _repo (updatePending opts)
-        (O.compress ? opts) (O.dryRun ? opts)
+      finalizeRepositoryChanges _repo (O.compress ? opts) (O.dryRun ? opts)
     createPristineDirectoryTree _repo "." (withWorkingDir ? opts)
     return marks
 fastImport _ _ _ = fail "I need exactly one output repository."

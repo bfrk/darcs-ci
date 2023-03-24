@@ -325,7 +325,7 @@ addChangesToPatch cfg _repository context oldp chs pending working =
       else
         tentativelyRemoveFromPW _repository chs pending working
       _repository <-
-        finalizeRepositoryChanges _repository YesUpdatePending (O.compress ? cfg)
+        finalizeRepositoryChanges _repository (O.compress ? cfg)
           (O.dryRun ? cfg) `clarifyErrors` failmsg
       case O.verbosity ? cfg of
         O.NormalVerbosity -> putDocLn "Finished amending patch."

@@ -81,10 +81,13 @@ combineConflicts resolveOne x = rcs x NilFL
       where
         rest = rcs ps (p :>: passedby)
 
--- | Find all patches in the context that conflict with a given patch.
--- This works by commuting the patch and its dependencies backward until it
--- becomes unconflicted, then minimizing the trailing patches by re-commuting
--- them backward as long as that keeps the patch unconflicted.
+-- | Find all patches in the context that conflict with a given patch,
+-- commuting them to the head (past the patch in question).
+--
+-- This actually works by commuting the patch and its dependencies backward
+-- until it becomes unconflicted, then minimizing the trailing patches by
+-- re-commuting them backward as long as that keeps the patch unconflicted.
+--
 -- Precondition: the context must contain all conflicting patches.
 findConflicting
   :: forall p wX wY wZ

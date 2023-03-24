@@ -143,6 +143,9 @@ startRebaseJob job repo = do
 
 checkSuspendedStatus :: RepoPatch p => Repository rt p wU wR -> IO ()
 checkSuspendedStatus repo =
+  -- This check is currently not needed as we call it only for RebaseJob
+  -- and RebaseAwareJob which don't work with remote repos. Still, better
+  -- no not have to make assumptions on how things are used.
   when (isValidLocalPath (repoLocation repo)) $ do
     -- This may be executed after transaction has been finalized,
     -- which is why we fall back to readRebase here.
@@ -170,6 +173,8 @@ maybeDisplaySuspendedStatus :: RepoPatch p
                             => Repository rt p wU wR
                             -> IO ()
 maybeDisplaySuspendedStatus repo =
+  -- Called after every RepoJob, so the repoLocation may indeed
+  -- be a remote URL (e.g. darcs log)
   when (isValidLocalPath (repoLocation repo)) $ do
     -- This may be executed after transaction has been finalized,
     -- which is why we fall back to readRebase here.

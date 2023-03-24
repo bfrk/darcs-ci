@@ -135,7 +135,7 @@ unrecordCmd _ opts _ =
             setEnvDarcsPatches to_unrecord
             _repository <- tentativelyRemovePatches _repository (compress ? opts)
                      YesUpdatePending to_unrecord
-            _ <- finalizeRepositoryChanges _repository YesUpdatePending
+            _ <- finalizeRepositoryChanges _repository
                   (compress ? opts) (O.dryRun ? opts)
             putInfo opts "Finished unrecording."
 
@@ -248,8 +248,9 @@ obliterateCmd cmdname _ opts _ =
                         (compress ? opts) YesUpdatePending removed
                     addToPending _repository (diffingOpts opts) $ invert $ p_after_pending
                     withSignalsBlocked $ do
-                        _repository <- finalizeRepositoryChanges _repository
-                                        YesUpdatePending (compress ? opts) (O.dryRun ? opts)
+                        _repository <-
+                          finalizeRepositoryChanges _repository
+                            (compress ? opts) (O.dryRun ? opts)
                         debugMessage "Applying patches to working tree..."
                         unless (O.yes (O.dryRun ? opts)) $
                           void $ applyToWorking _repository verbOpt (invert p_after_pending)

@@ -242,8 +242,7 @@ suspendCmd _ opts _args =
     (_repository, Sealed toWorking) <-
       doSuspend opts _repository suspended psToSuspend
     withSignalsBlocked $ do
-      void $ finalizeRepositoryChanges _repository YesUpdatePending
-        (compress ? opts) (O.dryRun ? opts)
+      void $ finalizeRepositoryChanges _repository (compress ? opts) (O.dryRun ? opts)
       unless (O.yes (O.dryRun ? opts)) $
         void $ applyToWorking _repository (verbosity ? opts) toWorking
 
@@ -429,7 +428,7 @@ unsuspendCmd cmd reifyFixups _ opts _args =
             writeTentativeRebase _repository ps_to_keep'
             withSignalsBlocked $ do
               _repository <-
-                finalizeRepositoryChanges _repository YesUpdatePending
+                finalizeRepositoryChanges _repository
                   (compress ? opts) (O.dryRun ? opts)
               unless (O.yes (O.dryRun ? opts)) $
                 void $ applyToWorking _repository (verbosity ? opts) effect_to_apply
@@ -541,8 +540,7 @@ injectCmd _ opts _args =
       simplifyPushes da (mapFL_FL PrimFixup rest_fixups) $
       RC NilFL toeditNew :>: rest_selects
     _repository <-
-      finalizeRepositoryChanges _repository YesUpdatePending
-        (compress ? opts) (O.dryRun ? opts)
+      finalizeRepositoryChanges _repository (compress ? opts) (O.dryRun ? opts)
     return ()
 
 obliterate :: DarcsCommand
@@ -597,8 +595,7 @@ obliterateCmd _ opts _args =
     writeTentativeRebase _repository (unseal Items ps_to_keep)
 
     _repository <-
-      finalizeRepositoryChanges _repository YesUpdatePending
-        (compress ? opts) (O.dryRun ? opts)
+      finalizeRepositoryChanges _repository (compress ? opts) (O.dryRun ? opts)
     return ()
    ) :: IO ()
 

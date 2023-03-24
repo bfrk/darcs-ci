@@ -47,7 +47,6 @@ import Darcs.Patch.RegChars ( regChars )
 import Darcs.Repository
     ( withRepoLock
     , RepoJob(..)
-    , UpdatePending(..)
     , addToPending
     , finalizeRepositoryChanges
     , applyToWorking
@@ -176,7 +175,7 @@ replaceCmd fps opts (old : new : args@(_ : _)) =
           -- everything it depends on past the diff between pending and working
           addToPending _repository (diffingOpts opts) replacePs
           _repository <-
-            finalizeRepositoryChanges _repository YesUpdatePending
+            finalizeRepositoryChanges _repository
               (O.compress ? opts) (O.dryRun ? opts)
           unless (O.yes (O.dryRun ? opts)) $
             void $ applyToWorking _repository (verbosity ? opts) replacePs

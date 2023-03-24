@@ -64,7 +64,6 @@ import Darcs.Repository
     , withUMaskFlag
     )
 import qualified Darcs.Repository as R ( setScriptsExecutable )
-import Darcs.Repository.Flags ( UpdatePending(..) )
 import Darcs.Repository.Format
     ( RepoProperty(Darcs2)
     , formatHas
@@ -166,7 +165,7 @@ toDarcs2 _ opts' args = do
     _repo <-
       createRepositoryV2 (withWorkingDir ? opts) (patchIndexNo ? opts)
         (O.useCache ? opts) (O.withPrefsTemplates ? opts)
-    _repo <- revertRepositoryChanges _repo NoUpdatePending
+    _repo <- revertRepositoryChanges _repo
 
     withRepositoryLocation (useCache ? opts) repodir $ V1Job $ \other -> do
       theirstuff <- readPatches other
@@ -210,7 +209,7 @@ toDarcs2 _ opts' args = do
 
       _ <- applyAll opts _repo $ progressFL "Converting patch" patches
       void $
-        finalizeRepositoryChanges _repo (updatePending opts) (O.compress ? opts)
+        finalizeRepositoryChanges _repo (O.compress ? opts)
           (O.dryRun ? opts)
       when (parseFlags O.setScriptsExecutable opts == O.YesSetScriptsExecutable)
         R.setScriptsExecutable
