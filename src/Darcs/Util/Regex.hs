@@ -69,7 +69,7 @@ mkRegexWithOpts s single_line case_sensitive
 mkRegexInternal :: RegexMaker p compOpt execOpt String => compOpt -> String -> p
 mkRegexInternal opt s =
   case runRegexFail (makeRegexOptsM opt defaultExecOpt s) of
-    Left e -> throw (userError ("Invalid regular expression" ++ show s ++ ":\n" ++ e))
+    Left e -> throw (userError ("Invalid regular expression:\n" ++ e))
     Right r -> r
 
 -- | Match a regular expression against a string

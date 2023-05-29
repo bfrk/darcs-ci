@@ -46,7 +46,7 @@ jobs:
       builddocs: ${{ matrix.ghc == '9.4.4' }}
       runtests: ${{ matrix.ghc == '8.4.4' || matrix.ghc == '9.4.4' }}
       tests-to-run: # e.g. -t=EXAMPLE
-      testcmd: cabal run -- darcs-test -j=3 -f=123 -i=yn -c=yn --hide
+      testcmd: cabal run -- darcs-test -j=6 -f=123 -i=yn -c=yn --hide
       ACTIONS_ALLOW_UNSECURE_COMMANDS: true
       # avoid occasional timeouts in test scripts that access darcs.net:
       DARCS_CONNECTION_TIMEOUT: 15
