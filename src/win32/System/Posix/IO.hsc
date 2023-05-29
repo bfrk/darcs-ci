@@ -24,7 +24,7 @@ stdError :: Fd
 stdError = Fd 2
 
 -- OpenFileFlags and defaultFileFlags copied literally from unix-2.8.1.1
--- except without the noctty flag
+-- except without the noctty and nonblock flags
 
 -- |Correspond to some of the int flags from C's fcntl.h.
 data OpenFileFlags =
@@ -33,7 +33,6 @@ data OpenFileFlags =
     exclusive :: Bool,           -- ^ O_EXCL, result is undefined if O_CREAT is False
                                  --
                                  -- __NOTE__: Result is undefined if 'creat' is 'Nothing'.
-    nonBlock  :: Bool,           -- ^ O_NONBLOCK
     trunc     :: Bool,           -- ^ O_TRUNC
     nofollow  :: Bool,           -- ^ O_NOFOLLOW
                                  --
@@ -89,7 +88,6 @@ openFd name how OpenFileFlags{..} =
     flags =
        (if append       then (#const O_APPEND)    else 0) .|.
        (if exclusive    then (#const O_EXCL)      else 0) .|.
-       (if nonBlock     then (#const O_NONBLOCK)  else 0) .|.
        (if truncate     then (#const O_TRUNC)     else 0) .|.
        (if nofollow     then (#const O_NOFOLLOW)  else 0) .|.
        (if cloexec      then (#const O_CLOEXEC)   else 0) .|.
