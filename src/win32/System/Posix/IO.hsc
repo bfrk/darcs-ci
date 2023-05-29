@@ -38,7 +38,7 @@ data OpenFileFlags =
 #include <fcntl.h>
 
 openFd :: FilePath -> OpenMode -> OpenFileFlags -> IO Fd
-openFd name how OpenFileFlags{..} =
+openFd name how off =
 #if mingw32_HOST_OS
   withCWString name $ \s -> do
 #else
