@@ -21,7 +21,7 @@ import Darcs.Repository.Inventory
 import Darcs.Patch.Info ( rawPatchInfo )
 import Darcs.Util.Hash ( sha256strict )
 import Darcs.Util.Printer ( renderPS )
-import Darcs.Util.ValidHash ( ValidHash(..), fromHash, fromSizeAndHash )
+import Darcs.Util.ValidHash ( decodeValidHash, fromHash, fromSizeAndHash )
 
 import Darcs.Test.Patch.Info ()
 

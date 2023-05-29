@@ -11,6 +11,7 @@ module Darcs.Util.Parser
     , linesStartingWith
     , linesStartingWithEndingWith
     , lexWord
+    , A.lookAhead
     , many
     , option
     , optional
@@ -22,6 +23,7 @@ module Darcs.Util.Parser
     , take
     , takeTill
     , takeTillChar
+    , unsigned
     , withPath
     , (<|>)
     ) where
@@ -31,6 +33,7 @@ import Control.Applicative ( empty, many, optional, (<|>) )
 import Darcs.Prelude hiding ( lex, take )
 
 import qualified Data.Attoparsec.ByteString as A
+import qualified Data.Attoparsec.Combinator as A
 import Data.Attoparsec.ByteString.Char8 hiding ( parse, char, string )
 import qualified Data.Attoparsec.ByteString.Char8 as AC
 import qualified Data.ByteString as B
@@ -89,6 +92,10 @@ string = skip . AC.string
 {-# INLINE int #-}
 int :: Parser Int
 int = lex (signed decimal)
+
+{-# INLINE unsigned #-}
+unsigned :: Integral a => Parser a
+unsigned = lex decimal
 
 {-# INLINE takeTillChar #-}
 takeTillChar :: Char -> Parser B.ByteString

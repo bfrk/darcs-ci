@@ -27,6 +27,7 @@ module Darcs.Util.Ssh
     , environmentHelpScp
     , environmentHelpSshPort
     , transferModeHeader
+    , resetSshConnections
     ) where
 
 import Darcs.Prelude
@@ -36,7 +37,7 @@ import System.Exit ( ExitCode(..) )
 
 import Control.Concurrent.MVar ( MVar, newMVar, withMVar, modifyMVar, modifyMVar_ )
 import Control.Exception ( throwIO, catch, catchJust, SomeException )
-import Control.Monad ( unless, (>=>) )
+import Control.Monad ( forM_, unless, void, (>=>) )
 
 import qualified Data.ByteString as B (ByteString, hGet, writeFile )
 
@@ -44,7 +45,13 @@ import Data.Map ( Map, empty, insert, lookup )
 
 import System.IO ( Handle, hSetBinaryMode, hPutStrLn, hGetLine, hFlush )
 import System.IO.Unsafe ( unsafePerformIO )
-import System.Process ( runInteractiveProcess, readProcessWithExitCode )
+import System.Process
+    ( ProcessHandle
+    , readProcessWithExitCode
+    , runInteractiveProcess
+    , terminateProcess
+    , waitForProcess
+    )
 
 import Darcs.Util.SignalHandler ( catchNonSignal )
 import Darcs.Util.URL ( SshFilePath, sshFilePathOf, sshUhost, sshRepo, sshFile )
@@ -122,6 +129,7 @@ data Connection = C
     { inp :: !Handle
     , out :: !Handle
     , err :: !Handle
+    , proc :: !ProcessHandle
     }
 
 -- | Identifier (key) for a connection.
@@ -177,14 +185,14 @@ newSshConnection rdarcs sshfp = do
   let sshargs = sshargs_ ++ ["--", sshUhost sshfp, rdarcs,
                              "transfer-mode", "--repodir", sshRepo sshfp]
   debugMessage $ "Exec: " ++ showCommandLine (sshcmd:sshargs)
-  (i,o,e,_) <- runInteractiveProcess sshcmd sshargs Nothing Nothing
+  (i,o,e,ph) <- runInteractiveProcess sshcmd sshargs Nothing Nothing
   do
     hSetBinaryMode i True
     hSetBinaryMode o True
     l <- hGetLine o
     unless (l == transferModeHeader) $
       fail "Couldn't start darcs transfer-mode on server"
-    return $ Just C { inp = i, out = o, err = e }
+    return $ Just C { inp = i, out = o, err = e, proc = ph }
     `catchNonSignal` \exn -> do
       debugMessage $ "Failed to start ssh connection: " ++ prettyException exn
       debugMessage $ unlines
@@ -193,6 +201,20 @@ newSshConnection rdarcs sshfp = do
                     , "Installing darcs 2 on the server will speed up ssh-based commands."
                     ]
       return Nothing
+
+-- | Terminate all child processes that run a remote "darcs transfer-mode" and
+-- remove them from the 'sshConnections', causing subsequent 'copySSH' calls to
+-- start a fresh child.
+resetSshConnections :: IO ()
+resetSshConnections =
+  modifyMVar_ sshConnections $ \cmap -> do
+    forM_ cmap $ \case
+      Just mvarc -> do
+        withMVar mvarc $ \C{ proc = ph } -> do
+          terminateProcess ph
+          void $ waitForProcess ph
+      Nothing -> return ()
+    return empty
 
 -- | Mark any connection associated with the given ssh file path
 -- as failed, so it won't be tried again.

@@ -2,7 +2,9 @@ module Darcs.Repository.Inventory.Format
     ( Inventory(..)
     , HeadInventory
     , InventoryEntry
-    , ValidHash(..)
+    , ValidHash(..) -- re-export
+    , decodeValidHash -- re-export
+    , encodeValidHash -- re-export
     , InventoryHash
     , PatchHash
     , PristineHash
@@ -23,7 +25,7 @@ module Darcs.Repository.Inventory.Format
     , prop_skipPokePristineHash
     ) where
 
-import Darcs.Prelude hiding ( take )
+import Darcs.Prelude
 
 import Control.Applicative ( optional, many )
 
@@ -32,7 +34,7 @@ import qualified Data.ByteString.Char8 as BC
 
 import Darcs.Patch.Info ( PatchInfo, showPatchInfo, readPatchInfo )
 import Darcs.Util.Parser
-    ( Parser, parse, string, skipSpace, take, takeTillChar )
+    ( Parser, char, parse, string, skipSpace )
 import Darcs.Patch.Show ( ShowPatchFor(..) )
 import Darcs.Util.Printer
     ( Doc, (<+>), ($$), hcat, text, invisiblePS, packedString, renderPS )
@@ -42,6 +44,9 @@ import Darcs.Util.ValidHash
     , PristineHash
     , ValidHash(..)
     , calcValidHash
+    , decodeValidHash
+    , encodeValidHash
+    , parseValidHash
     )
 
 -- * Inventories
@@ -94,12 +99,7 @@ pInvParent = optional $ do
   pHash
 
 pHash :: ValidHash h => Parser h
-pHash = do
-  hash <- pLine
-  maybe (fail "expected valid hash") return $ decodeValidHash (BC.unpack hash)
-
-pLine :: Parser B.ByteString
-pLine = takeTillChar '\n' <* take 1
+pHash = parseValidHash <* char '\n'
 
 pInvPatches :: Parser [InventoryEntry]
 pInvPatches = many pInvEntry

@@ -37,11 +37,11 @@ import qualified Data.ByteString.Lazy as BL
 import qualified Darcs.Util.Tree.Monad as TM
 import Darcs.Patch.Object ( ObjectIdOf )
 import Darcs.Util.Tree ( Tree )
-import Data.Functor.Identity (Identity(..) )
 import Data.Maybe ( fromMaybe )
 import Darcs.Util.Path ( AnchoredPath, movedirfilename, isPrefix )
 import Control.Monad.Catch ( MonadThrow(..) )
 import Control.Monad.State.Strict
+import Control.Monad.StrictIdentity (StrictIdentity(..) )
 
 import GHC.Exts ( Constraint )
 
@@ -103,12 +103,14 @@ type OrigFileNameOf = (AnchoredPath, AnchoredPath)
 type FilePathMonadState = ([AnchoredPath], [AnchoredPath], [OrigFileNameOf])
 type FilePathMonad = StateT FilePathMonadState Pure
 
-newtype Pure a = Pure (Identity a)
+newtype Pure a = Pure (StrictIdentity a)
   deriving (Functor, Applicative, Monad)
 
 runPure :: Pure a -> a
-runPure (Pure (Identity x)) = x
+runPure (Pure (StrictIdentity x)) = x
 
+-- With "Data.Functor.Identity" this instance would not satisfy the law
+-- @throwM e >> x = throwM e@, which is why we use 'StrictIdentity'.
 instance MonadThrow Pure where
   throwM e = Pure (error (show e))
 

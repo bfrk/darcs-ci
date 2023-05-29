@@ -67,7 +67,8 @@ import Darcs.Util.Tree
 import Darcs.Util.Tree.Monad ( TreeIO, runTreeMonad )
 import Darcs.Util.ValidHash
     ( PristineHash
-    , ValidHash(..)
+    , decodeValidHash
+    , encodeValidHash
     , fromHash
     , getHash
     , getSize

@@ -23,10 +23,8 @@ data DarcsFlag = Version | ExactVersion | ListCommands
                | AfterPatch String | UpToPatch String
                | OnePattern String | SeveralPattern String
                | AfterPattern String | UpToPattern String
-               | OneTag String | SeveralTag String
-               | AfterTag String | UpToTag String
-               | OneHash String | SeveralHash String
-               | AfterHash String | UpToHash String
+               | OneHash String | AfterHash String | UpToHash String
+               | OneTag String | SeveralTag String | AfterTag String | UpToTag String
                | LastN String | MaxCount String
                | IndexRange String | OneIndex String
                | NumberPatches

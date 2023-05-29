@@ -4,6 +4,9 @@ module Darcs.Util.ValidHash
     , PatchHash
     , PristineHash
     , HashedDir(..)
+    , encodeValidHash
+    , decodeValidHash
+    , parseValidHash
     , getHash
     , getSize
     , fromHash
@@ -16,9 +19,11 @@ import qualified Data.ByteString as B
 import Data.Maybe ( isJust )
 import Text.Read ( readMaybe )
 
+import Prelude ( (^) )
 import Darcs.Prelude
 
-import Darcs.Util.Hash ( Hash, decodeHash, encodeHash, sha256strict )
+import Darcs.Util.Hash ( Hash, decodeBase16, decodeHash, encodeHash, sha256strict )
+import qualified Darcs.Util.Parser as P
 
 -- | Semantically, this is the type of hashed objects. Git has a type tag
 -- inside the hashed file itself, whereas in Darcs the type is determined
@@ -31,15 +36,11 @@ data HashedDir
 
 -- | External API for the various hash types.
 class (Eq h, IsSizeHash h) => ValidHash h where
-  encodeValidHash :: h -> String
-  decodeValidHash :: String -> Maybe h
   -- | The 'HashedDir' belonging to this type of hash
   dirofValidHash :: h -> HashedDir
   -- | Compute hash from file content.
   calcValidHash :: B.ByteString -> h
   -- default definitions
-  encodeValidHash = encodeSizeHash . getSizeHash
-  decodeValidHash = fmap fromSizeHash . decodeSizeHash
   calcValidHash content = fromSizeAndHash (B.length content) (sha256strict content)
 
 newtype InventoryHash = InventoryHash SizeHash
@@ -62,6 +63,15 @@ instance ValidHash PristineHash where
   -- note: not the default definition here
   calcValidHash = fromHash . sha256strict
 
+encodeValidHash :: ValidHash h => h -> String
+encodeValidHash = encodeSizeHash . getSizeHash
+
+decodeValidHash :: ValidHash h => String -> Maybe h
+decodeValidHash = fmap fromSizeHash . decodeSizeHash
+
+parseValidHash :: ValidHash h => P.Parser h
+parseValidHash = fromSizeHash <$> parseSizeHash
+
 getHash :: ValidHash h => h -> Hash
 getHash sh =
   case getSizeHash sh of
@@ -77,9 +87,15 @@ getSize sh =
 fromHash :: ValidHash h => Hash -> h
 fromHash h = fromSizeHash (NoSize h)
 
+numSizeDigits :: Int
+numSizeDigits = 10
+
+sizeLimit :: Int
+sizeLimit = 10 ^ numSizeDigits
+
 fromSizeAndHash :: ValidHash h => Int -> Hash -> h
 fromSizeAndHash size hash =
-  fromSizeHash $ if size < 1000000000 then WithSize size hash else NoSize hash
+  fromSizeHash $ if size < sizeLimit then WithSize size hash else NoSize hash
 
 -- | Check that the given 'String' is an encoding of some 'ValidHash'.
 okayHash :: String -> Bool
@@ -104,7 +120,7 @@ checkHash vh content =
 -- | Combined size and hash, where the size is optional.
 -- The invariant for a valid @'WithSize' size _@ is that
 --
--- > size >=0 and size < 1_000_000_000
+-- > size >=0 and size < 'sizeLimit'
 data SizeHash
   = WithSize !Int !Hash
   | NoSize !Hash
@@ -134,11 +150,11 @@ encodeSizeHash :: SizeHash -> String
 encodeSizeHash (NoSize hash) = encodeHash hash
 encodeSizeHash (WithSize size hash) =
     padZero (show size) ++ '-' : encodeHash hash
-  where padZero s = replicate (10 - length s) '0' ++ s
+  where padZero s = replicate (numSizeDigits - length s) '0' ++ s
 
 decodeSizeHash :: String -> Maybe SizeHash
 decodeSizeHash s =
-  case splitAt 10 s of
+  case splitAt numSizeDigits s of
     (sizeStr, '-':hashStr)
       | Just size <- decodeSize sizeStr -> WithSize size <$> decodeHash hashStr
     _ -> NoSize <$> decodeHash s
@@ -146,5 +162,16 @@ decodeSizeHash s =
     decodeSize :: String -> Maybe Int
     decodeSize ss =
       case readMaybe ss of
-        Just size | size >= 0 && size < 1000000000 -> Just size
+        Just size | size >= 0 && size < sizeLimit -> Just size
         _ -> Nothing
+
+parseSizeHash :: P.Parser SizeHash
+parseSizeHash =
+    (WithSize <$> pSize <*> pNoSize) P.<|> (NoSize <$> pNoSize)
+  where
+    pSize = do
+      P.lookAhead (P.take numSizeDigits >> P.char '-')
+      P.unsigned <* P.char '-'
+    pNoSize = do
+      x <- P.take 64
+      maybe (fail "expecting b16-encoded sha256 hash") return (decodeBase16 x)

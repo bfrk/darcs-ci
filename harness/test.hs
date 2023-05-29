@@ -222,8 +222,7 @@ main = do hSetBuffering stdout NoBuffering
           clp  <- cmdArgs_ defaultConfigAnn
           run $
             if full clp then clp
-              { suites   = "snu" -- not with 'h' because they arent' re-entrant
-              , formats  = "123"
+              { formats  = "123"
               , diffalgs = "mp"
               , index = "yn"
               , cache = "yn"

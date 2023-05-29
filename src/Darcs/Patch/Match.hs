@@ -168,7 +168,6 @@ data MatchFlag
     | AfterPatch String
     | UpToPatch String
     | OneHash String
-    | SeveralHash String
     | AfterHash String
     | UpToHash String
     | OneTag String
@@ -270,14 +269,11 @@ helpOnMatchers =
    "The C notation for logic operators (!, && and ||) can also be used.",
    "",
    "    --patches=regex is a synonym for --matches='name regex'",
-   "    --hashes=HASH is a synonym for --matches='hash HASH'",
+   "    --hash=HASH is a synonym for --matches='hash HASH'",
    "    --from-patch and --to-patch are synonyms for",
    "      --from-match='name... and --to-match='name...",
-   "    --from-hash and --to-hash are synonyms for",
-   "      --from-match='hash...' and --to-match='hash...'",
-   "    sensible combinations of --from-* and --to-* options are possible:",
+   "    --from-patch and --to-match can be unproblematically combined:",
    "      `darcs log --from-patch='html.*docu' --to-match='date 20040212'`",
-   "      `darcs log --from-hash=368089c6969 --to-patch='^fix.*renamed or moved\\.$'`",
    "",
    "The following primitive Boolean expressions are supported:"
    ,""]
@@ -463,7 +459,6 @@ nonrangeMatcher (OneHash h:_) = strictJust $ hashmatch' h
 nonrangeMatcher (SeveralPattern m:_) = strictJust $ matchPattern m
 nonrangeMatcher (SeveralTag t:_) = strictJust $ tagmatch t
 nonrangeMatcher (SeveralPatch p:_) = strictJust $ patchmatch p
-nonrangeMatcher (SeveralHash h:_) = strictJust $ hashmatch' h
 nonrangeMatcher (_:fs) = nonrangeMatcher fs
 
 -- | @firstMatcher@ returns the left bound of the matched interval.

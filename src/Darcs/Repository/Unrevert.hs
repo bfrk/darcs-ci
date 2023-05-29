@@ -33,6 +33,7 @@ import Darcs.Util.Prompt ( promptYorn )
 import Darcs.Util.Tree ( Tree )
 
 import System.Directory ( copyFile, renameFile )
+import System.Exit ( exitSuccess )
 
 finalizeTentativeUnrevert :: IO ()
 finalizeTentativeUnrevert =
@@ -101,7 +102,7 @@ removeFromUnrevertContext ref ps =
         promptYorn "This operation will make unrevert impossible!\nProceed?"
       if confirmed
         then removeFileMayNotExist tentativeUnrevertPath
-        else fail "Cancelled."
+        else putStrLn "Cancelled." >> exitSuccess
     unrevert_patch_bundle = do
       pf <- readBinFile tentativeUnrevertPath
       case parseBundle pf of

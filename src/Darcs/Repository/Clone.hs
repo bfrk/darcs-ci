@@ -146,6 +146,7 @@ import Darcs.Util.English ( englishNum, Noun(..) )
 import Darcs.Util.Global ( darcsdir )
 import Darcs.Util.URL ( isValidLocalPath )
 import Darcs.Util.SignalHandler ( catchInterrupt, withSignalsBlocked )
+import Darcs.Util.Ssh ( resetSshConnections )
 import Darcs.Util.Printer ( Doc, ($$), hsep, putDocLn, text )
 import Darcs.Util.Printer.Color ( unsafeRenderStringColored )
 import Darcs.Util.Progress
@@ -437,8 +438,14 @@ fetchPatchesIfNecessary toRepo =
         c = repoCache toRepo
 
 allowCtrlC :: CloneKind -> IO () -> IO () -> IO ()
-allowCtrlC CompleteClone _       action = action
-allowCtrlC _             cleanup action = action `catchInterrupt` cleanup
+allowCtrlC CompleteClone _ action = action
+allowCtrlC _ cleanup action =
+  action `catchInterrupt` do
+    debugMessage "Cleanup after SIGINT in allowCtrlC"
+    -- the SIGINT has also killed our running ssh connections,
+    -- this will cause them to be restarted
+    resetSshConnections
+    cleanup
 
 hashedPatchHash :: PatchInfoAnd p wA wB -> Maybe PatchHash
 hashedPatchHash = either (const Nothing) Just . extractHash

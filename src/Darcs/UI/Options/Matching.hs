@@ -61,18 +61,18 @@ matchOneNontag =  match <> patch <> hash
 
 -- | Used by: rebase pull/apply, send, push, pull, apply, fetch
 matchSeveral :: MatchOption
-matchSeveral = matches <> patches <> tags <> hashes
+matchSeveral = matches <> patches <> tags <> hash
 
 matchLast :: MatchOption
 matchLast = last
 
 -- | Used by: rebase unsuspend/reify
 matchSeveralOrFirst :: MatchOption
-matchSeveralOrFirst = mconcat [ matchTo, last, matches, patches, tags, hashes ]
+matchSeveralOrFirst = mconcat [ matchTo, last, matches, patches, tags, hash ]
 
 -- | Used by: unrecord, obliterate, rebase suspend, rollback
 matchSeveralOrLast :: MatchOption
-matchSeveralOrLast = mconcat [ matchFrom, last, matches, patches, tags, hashes ]
+matchSeveralOrLast = mconcat [ matchFrom, last, matches, patches, tags, hash ]
 
 -- | Used by: diff
 matchOneOrRange :: MatchOption
@@ -85,7 +85,7 @@ matchRange = mconcat [ matchTo, matchFrom, last, indexes ]
 -- | Used by: log
 matchSeveralOrRange :: MatchOption
 matchSeveralOrRange = mconcat
-  [ matchTo, matchFrom, last, indexes, matches, patches, tags, hashes ]
+  [ matchTo, matchFrom, last, indexes, matches, patches, tags, hash ]
 
 matchTo :: MatchOption
 matchTo = toMatch <> toPatch <> toHash <> toTag
@@ -94,14 +94,9 @@ matchFrom :: MatchOption
 matchFrom = fromMatch <> fromPatch <> fromHash <> fromTag
 
 matchAny :: MatchOption
-matchAny =
-  mconcat
-    [ toMatch, toPatch, toHash, toTag
-    , fromMatch, fromPatch, fromHash, fromTag
-    , match, patch, hash, tag
-    , matches, patches, hashes, tags
-    , index, indexes, context, last
-    ]
+matchAny = mconcat [ toMatch, toPatch, toHash, toTag,
+  fromMatch, fromPatch, fromHash, fromTag,
+  tag, tags, patch, patches, hash, match, matches, index, indexes, context, last ]
 
 -- * Primitive matching options
 
@@ -109,7 +104,7 @@ toMatch, toPatch, toHash, toTag,
   fromMatch, fromPatch, fromHash, fromTag,
   tag, tags,
   patch, patches,
-  hash, hashes,
+  hash,
   match, matches,
   index, indexes,
   context, last :: MatchOption
@@ -133,7 +128,7 @@ toHash = OptSpec {..} where
   oparse k fs = k [ UpToHash s | F.UpToHash s <- fs ]
   ocheck _ = []
   odesc = [ strArg [] ["to-hash"] F.UpToHash "HASH"
-    "select changes up to a patch whose hash prefix matches HASH" ]
+    "select changes up to a patch with HASH" ]
 
 context = OptSpec {..} where
   ounparse k mfs = k [ F.Context p | Context p <- mfs ]
@@ -168,7 +163,7 @@ fromHash = OptSpec {..} where
   oparse k fs = k [ AfterHash s | F.AfterHash s <- fs ]
   ocheck _ = []
   odesc = [ strArg [] ["from-hash"] F.AfterHash "HASH"
-    "select changes starting with a patch whose hash prefix matches HASH" ]
+    "select changes starting with a patch with HASH" ]
 
 fromTag = OptSpec {..} where
   ounparse k mfs = k [ F.AfterTag s | AfterTag s <- mfs ]
@@ -208,14 +203,7 @@ hash = OptSpec {..} where
   oparse k fs = k [ OneHash s | F.OneHash s <- fs ]
   ocheck _ = []
   odesc = [ strArg ['h'] ["hash"] F.OneHash "HASH"
-    "select a single patch whose hash prefix matches HASH" ]
-
-hashes = OptSpec {..} where
-  ounparse k mfs = k [ F.SeveralHash s | SeveralHash s <- mfs ]
-  oparse k fs = k [ SeveralHash s | F.SeveralHash s <- fs ]
-  ocheck _ = []
-  odesc = [ strArg ['h'] ["hashes"] F.SeveralHash "HASH"
-    "select patches whose hash prefix matches HASH" ]
+    "select a single patch with HASH" ]
 
 match = OptSpec {..} where
   ounparse k mfs = k [ F.OnePattern s | OnePattern s <- mfs ]
