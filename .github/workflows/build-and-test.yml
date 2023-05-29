@@ -104,7 +104,7 @@ jobs:
       if: runner.os == 'Linux' && env.runtests == 'true'
       run: |
         sudo apt-get install lighttpd
-        ${{ env.testcmd }} ${{ env.tests-to-run }}
+        ${{ env.testcmd }} ${{ env.tests-to-run }} -t !network/log
 
     - name: Run tests on MacOS
       if: runner.os == 'macOS' && env.runtests == 'true'

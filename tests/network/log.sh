@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 
 . lib
+. httplib
 
-with_lock
+check_remote_http http://darcs.net
 
 # Demonstrates issue385 and others
 darcs log --repo=http://darcs.net GNUmakefile --last 30

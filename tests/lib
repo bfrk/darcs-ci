@@ -134,13 +134,4 @@ grep -q darcs-1 .darcs/defaults && format=darcs-1
 #
 # export XDG_CACHE_HOME=`mktemp -d -p /run/darcs-test`
 
-# To be used for tests that must be run sequentially,
-# even if we run tests with -j. Only one such test can run at any time.
-with_lock () {
-  trap "rm /tmp/darcs-test-lock" EXIT
-  while (set -o noclobber; >/tmp/darcs-test-lock); do
-    sleep 1
-  done
-}
-
 set -vex -o pipefail
