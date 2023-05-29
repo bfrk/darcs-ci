@@ -23,87 +23,22 @@ stdOutput = Fd 1
 stdError :: Fd
 stdError = Fd 2
 
--- OpenFileFlags and defaultFileFlags copied literally from unix-2.8.1.1
--- except without the noctty and nonblock flags
-
--- |Correspond to some of the int flags from C's fcntl.h.
-data OpenFileFlags =
+data OpenFileFlags = 
  OpenFileFlags {
-    append    :: Bool,           -- ^ O_APPEND
-    exclusive :: Bool,           -- ^ O_EXCL, result is undefined if O_CREAT is False
-                                 --
-                                 -- __NOTE__: Result is undefined if 'creat' is 'Nothing'.
-    trunc     :: Bool,           -- ^ O_TRUNC
-    nofollow  :: Bool,           -- ^ O_NOFOLLOW
-                                 --
-                                 -- @since 2.8.0.0
-    creat     :: Maybe FileMode, -- ^ O_CREAT
-                                 --
-                                 -- @since 2.8.0.0
-    cloexec   :: Bool,           -- ^ O_CLOEXEC
-                                 --
-                                 -- @since 2.8.0.0
-    directory :: Bool,           -- ^ O_DIRECTORY
-                                 --
-                                 -- @since 2.8.0.0
-    sync      :: Bool            -- ^ O_SYNC
-                                 --
-                                 -- @since 2.8.0.0
+  append :: Bool,
+  exclusive :: Bool,
+  noctty :: Bool,
+  nonBlock :: Bool,
+  trunc :: Bool,
+  creat :: Maybe FileMode
  }
- deriving (Read, Show, Eq, Ord)
-
--- | Default values for the 'OpenFileFlags' type.
---
--- Each field of 'OpenFileFlags' is either 'False' or 'Nothing'
--- respectively.
-defaultFileFlags :: OpenFileFlags
-defaultFileFlags =
- OpenFileFlags {
-    append    = False,
-    exclusive = False,
-    nonBlock  = False,
-    trunc     = False,
-    nofollow  = False,
-    creat     = Nothing,
-    cloexec   = False,
-    directory = False,
-    sync      = False
-  }
 
 
--- Adapted from System.Posix.IO.Common.openat_ in unix-2.8.1.1
+-- Adapted from System.Posix.IO in ghc
 #include <fcntl.h>
 
 openFd :: FilePath -> OpenMode -> OpenFileFlags -> IO Fd
 openFd name how OpenFileFlags{..} =
-#if mingw32_HOST_OS
-  withCWString name $ \s -> do
-#else
-  withCString name $ \s -> do
-#endif
-    Fd <$> throwErrnoIfMinus1 "openFd" (c_open s all_flags mode_w)
-  where
-    all_flags  = creat .|. flags .|. open_mode
-
-    flags =
-       (if append       then (#const O_APPEND)    else 0) .|.
-       (if exclusive    then (#const O_EXCL)      else 0) .|.
-       (if truncate     then (#const O_TRUNC)     else 0) .|.
-       (if nofollow     then (#const O_NOFOLLOW)  else 0) .|.
-       (if cloexec      then (#const O_CLOEXEC)   else 0) .|.
-       (if directory    then (#const O_DIRECTORY) else 0) .|.
-       (if sync         then (#const O_SYNC)      else 0)
-
-    (creat, mode_w) = case creat of
-                        Nothing -> (0,0)
-                        Just x  -> ((#const O_CREAT), x)
-
-    open_mode = case how of
-                   ReadOnly  -> (#const O_RDONLY)
-                   WriteOnly -> (#const O_WRONLY)
-                   ReadWrite -> (#const O_RDWR)
-
-{-
 #if mingw32_HOST_OS
   withCWString name $ \s -> do
 #else
@@ -123,10 +58,13 @@ openFd name how OpenFileFlags{..} =
                 ReadOnly  -> (#const O_RDONLY)
                 WriteOnly -> (#const O_WRONLY)
                 ReadWrite -> (#const O_RDWR)
--}
 
 closeFd :: Fd -> IO ()
 closeFd (Fd fd) = throwErrnoIfMinus1_ "closeFd" (c_close fd)
 
 data OpenMode = ReadOnly | WriteOnly | ReadWrite
+
+defaultFileFlags :: OpenFileFlags
+defaultFileFlags = OpenFileFlags False False False False False Nothing
+
 
