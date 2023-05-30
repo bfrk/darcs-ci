@@ -47,9 +47,8 @@ import Data.Int( Int64 )
 import Data.Maybe( isNothing, isJust )
 
 import qualified Data.ByteString.Lazy as BL
-import Control.Monad ( forM_, unless, when )
 import Control.Monad.Catch ( MonadThrow(..) )
-import Control.Monad.RWS.Strict ( RWST(..), ask, lift, gets, modify )
+import Control.Monad.RWS.Strict
 import qualified Data.Map as M
 
 import System.IO.Error ( ioeSetErrorString, mkIOError )

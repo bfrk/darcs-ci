@@ -17,7 +17,7 @@ import System.Directory ( getCurrentDirectory )
 import System.IO.Error ( mkIOError, alreadyExistsErrorType )
 import System.Posix.Files ( stdFileMode )
 import System.Posix.IO ( openFd, closeFd,
-                         defaultFileFlags, exclusive, creat,
+                         defaultFileFlags, exclusive,
                          OpenMode(WriteOnly) )
 
 import Darcs.Util.SignalHandler ( stdoutIsAPipe )
@@ -45,11 +45,10 @@ maybeRelink src dst =
         _ -> fail ("Unexpected situation when relinking " ++ dst)
 
 sloppyAtomicCreate :: FilePath -> IO ()
-sloppyAtomicCreate fp = do
-  fd <-
-    openFd fp WriteOnly
-      defaultFileFlags {exclusive = True, creat = Just stdFileMode}
-  closeFd fd
+sloppyAtomicCreate fp
+    = do fd <- openFd fp WriteOnly (Just stdFileMode) flags
+         closeFd fd
+  where flags = defaultFileFlags { exclusive = True }
 
 atomicCreate :: FilePath -> IO ()
 atomicCreate fp = withCString fp $ \cstr -> do

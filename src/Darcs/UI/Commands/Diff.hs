@@ -122,6 +122,8 @@ diffCommand = DarcsCommand
     diffBasicOpts
       = O.matchOneOrRange
       ^ O.extDiff
+      ^ O.lookforadds
+      ^ O.lookformoves
       ^ O.repoDir
       ^ O.storeInMemory
     diffAdvancedOpts = O.pauseForGui

@@ -398,9 +398,7 @@ viewDocWith pr msg = do
                       [] -> pipeDocToPager "" [] pr msg
                       (viewer : args) -> pipeDocToPager viewer args pr msg
                   Nothing -> return $ ExitFailure 127 -- No such command
-               -- TEMPORARY passing the -K option should be removed as soon as
-               -- we can use the delegate_ctrl_c feature in process
-               `ortryrunning` pipeDocToPager  "less" ["-RK"] pr msg
+               `ortryrunning` pipeDocToPager  "less" ["-R"] pr msg
                `ortryrunning` pipeDocToPager  "more" [] pr msg
 #ifdef WIN32
                `ortryrunning` pipeDocToPager  "more.com" [] pr msg

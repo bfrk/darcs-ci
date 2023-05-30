@@ -44,7 +44,7 @@ import Darcs.Util.Global
     ( darcsdir
     )
 import Darcs.Util.Path
-    ( AnchoredPath, anchorPath
+    ( AnchoredPath, realPath
     , AbsolutePath, toPath, floatSubPath, makeSubPathOf
     )
 import Darcs.Util.Tree as Tree
@@ -55,7 +55,6 @@ import Darcs.Util.Tree.Plain ( readPlainTree )
 
 -- | Return all files available under the original working
 -- directory regardless of their repo state.
--- Subdirectories get a separator (slash) appended.
 fileArgs :: (AbsolutePath, AbsolutePath)
          -> [DarcsFlag]
          -> [String]
@@ -67,7 +66,6 @@ fileArgs (_, orig) _flags args =
 
 -- | Return all files available under the original working directory that
 -- are unknown to darcs but could be added.
--- Subdirectories get a separator (slash) appended.
 unknownFileArgs :: (AbsolutePath, AbsolutePath)
                 -> [DarcsFlag]
                 -> [String]
@@ -83,7 +81,6 @@ unknownFileArgs fps flags args = notYetListed args $ do
 
 -- | Return all files available under the original working directory that
 -- are known to darcs (either recorded or pending).
--- Subdirectories get a separator (slash) appended.
 knownFileArgs :: (AbsolutePath, AbsolutePath)
               -> [DarcsFlag]
               -> [String]
@@ -94,7 +91,6 @@ knownFileArgs fps flags args = notYetListed args $ do
 
 -- | Return all files available under the original working directory that
 -- are modified (relative to the recorded state).
--- Subdirectories get a separator (slash) appended.
 modifiedFileArgs :: (AbsolutePath, AbsolutePath)
                  -> [DarcsFlag]
                  -> [String]
@@ -104,7 +100,7 @@ modifiedFileArgs fps flags args = notYetListed args $ do
   case uncurry makeSubPathOf fps of
     Nothing -> return []
     Just here ->
-      return $ mapMaybe (stripPathPrefix (toPath here)) $ map (anchorPath "") new
+      return $ mapMaybe (stripPathPrefix (toPath here)) $ map realPath new
 
 -- | Return the available prefs of the given kind.
 prefArgs :: String
@@ -160,8 +156,7 @@ listItems :: Tree m -> [(AnchoredPath, ItemType)]
 listItems = map (\(p, i) -> (p, itemType i)) . Tree.list
 
 anchoredToFilePath :: (AnchoredPath, ItemType) -> [Char]
-anchoredToFilePath (path, TreeType) = anchorPath "" path -- ++ "/"
-anchoredToFilePath (path, BlobType) = anchorPath "" path
+anchoredToFilePath (path, _) = realPath path
 
 stripPathPrefix :: FilePath -> FilePath -> Maybe FilePath
 stripPathPrefix = stripPrefix . addSlash where

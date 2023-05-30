@@ -45,7 +45,9 @@ jobs:
     env:
       builddocs: ${{ matrix.ghc == '9.4.4' }}
       runtests: ${{ matrix.ghc == '8.4.4' || matrix.ghc == '9.4.4' }}
-      tests-to-run: # e.g. -t=EXAMPLE
+      # for some reason this test randomly fails with darcs.net server
+      # timeouts or similar errors; works fine on my machine
+      tests-to-run: -t='!network/log'
       testcmd: cabal run -- darcs-test -j=6 -f=123 -i=yn -c=yn --hide
       ACTIONS_ALLOW_UNSECURE_COMMANDS: true
       # avoid occasional timeouts in test scripts that access darcs.net:
@@ -104,7 +106,7 @@ jobs:
       if: runner.os == 'Linux' && env.runtests == 'true'
       run: |
         sudo apt-get install lighttpd
-        ${{ env.testcmd }} ${{ env.tests-to-run }} -t !network/log
+        ${{ env.testcmd }} ${{ env.tests-to-run }}
 
     - name: Run tests on MacOS
       if: runner.os == 'macOS' && env.runtests == 'true'

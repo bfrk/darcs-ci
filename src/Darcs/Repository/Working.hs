@@ -1,6 +1,6 @@
 module Darcs.Repository.Working
     ( applyToWorking
-    , setScriptsExecutable
+    , setAllScriptsExecutable
     , setScriptsExecutablePatches
     )  where
 
@@ -63,8 +63,8 @@ setScriptsExecutable_ paths = do
     debugMessage "Making scripts executable"
     mapM_ setExecutableIfScript paths
 
-setScriptsExecutable :: IO ()
-setScriptsExecutable = do
+setAllScriptsExecutable :: IO ()
+setAllScriptsExecutable = do
     tree <- readWorking (TreeFilter id)
     setScriptsExecutable_ [anchorPath "." p | (p, Tree.File _) <- Tree.list tree]
 

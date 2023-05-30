@@ -505,7 +505,7 @@ __xmloutput val = RawNoArg [] ["xml-output"] F.XMLOutput val "generate XML forma
 
 dryRun :: PrimDarcsOption DryRun
 dryRun = withDefault NoDryRun
-  [ RawNoArg [] ["dry-run"] F.DryRun YesDryRun "don't actually take the action" ]
+  [ RawNoArg ['n'] ["dry-run"] F.DryRun YesDryRun "don't actually take the action" ]
 
 dryRunXml :: DarcsOption a (DryRun -> XmlOutput -> a)
 dryRunXml = dryRun ^ xmlOutput

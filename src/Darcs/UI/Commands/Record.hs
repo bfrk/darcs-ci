@@ -304,7 +304,7 @@ doActualRecord _repository cfg name date my_author my_log logf deps chs
       (pending :> working) = do
     debugMessage "Writing the patch file..."
     myinfo <- patchinfo date name my_author my_log
-    let mypatch = infopatch myinfo $ progressFL "Writing changes:" chs
+    let mypatch = infopatch myinfo $ progressFL "Writing changes" chs
     let pia = n2pia $ adddeps mypatch deps
     _repository <-
       tentativelyAddPatch _repository (O.compress ? cfg) (O.verbosity ? cfg)

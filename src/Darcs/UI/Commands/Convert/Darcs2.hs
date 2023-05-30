@@ -63,7 +63,7 @@ import Darcs.Repository
     , withRepositoryLocation
     , withUMaskFlag
     )
-import qualified Darcs.Repository as R ( setScriptsExecutable )
+import qualified Darcs.Repository as R ( setAllScriptsExecutable )
 import Darcs.Repository.Format
     ( RepoProperty(Darcs2)
     , formatHas
@@ -212,7 +212,7 @@ toDarcs2 _ opts' args = do
         finalizeRepositoryChanges _repo (O.compress ? opts)
           (O.dryRun ? opts)
       when (parseFlags O.setScriptsExecutable opts == O.YesSetScriptsExecutable)
-        R.setScriptsExecutable
+        R.setAllScriptsExecutable
 
       -- Copy over the prefs file
       (fetchFilePS (repodir </> prefsFilePath) Uncachable >>= B.writeFile prefsFilePath)

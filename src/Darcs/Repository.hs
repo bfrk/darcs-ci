@@ -73,7 +73,7 @@ module Darcs.Repository
     , PatchSet
     , SealedPatchSet
     , PatchInfoAnd
-    , setScriptsExecutable
+    , setAllScriptsExecutable
     , setScriptsExecutablePatches
     , modifyCache
     -- * Recorded and unrecorded and pending.
@@ -124,7 +124,7 @@ import Darcs.Repository.Traverse ( cleanRepository )
 import Darcs.Repository.Pending ( setTentativePending, tentativelyRemoveFromPW )
 import Darcs.Repository.Working
     ( applyToWorking
-    , setScriptsExecutable
+    , setAllScriptsExecutable
     , setScriptsExecutablePatches
     )
 import Darcs.Repository.Job

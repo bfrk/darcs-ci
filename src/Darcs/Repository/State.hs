@@ -108,7 +108,6 @@ import Darcs.Util.Tree( Tree, restrict, FilterTree, expand, emptyTree, overlay, 
                       , ItemType(..), itemType, readBlob, modifyTree, findFile, TreeItem(..)
                       , makeBlobBS, expandPath )
 import qualified Darcs.Util.Tree.Plain as PlainTree ( readPlainTree )
-import Darcs.Util.Tree.Hashed ( darcsTreeHash )
 import Darcs.Util.Index
     ( Index
     , indexFormatValid
@@ -454,7 +453,7 @@ readIndex repo = do
   okay <- checkIndex
   if not okay
     then internalUpdateIndex repo
-    else openIndex indexPath (Just . darcsTreeHash)
+    else openIndex indexPath
 
 -- | Update the index so that it matches pristine+pending. If the index does
 -- not exist or is invalid, create a new one. Returns the updated index.
@@ -464,7 +463,7 @@ internalUpdateIndex repo = do
   pris <-
     readPristineAndPending repo
     `catch` \(_::IOException) -> readPristine repo
-  idx <- updateIndexFrom indexPath (Just . darcsTreeHash) pris
+  idx <- updateIndexFrom indexPath pris
   removeFileMayNotExist indexInvalidPath
   return idx
 

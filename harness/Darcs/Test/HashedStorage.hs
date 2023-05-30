@@ -152,7 +152,7 @@ index = [ testCase "index versioning" check_index_versions
                exist <- doesFileExist "_darcs/index"
                performGC -- required in win32 to trigger file close
                when exist $ removeFile "_darcs/index"
-               idx <- treeFromIndex =<< updateIndexFrom "_darcs/index" (Just . darcsTreeHash) x
+               idx <- treeFromIndex =<< updateIndexFrom "_darcs/index" x
                return (x, idx)
           check_index = extractRepoAndRun $
             do (pris, idx) <- build_index
@@ -284,7 +284,7 @@ tree = [ testCase "modifyTree" check_modify
                  do Prelude.writeFile "foo_dir/foo_a" "b\n"
                     working_plain <- filter nondarcs `fmap` readPlainTree "."
                     working <- treeFromIndex =<<
-                                 updateIndexFrom "_darcs/index" (Just . darcsTreeHash) working_plain
+                                 updateIndexFrom "_darcs/index" working_plain
                     pristine <- readDarcsPristine "."
                     (working', pristine') <- diffTrees working pristine
                     let foo_work = findFile working' (unsafeFloatPath "foo_dir/foo_a")

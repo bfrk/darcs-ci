@@ -272,8 +272,11 @@ helpOnMatchers =
    "    --hash=HASH is a synonym for --matches='hash HASH'",
    "    --from-patch and --to-patch are synonyms for",
    "      --from-match='name... and --to-match='name...",
-   "    --from-patch and --to-match can be unproblematically combined:",
+   "    --from-hash and --to-hash are synonyms for",
+   "      --from-match='hash...' and --to-match='hash...'",
+   "    sensible combinations of --from-* and --to-* options are possible:",
    "      `darcs log --from-patch='html.*docu' --to-match='date 20040212'`",
+   "      `darcs log --from-hash=368089c6969 --to-patch='^fix.*renamed or moved\\.$'`",
    "",
    "The following primitive Boolean expressions are supported:"
    ,""]

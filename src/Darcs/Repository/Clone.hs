@@ -37,7 +37,7 @@ import Darcs.Repository.Hashed
     , writeTentativeInventory
     )
 import Darcs.Repository.Working
-    ( setScriptsExecutable
+    ( setAllScriptsExecutable
     , setScriptsExecutablePatches )
 import Darcs.Repository.InternalTypes
     ( Repository
@@ -225,7 +225,7 @@ cloneRepository repourl mysimplename v useCache cloneKind um rdarcs sse remoteRe
        -- old-fashioned repositories are cloned differently since
        -- we need to copy all patches first and then build pristine
        copyRepoOldFashioned fromRepo _toRepo v withWorkingDir
-      when (sse == YesSetScriptsExecutable) setScriptsExecutable
+      when (sse == YesSetScriptsExecutable) setAllScriptsExecutable
       case patchSetMatch matchFlags of
        Nothing -> return ()
        Just psm -> do
