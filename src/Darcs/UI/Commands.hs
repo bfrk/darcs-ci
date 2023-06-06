@@ -327,10 +327,12 @@ setEnvDarcsFiles ps = do
     setEnvCautiously "DARCS_FILES" $ unlines filepaths
 
 -- | Set some environment variable to the given value, unless said value is
--- longer than 10K characters, in which case do nothing.
+-- longer than 100K characters, in which case do nothing.
 setEnvCautiously :: String -> String -> IO ()
 setEnvCautiously e v
-    | toobig (10 * 1024) v = return ()
+    | toobig (100 * 1024) v =
+        hPutDocLn stderr $ text $
+          "Warning: not setting env var " ++ e ++ " (would exceed 100K)"
     | otherwise =
         setEnv e v `catchIOError` (\_ -> setEnv e (decodeLocale (packStringToUTF8 v)))
   where
