@@ -1,2 +1,2 @@
 packages: .
-constraint: tls < 1.7
+constraints: tls < 1.7
