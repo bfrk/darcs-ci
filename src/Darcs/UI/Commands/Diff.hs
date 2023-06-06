@@ -24,6 +24,7 @@ import Data.Maybe ( fromMaybe )
 import Data.Maybe ( isJust )
 import System.Directory ( createDirectory, findExecutable, withCurrentDirectory )
 import System.FilePath.Posix ( takeFileName, (</>) )
+import System.IO ( hFlush, stdout )
 
 import Darcs.Patch ( listTouchedFiles )
 import Darcs.Patch.Apply ( Apply(..) )
@@ -59,7 +60,7 @@ import Darcs.Util.Exec ( execInteractive )
 import Darcs.Util.Global ( debugMessage )
 import Darcs.Util.Lock ( withTempDir )
 import Darcs.Util.Path ( AbsolutePath, AnchoredPath, isPrefix, toFilePath )
-import Darcs.Util.Printer ( Doc, putDoc, text, vcat )
+import Darcs.Util.Printer ( Doc, putDocLn, text, vcat )
 import Darcs.Util.Prompt ( askEnter )
 import Darcs.Util.Tree.Hashed ( hashedTreeIO, writeDarcsHashed )
 import Darcs.Util.Tree.Plain ( writePlainTree )
@@ -228,7 +229,8 @@ doDiff opts mpaths = withRepository (useCache ? opts) $ RepoJob $ \repository ->
         writePlainTree (applyTreeFilter relevant oldtree) (toFilePath odir)
         writePlainTree (applyTreeFilter relevant newtree) (toFilePath ndir)
         -- Display patch info for (only) the recorded patches that we diff
-        putDoc $ vcat $ map displayPatchInfo $ reverse $ mapFL info tolog
+        putDocLn $ vcat $ map displayPatchInfo $ reverse $ mapFL info tolog
+        hFlush stdout
 
       -- Call the external diff program. Note we are now back in our
       -- temporary directory.

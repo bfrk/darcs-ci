@@ -200,7 +200,6 @@ record = DarcsCommand
       ^ O.lookforreplaces
       ^ O.lookformoves
       ^ O.repoDir
-      ^ O.withContext
       ^ O.diffAlgorithm
     advancedOpts
       = O.logfile
@@ -265,14 +264,13 @@ doRecord repository cfg files pw@(pending :> working) = do
     date <- getDate (O.pipe ? cfg)
     my_author <- getAuthor (O.author ? cfg) (O.pipe ? cfg)
     debugMessage "I'm slurping the repository."
-    pristine <- readPristine repository
     debugMessage "About to select changes..."
     let da = O.diffAlgorithm ? cfg
     (chs :> _ ) <- runInvertibleSelection (canonizeFL da $ pending +>+ working) $
                       selectionConfigPrim
                           First "record" (patchSelOpts cfg)
                           (Just (primSplitter (O.diffAlgorithm ? cfg)))
-                          files (Just pristine)
+                          files
     when (not (O.askDeps ? cfg) && nullFL chs) $
               do putStrLn "Ok, if you don't want to record anything, that's fine!"
                  exitSuccess
@@ -345,7 +343,6 @@ patchSelOpts cfg = S.PatchSelectionOptions
     , S.interactive = isInteractive cfg
     , S.selectDeps = O.PromptDeps -- option not supported, use default
     , S.withSummary = O.NoSummary -- option not supported, use default
-    , S.withContext = O.withContext ? cfg
     }
 
 isInteractive :: Config -> Bool

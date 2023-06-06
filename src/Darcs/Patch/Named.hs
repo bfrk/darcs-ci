@@ -29,6 +29,7 @@ module Darcs.Patch.Named
     -- treated as abstract data type except by Darcs.Patch.Rebase
     , infopatch
     , adddeps
+    , setinfo
     , anonymous
     , HasDeps(..)
     , patch2patchinfo
@@ -162,6 +163,9 @@ infopatch pi ps = NamedP pi [] (fromPrims pi ps) where
 
 adddeps :: Named p wX wY -> [PatchInfo] -> Named p wX wY
 adddeps (NamedP pi _ p) ds = NamedP pi ds p
+
+setinfo :: PatchInfo -> Named p wX wY -> Named p wX wY
+setinfo i (NamedP _ ds ps) = NamedP i ds ps
 
 -- | This slightly ad-hoc class is here so we can call 'getdeps' with patch
 -- types that wrap a 'Named', such as 'RebaseChange'.

@@ -139,7 +139,6 @@ patchSelOpts flags = S.PatchSelectionOptions
     , S.interactive = isInteractive True flags
     , S.selectDeps = selectDeps ? flags
     , S.withSummary = O.withSummary ? flags
-    , S.withContext = O.NoContext
     }
 
 send :: DarcsCommand

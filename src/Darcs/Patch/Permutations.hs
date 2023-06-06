@@ -268,7 +268,7 @@ headPermutationsRL (ps:<:p) =
 -- | All permutations of an 'RL'.
 permutationsRL :: Commute p => RL p wX wY -> [RL p wX wY]
 permutationsRL ps =
-  [qs' :<: q | qs :<: q <- headPermutationsRL ps, qs' <- permutationsRL qs]
+  ps : [qs' :<: q | qs :<: q <- headPermutationsRL ps, qs' <- permutationsRL qs]
 
 -- | This commutes patches in the RHS to bring them into the same
 -- order as the LHS.

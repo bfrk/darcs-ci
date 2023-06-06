@@ -47,8 +47,9 @@ import Darcs.Repository.Repair
 import Darcs.Repository
     ( withRepository, RepoJob(..)
     , withRepoLock, writePristine
+    , finalizeRepositoryChanges
     )
-import Darcs.Repository.Hashed ( finalizeRepositoryChanges, writeTentativeInventory )
+import Darcs.Repository.Hashed ( writeTentativeInventory )
 import Darcs.Repository.Pending ( setTentativePending )
 
 import Darcs.Patch ( displayPatch )

@@ -56,12 +56,15 @@ for my $patch_name (keys %{ $xml->{patch} }) {
     # Otherwise, we default to darcs-devel as the sender. 
     my $email = ($author =~ m/\@/) ? $author : 'darcs-devel@darcs.net';
 
-    my $comment = $patch->{comment} ? "\n$patch->{comment}" : '';
+    my $comment = $patch->{comment};
+    $comment =~ s/^Ignore-this:.*\n?//m;
+    $comment =~ s/^/  /mg;
 
     my $patch_name_minus_status = $patch_name; 
     $patch_name_minus_status =~ s/$issue_re(:?\s?)//;
 
-     # Each patches can potentially update the status of a different issue, so generates a different e-mail
+    # Each patch can potentially update the status of a different issue, so
+    # generates a different e-mail
     my $msg = MIME::Lite->new(
          From     => 'noreply@darcs.net',
          To      =>'bugs@lists.osuosl.org',
@@ -71,7 +74,11 @@ for my $patch_name (keys %{ $xml->{patch} }) {
          Data     => qq!The following patch sent by $email updated issue $issue with
 $UPDATE_STRING
 
-* $patch_name $comment
+Hash: $patch->{hash}
+Author: $patch->{author}
+* $patch_name
+
+$comment
 
 !
      );
@@ -80,5 +87,3 @@ $UPDATE_STRING
      # use File::Slurp;
      # write_file("msg-$patch->{hash}.out",$msg->as_string);
 }
-
-

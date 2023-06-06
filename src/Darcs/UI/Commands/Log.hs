@@ -42,7 +42,7 @@ import Darcs.UI.Flags
     ( DarcsFlag
     , changesReverse, onlyToFiles, diffingOpts
     , useCache, maxCount, hasXmlOutput
-    , verbosity, withContext, isInteractive, verbose
+    , verbosity, isInteractive, verbose
     , getRepourl, pathSetFromArgs )
 import Darcs.UI.Options ( (^), parseFlags, (?) )
 import qualified Darcs.UI.Options.All as O
@@ -473,5 +473,4 @@ logPatchSelOpts flags = S.PatchSelectionOptions
     , S.interactive = isInteractive False flags
     , S.selectDeps = O.PromptDeps -- option not supported, use default
     , S.withSummary = O.withSummary ? flags
-    , S.withContext = withContext ? flags
     }

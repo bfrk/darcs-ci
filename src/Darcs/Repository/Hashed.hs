@@ -16,10 +16,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Darcs.Repository.Hashed
     ( revertTentativeChanges
-    , revertRepositoryChanges
     , finalizeTentativeChanges
     , addToTentativeInventory
     , readPatches
+    , readTentativePatches
     , writeAndReadPatch
     , writeTentativeInventory
     , copyHashedInventory
@@ -30,11 +30,9 @@ module Darcs.Repository.Hashed
     , tentativelyAddPatch_
     , tentativelyAddPatches
     , tentativelyAddPatches_
-    , finalizeRepositoryChanges
     , reorderInventory
     , UpdatePristine(..)
     , repoXor
-    , upgradeOldStyleRebase
     ) where
 
 import Darcs.Prelude
@@ -44,13 +42,9 @@ import Data.List ( foldl' )
 import System.Directory
     ( copyFile
     , createDirectoryIfMissing
-    , doesFileExist
-    , removeFile
     , renameFile
     )
 import System.FilePath.Posix ( (</>) )
-import System.IO ( IOMode(..), hClose, hPutStrLn, openBinaryFile, stderr )
-import System.IO.Error ( catchIOError )
 import System.IO.Unsafe ( unsafeInterleaveIO )
 
 import Darcs.Patch ( RepoPatch, effect, invertFL, readPatch )
@@ -72,31 +66,24 @@ import Darcs.Patch.PatchInfoAnd
     )
 import Darcs.Patch.Progress ( progressFL )
 import Darcs.Patch.Read ( ReadPatch )
-import qualified Darcs.Patch.Rebase.Legacy.Wrapped as W
 import Darcs.Patch.Rebase.Suspended
-    ( Suspended(..)
-    , addFixupsToSuspended
+    ( addFixupsToSuspended
     , removeFixupsFromSuspended
-    , showSuspended
     )
-import Darcs.Patch.Set ( Origin, PatchSet(..), Tagged(..), patchSet2RL )
-import Darcs.Patch.Show ( ShowPatchFor(..) )
+import Darcs.Patch.Set ( Origin, PatchSet(..), patchSet2RL )
 import Darcs.Patch.Witnesses.Ordered
-    ( (:>)(..)
-    , FL(..)
-    , RL(..)
+    ( FL(..)
     , foldFL_M
     , foldrwFL
     , mapRL
     , (+>+)
     , (+>>+)
     )
-import Darcs.Patch.Witnesses.Sealed ( Dup(..), Sealed(..) )
+import Darcs.Patch.Witnesses.Sealed ( Sealed(..) )
 import Darcs.Patch.Witnesses.Unsafe ( unsafeCoerceP )
 
 import Darcs.Repository.Flags
     ( Compression
-    , DryRun(..)
     , OptimizeDeep(..)
     , RemoteDarcs
     , UpdatePending(..)
@@ -104,11 +91,8 @@ import Darcs.Repository.Flags
     , remoteDarcs
     )
 import Darcs.Repository.Format
-    ( RepoProperty(HashedInventory, RebaseInProgress, RebaseInProgress_2_16)
-    , addToFormat
+    ( RepoProperty(HashedInventory)
     , formatHas
-    , removeFromFormat
-    , writeRepoFormat
     )
 import Darcs.Repository.InternalTypes
     ( AccessType(..)
@@ -119,31 +103,20 @@ import Darcs.Repository.InternalTypes
     , repoFormat
     , repoLocation
     , unsafeCoerceR
-    , unsafeEndTransaction
-    , unsafeStartTransaction
     , withRepoDir
     )
 import Darcs.Repository.Inventory
-    ( Inventory(..)
-    , peekPristineHash
+    ( peekPristineHash
     , pokePristineHash
-    , readInventoryPrivate
-    , readPatchesFromInventoryEntries
     , readPatchesFromInventoryFile
     , showInventoryEntry
     , writeInventory
     , writePatchIfNecessary
     )
 import qualified Darcs.Repository.Old as Old ( oldRepoFailMsg, readOldRepo )
-import Darcs.Repository.PatchIndex
-    ( createOrUpdatePatchIndexDisk
-    , doesPatchIndexExist
-    )
 import Darcs.Repository.Paths
 import Darcs.Repository.Pending
-    ( finalizePending
-    , readTentativePending
-    , revertPending
+    ( readTentativePending
     , writeTentativePending
     )
 import Darcs.Repository.Pristine
@@ -153,19 +126,11 @@ import Darcs.Repository.Pristine
     , convertSizePrefixedPristine
     )
 import Darcs.Repository.Rebase
-    ( extractOldStyleRebase
-    , finalizeTentativeRebase
-    , readTentativeRebase
-    , revertTentativeRebase
-    , withTentativeRebase
-    , writeTentativeRebase
+    ( withTentativeRebase
     )
-import Darcs.Repository.State ( updateIndex )
 import Darcs.Repository.Traverse ( cleanRepository )
 import Darcs.Repository.Unrevert
-    ( finalizeTentativeUnrevert
-    , removeFromUnrevertContext
-    , revertTentativeUnrevert
+    ( removeFromUnrevertContext
     )
 
 import Darcs.Util.ByteString ( gzReadFilePS )
@@ -177,8 +142,7 @@ import Darcs.Util.Lock
     , writeAtomicFilePS
     , writeDocBinFile
     )
-import Darcs.Util.Printer ( renderString, text, ($$) )
-import Darcs.Util.Printer.Color ( ePutDocLn )
+import Darcs.Util.Printer ( renderString )
 import Darcs.Util.Progress ( beginTedious, debugMessage, endTedious )
 import Darcs.Util.SignalHandler ( withSignalsBlocked )
 import Darcs.Util.Tree ( Tree )
@@ -408,68 +372,6 @@ removeFromTentativeInventory repo compr to_remove = do
     debugMessage $ "Done removeFromTentativeInventory"
     return repo'
 
--- | Atomically copy the tentative state to the recorded state,
--- thereby committing the tentative changes that were made so far.
--- This includes inventories, pending, rebase, and the index.
-finalizeRepositoryChanges :: (RepoPatch p, ApplyState p ~ Tree)
-                          => Repository 'RW p wU wR
-                          -> Compression
-                          -> DryRun
-                          -> IO (Repository 'RO p wU wR)
-finalizeRepositoryChanges r compr dryrun
-    | formatHas HashedInventory (repoFormat r) =
-        withRepoDir r $ do
-          let r' = unsafeEndTransaction $ unsafeCoerceR r
-          when (dryrun == NoDryRun) $ do
-            debugMessage "Finalizing changes..."
-            withSignalsBlocked $ do
-                finalizeTentativeRebase
-                finalizeTentativeChanges r compr
-                finalizePending r
-                finalizeTentativeUnrevert
-            debugMessage "Done finalizing changes..."
-            ps <- readPatches r'
-            pi_exists <- doesPatchIndexExist (repoLocation r')
-            when pi_exists $
-              createOrUpdatePatchIndexDisk r' ps
-              `catchIOError` \e ->
-                hPutStrLn stderr $ "Cannot create or update patch index: "++ show e
-            updateIndex r'
-          return r'
-    | otherwise = fail Old.oldRepoFailMsg
-
--- TODO: rename this and document the transaction protocol (revert/finalize)
--- clearly.
--- |Slightly confusingly named: as well as throwing away any tentative
--- changes, revertRepositoryChanges also re-initialises the tentative state.
--- It's therefore used before makign any changes to the repo.
-revertRepositoryChanges :: RepoPatch p
-                        => Repository 'RO p wU wR
-                        -> IO (Repository 'RW p wU wR)
-revertRepositoryChanges r
-  | formatHas HashedInventory (repoFormat r) =
-      withRepoDir r $ do
-        checkIndexIsWritable
-          `catchIOError` \e -> fail (unlines ["Cannot write index", show e])
-        revertTentativeUnrevert
-        revertPending r
-        revertTentativeChanges r
-        let r' = unsafeCoerceR r
-        revertTentativeRebase r'
-        return $ unsafeStartTransaction r'
-  | otherwise = fail Old.oldRepoFailMsg
-
-checkIndexIsWritable :: IO ()
-checkIndexIsWritable = do
-    checkWritable indexInvalidPath
-    checkWritable indexPath
-  where
-    checkWritable path = do
-      exists <- doesFileExist path
-      touchFile path
-      unless exists $ removeFile path
-    touchFile path = openBinaryFile path AppendMode >>= hClose
-
 -- | Writes out a fresh copy of the inventory that minimizes the
 -- amount of inventory that need be downloaded when people pull from
 -- the repository. The exact beavior depends on the 3rd parameter:
@@ -525,37 +427,3 @@ repoXor :: RepoPatch p => Repository rt p wU wR -> IO SHA1
 repoXor repo = do
   hashes <- mapRL (makePatchname . info) . patchSet2RL <$> readPatches repo
   return $ foldl' sha1Xor sha1zero hashes
-
--- | Upgrade a possible old-style rebase in progress to the new style.
-upgradeOldStyleRebase :: forall p wU wR.
-                         (RepoPatch p, ApplyState p ~ Tree)
-                      => Repository 'RW p wU wR -> Compression -> IO ()
-upgradeOldStyleRebase repo compr = do
-  PatchSet (ts :: RL (Tagged p) Origin wX) _ <- readTentativePatches repo
-  Inventory _ invEntries <- readInventoryPrivate tentativeHashedInventoryPath
-  Sealed wps <-
-    readPatchesFromInventoryEntries @(W.WrappedNamed p) (repoCache repo) invEntries
-  case extractOldStyleRebase wps of
-    Nothing ->
-      ePutDocLn $ text "No old-style rebase state found, no upgrade needed."
-    Just ((ps :: RL (PatchInfoAnd p) wX wZ) :> Dup r) -> do
-      -- low-level call, must not try to update an existing rebase patch,
-      -- nor update anything else beside the inventory
-      writeTentativeInventory repo compr (PatchSet ts ps)
-      Items old_r <- readTentativeRebase repo
-      case old_r of
-        NilFL -> do
-          writeTentativeRebase (unsafeCoerceR repo) r
-          writeRepoFormat
-            ( addToFormat RebaseInProgress_2_16
-            $ removeFromFormat RebaseInProgress
-            $ repoFormat repo)
-            formatPath
-          _ <- finalizeRepositoryChanges repo compr NoDryRun
-          return ()
-        _ -> do
-          ePutDocLn
-            $  "A new-style rebase is already in progress, not overwriting it."
-            $$ "This should not have happened! This is the old-style rebase I found"
-            $$ "and removed from the repository:"
-            $$ showSuspended ForDisplay r

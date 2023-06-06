@@ -1,6 +1,7 @@
 module Darcs.UI.PatchHeader
     ( getLog
     , getAuthor
+    , editLog
     , updatePatchHeader, AskAboutDeps(..)
     , PatchHeaderConfig
     , patchHeaderConfig
@@ -12,13 +13,23 @@ import Darcs.Prelude
 
 import Darcs.Patch ( PrimOf, RepoPatch, summaryFL )
 import Darcs.Patch.Apply ( ApplyState )
-import Darcs.Patch.Info ( PatchInfo,
-                          piAuthor, piName, piLog, piDateString,
-                          patchinfo
-                        )
+import Darcs.Patch.Info
+    ( PatchInfo
+    , patchinfo
+    , piAuthor
+    , piDateString
+    , piLog
+    , piName
+    )
 import Darcs.Patch.Named
-   ( Named, patchcontents, patch2patchinfo, infopatch, getdeps, adddeps
-   )
+    ( Named
+    , adddeps
+    , getdeps
+    , infopatch
+    , patch2patchinfo
+    , patchcontents
+    , setinfo
+    )
 import Darcs.Patch.PatchInfoAnd ( PatchInfoAnd, n2pia )
 import Darcs.Patch.Prim ( canonizeFL )
 import Darcs.Patch.Set ( Origin, PatchSet )
@@ -214,6 +225,15 @@ getLog m_name has_pipe log_file ask_long m_old chs =
         , text "#"
         , prefixLines (text "#") chs
         ]
+
+editLog :: Named prim wX wY -> IO (Named prim wX wY)
+editLog p = do
+  let pi = patch2patchinfo p
+  (name, log, _) <-
+    getLog Nothing False (O.Logfile Nothing False)
+      (Just O.YesEditLongComment) (Just (piName pi, piLog pi)) mempty
+  pi' <- patchinfo (piDateString pi) name (piAuthor pi) log
+  return $ setinfo pi' p
 
 -- | Specify whether to ask about dependencies with respect to a particular
 -- 'PatchSet', or not

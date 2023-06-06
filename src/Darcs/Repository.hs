@@ -112,13 +112,15 @@ import Darcs.Repository.Hashed
     , tentativelyAddPatch
     , tentativelyAddPatches
     , tentativelyRemovePatches
-    , revertRepositoryChanges
-    , finalizeRepositoryChanges
     , reorderInventory
     )
 import Darcs.Repository.Pristine
     ( createPristineDirectoryTree
     , writePristine
+    )
+import Darcs.Repository.Transaction
+    ( revertRepositoryChanges
+    , finalizeRepositoryChanges
     )
 import Darcs.Repository.Traverse ( cleanRepository )
 import Darcs.Repository.Pending ( setTentativePending, tentativelyRemoveFromPW )

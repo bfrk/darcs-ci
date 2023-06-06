@@ -181,7 +181,6 @@ amend = DarcsCommand
       ^ O.lookforreplaces
       ^ O.lookformoves
       ^ O.repoDir
-      ^ O.withContext
       ^ O.diffAlgorithm
     advancedOpts
       = O.compress
@@ -204,7 +203,6 @@ doAmend cfg files =
       -- reconstruct context patchset
       context <- return $ appendPSFL common (reverseRL kept)
       announceFiles (O.verbosity ? cfg) files "Amending changes in"
-      pristine <- readPristine repository
       pending :> working <-
         readPendingAndWorking (diffingOpts cfg) repository files
       -- auxiliary function needed because the witness types differ for the
@@ -217,7 +215,6 @@ doAmend cfg files =
                        (patchSelOpts cfg)
                        (Just (primSplitter (O.diffAlgorithm ? cfg)))
                        files
-                       (Just pristine)
             (chosenPatches :> _) <- runInvertibleSelection ch selection_config
             addChangesToPatch cfg repository context oldp chosenPatches pending working
       if not (isTag (info oldp))
@@ -228,7 +225,7 @@ doAmend cfg files =
               let selection_config =
                     selectionConfigPrim Last "unrecord" (patchSelOpts cfg)
                       (Just (primSplitter (O.diffAlgorithm ? cfg)))
-                      files (Just pristine)
+                      files
               (_ :> chosenPrims) <-
                 runInvertibleSelection (effect oldp) selection_config
               let invPrims = reverseRL (invertFL chosenPrims)
@@ -381,7 +378,6 @@ patchSelOpts cfg = S.PatchSelectionOptions
     , S.interactive = isInteractive cfg
     , S.selectDeps = O.PromptDeps -- option not supported, use default
     , S.withSummary = O.NoSummary -- option not supported, use default
-    , S.withContext = O.withContext ? cfg
     }
 
 isInteractive :: Config -> Bool

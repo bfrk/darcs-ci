@@ -28,13 +28,15 @@ import Darcs.Repository.Pristine
     )
 import Darcs.Repository.Hashed
     ( copyHashedInventory
-    , finalizeRepositoryChanges
     , finalizeTentativeChanges
     , readPatches
-    , revertRepositoryChanges
     , revertTentativeChanges
     , tentativelyRemovePatches
     , writeTentativeInventory
+    )
+import Darcs.Repository.Transaction
+    ( finalizeRepositoryChanges
+    , revertRepositoryChanges
     )
 import Darcs.Repository.Working
     ( setAllScriptsExecutable
