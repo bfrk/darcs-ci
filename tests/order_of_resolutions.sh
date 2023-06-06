@@ -70,7 +70,7 @@ darcs pull --allow -a -p p35 ../S
 darcs mark
 cd ..
 
-darcs whatsnew --repo C1 > c1
-darcs whatsnew --repo C2 > c2
+darcs whatsnew --repo C1 > whatsnew-C1
+darcs whatsnew --repo C2 > whatsnew-C2
 
 diff c1 c2
