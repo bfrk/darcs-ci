@@ -88,8 +88,6 @@ module Darcs.UI.Options.All
     , setDefault
     , InheritDefault (..) -- re-export
     , inheritDefault
-    , WithPrefsTemplates (..) -- re-export
-    , withPrefsTemplates
 
     -- patch meta-data
     , patchname
@@ -169,8 +167,6 @@ module Darcs.UI.Options.All
     , Reorder (..) -- re-export
     , minimize
     , storeInMemory
-    , OptimizeDeep (..)
-    , optimizeDeep
 
     -- miscellaneous
     , Output (..)
@@ -271,8 +267,6 @@ import Darcs.Repository.Flags
     , WithPatchIndex (..)
     , WithWorkingDir (..)
     , PatchFormat (..)
-    , WithPrefsTemplates(..)
-    , OptimizeDeep(..)
     )
 
 import qualified Darcs.UI.Options.Flags as F ( DarcsFlag(..) )
@@ -362,10 +356,6 @@ instance YesNo EnumPatches where
 instance YesNo InheritDefault where
   yes NoInheritDefault = False
   yes YesInheritDefault = True
-
-instance YesNo WithPrefsTemplates where
-  yes NoPrefsTemplates = False
-  yes WithPrefsTemplates = True
 
 -- * Root command
 
@@ -505,7 +495,7 @@ __xmloutput val = RawNoArg [] ["xml-output"] F.XMLOutput val "generate XML forma
 
 dryRun :: PrimDarcsOption DryRun
 dryRun = withDefault NoDryRun
-  [ RawNoArg ['n'] ["dry-run"] F.DryRun YesDryRun "don't actually take the action" ]
+  [ RawNoArg [] ["dry-run"] F.DryRun YesDryRun "don't actually take the action" ]
 
 dryRunXml :: DarcsOption a (DryRun -> XmlOutput -> a)
 dryRunXml = dryRun ^ xmlOutput
@@ -643,12 +633,6 @@ inheritDefault :: PrimDarcsOption InheritDefault
 inheritDefault = withDefault NoInheritDefault
   [ RawNoArg [] ["inherit-default"] F.InheritDefault YesInheritDefault "inherit default repository"
   , RawNoArg [] ["no-inherit-default"] F.NoInheritDefault NoInheritDefault "don't inherit default repository" ]
-
-withPrefsTemplates :: PrimDarcsOption WithPrefsTemplates
-withPrefsTemplates = withDefault WithPrefsTemplates
-  [ RawNoArg [] ["with-prefs-templates"] F.WithPrefsTemplates WithPrefsTemplates "create template-filled preferences"
-  , RawNoArg [] ["no-prefs-templates"] F.NoPrefsTemplates NoPrefsTemplates "create empty preferences"
-  ]
 
 -- * Specifying patch meta-data
 
@@ -1062,13 +1046,6 @@ storeInMemory = withDefault False
     "do patch application in memory rather than on disk"
   , RawNoArg [] ["no-store-in-memory"] F.ApplyOnDisk False
     "do patch application on disk" ]
-
-optimizeDeep :: PrimDarcsOption OptimizeDeep
-optimizeDeep = withDefault OptimizeShallow
-  [ RawNoArg [] ["deep"] F.OptimizeDeep OptimizeDeep
-    "also optimize clean tags in the complete history"
-  , RawNoArg [] ["shallow"] F.OptimizeShallow OptimizeShallow
-    "only reorder recent patches (works with lazy repo)" ]
 
 -- * Output
 

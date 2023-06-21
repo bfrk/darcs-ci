@@ -22,19 +22,19 @@ import Darcs.Prelude hiding ( all )
 import Control.Monad ( unless, when )
 import Data.Maybe ( fromMaybe )
 import Data.Maybe ( isJust )
-import System.Directory ( createDirectory, findExecutable, withCurrentDirectory )
+import System.Directory ( createDirectory, findExecutable )
 import System.FilePath.Posix ( takeFileName, (</>) )
 import System.IO ( hFlush, stdout )
 
 import Darcs.Patch ( listTouchedFiles )
 import Darcs.Patch.Apply ( Apply(..) )
-import Darcs.Patch.Depends ( findCommon )
+import Darcs.Patch.Depends ( findCommonWithThem )
 import Darcs.Patch.Info ( displayPatchInfo )
 import Darcs.Patch.Match ( matchFirstPatchset, matchSecondPatchset, secondMatch )
 import Darcs.Patch.Named ( anonymous )
 import Darcs.Patch.PatchInfoAnd ( info, n2pia )
 import Darcs.Patch.Set ( patchSetSnoc )
-import Darcs.Patch.Witnesses.Ordered ( Fork(..), mapFL )
+import Darcs.Patch.Witnesses.Ordered ( (:>)(..), mapFL )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(..), seal )
 import Darcs.Repository ( RepoJob(..), readPatches, withRepository )
 import Darcs.Repository.State
@@ -57,6 +57,7 @@ import qualified Darcs.UI.Options.All as O
 import Darcs.Util.Cache ( mkDirCache )
 import Darcs.Util.CommandLine ( parseCmd )
 import Darcs.Util.Exec ( execInteractive )
+import Darcs.Util.File ( withCurrentDirectory )
 import Darcs.Util.Global ( debugMessage )
 import Darcs.Util.Lock ( withTempDir )
 import Darcs.Util.Path ( AbsolutePath, AnchoredPath, isPrefix, toFilePath )
@@ -123,8 +124,6 @@ diffCommand = DarcsCommand
     diffBasicOpts
       = O.matchOneOrRange
       ^ O.extDiff
-      ^ O.lookforadds
-      ^ O.lookformoves
       ^ O.repoDir
       ^ O.storeInMemory
     diffAdvancedOpts = O.pauseForGui
@@ -164,15 +163,15 @@ doDiff opts mpaths = withRepository (useCache ? opts) $ RepoJob $ \repository ->
   Sealed match <- return $
     fromMaybe (seal all) $ matchSecondPatchset matchFlags patchset
 
-  Fork _ todiff _ <- return $ findCommon match ctx
-  Fork _ tounapply _ <- return $ findCommon all match
+  (_ :> todiff) <- return $ findCommonWithThem match ctx
+  (_ :> tounapply) <- return $ findCommonWithThem all match
 
   Sealed logmatch <- return $
     if secondMatch matchFlags
       then seal match
       else seal patchset
   -- Same as @todiff@ but without trailing @unrecorded'@ changes
-  Fork _ tolog _ <- return $ findCommon logmatch ctx
+  (_ :> tolog) <- return $ findCommonWithThem logmatch ctx
 
   let touched = listTouchedFiles todiff
       files = case mpaths of

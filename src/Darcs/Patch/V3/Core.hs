@@ -36,13 +36,13 @@ import Darcs.Patch.Format ( ListFormat(ListFormatV3) )
 import Darcs.Patch.FromPrim ( ToPrim(..) )
 import Darcs.Patch.Ident
     ( Ident(..)
+    , IdEq2(..)
     , PatchId
     , SignedId(..)
     , StorableId(..)
     , commuteToPrefix
     , fastRemoveFL
     , findCommonFL
-    , (=\^/=)
     )
 import Darcs.Patch.Invert ( Invert, invert, invertFL )
 import Darcs.Patch.Merge
@@ -462,7 +462,7 @@ instance (StorableId name, PrimPatch prim)
   => ShowContextPatch (RepoPatchV3 name prim) where
 
   showContextPatch f (Prim p) = showContextPatch f p
-  showContextPatch f p = apply p >> return (showPatch f p)
+  showContextPatch f p = return $ showPatch f p
 
 -- * Read and Write
 

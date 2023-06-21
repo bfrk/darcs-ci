@@ -34,12 +34,5 @@ darcs apply foo.dpatch
 cd ..
 
 cd R
-# The issue calls for darcs to detect this and fail, which it does,
-# though not in a regular way but by calling 'error'. Since the 'not'
-# function now regards that as test failure we cannot use it here.
-# This is only a temporary work-around: Darcs should never call error
-# unless it is really a bug in darcs.
-if darcs pull -a ../S 2>&1 | tee log; then
-  exit 1
-fi
+not darcs pull -a ../S 2>&1 | tee log
 cd ..

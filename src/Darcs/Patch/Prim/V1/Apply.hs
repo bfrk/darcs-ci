@@ -22,7 +22,7 @@ import Darcs.Patch.TokenReplace ( tryTokReplace )
 import Darcs.Patch.ApplyMonad ( ApplyMonadTree(..) )
 import Darcs.Util.Tree( Tree )
 
-import Darcs.Patch.Witnesses.Ordered ( FL(..), spanFL, (:>)(..) )
+import Darcs.Patch.Witnesses.Ordered ( FL(..), mapFL_FL, spanFL, (:>)(..) )
 import Darcs.Patch.Witnesses.Unsafe ( unsafeCoercePStart )
 
 import Darcs.Util.ByteString ( unlinesPS )
@@ -126,19 +126,20 @@ instance RepairToFL Prim where
 
 instance PrimApply Prim where
     applyPrimFL NilFL = return ()
-    applyPrimFL (h@(FP f (Hunk{})):>:the_ps)
+    applyPrimFL (FP f h@(Hunk{}):>:the_ps)
      = case spanFL f_hunk the_ps of
            (xs :> ps') ->
-               do mModifyFilePS f $ hunkmod (h :>: xs)
+               do let foo = h :>: mapFL_FL (\(FP _ h') -> h') xs
+                  mModifyFilePS f $ hunkmod foo
                   applyPrimFL ps'
         where f_hunk (FP f' (Hunk{})) = f == f'
               f_hunk _ = False
               -- TODO there should be a HOF that abstracts
               -- over this recursion scheme
-              hunkmod :: MonadThrow m => FL Prim wX wY
+              hunkmod :: MonadThrow m => FL FilePatchType wX wY
                       -> B.ByteString -> m B.ByteString
               hunkmod NilFL content = return content
-              hunkmod (FP _ (Hunk line old new):>:hs) content =
+              hunkmod (Hunk line old new:>:hs) content =
                   applyHunk f (line, old, new) content >>= hunkmod hs
               hunkmod _ _ = error "impossible case"
     applyPrimFL (p:>:ps) = apply p >> applyPrimFL ps

@@ -41,7 +41,7 @@ import Darcs.Patch.Merge ( Merge(..), mergerFLFL )
 import Darcs.Patch.Invert ( Invert(..) )
 import Darcs.Patch.Commute ( Commute(..) )
 import Darcs.Patch.FromPrim ( PrimPatchBase, PrimOf )
-import Darcs.Patch.Prim ( sortCoalesceFL, PrimCoalesce, PrimConstruct )
+import Darcs.Patch.Prim ( sortCoalesceFL, PrimCanonize, PrimConstruct )
 import Darcs.Patch.Read ( ReadPatch )
 import Darcs.Patch.Show ( ShowPatchBasic )
 import Darcs.Patch.Witnesses.Show
@@ -109,12 +109,12 @@ class ( ArbitraryState prim
     where
         -- hooks to disable certain kinds of tests for certain kinds of patches
 
-        -- These tests depend on the PrimCoalesce class, which may not be
+        -- These tests depend on the PrimCanonize class, which may not be
         -- implemented. By passing the implementation in explicitly only where
         -- it is available, we can avoid having to have dummy instances that
         -- won't be used.
-        runCoalesceTests :: Maybe (Dict (PrimCoalesce prim))
-        default runCoalesceTests :: PrimCoalesce prim => Maybe (Dict (PrimCoalesce prim))
+        runCoalesceTests :: Maybe (Dict (PrimCanonize prim))
+        default runCoalesceTests :: PrimCanonize prim => Maybe (Dict (PrimCanonize prim))
         runCoalesceTests = Just Dict
 
         -- TODO in practice both hasPrimConstruct and usesV1Model will only work for V1 prims
@@ -217,7 +217,7 @@ instance (CheckedMerge p, PrimBased p) => Effect (MergeableSequence p) where
 instance
   ( PropagateShrink prim (OnlyPrim p)
   , CheckedMerge p, Effect p, PrimOf p ~ prim
-  , Invert prim, PrimCoalesce prim
+  , Invert prim, PrimCanonize prim
   , PrimBased p
   )
   => PropagateShrink prim (MergeableSequence p) where

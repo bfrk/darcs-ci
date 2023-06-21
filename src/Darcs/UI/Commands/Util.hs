@@ -29,7 +29,6 @@ module Darcs.UI.Commands.Util
     , getLastPatches
     , matchRange
     , historyEditHelp
-    , commonHelpWithPrefsTemplates
     ) where
 
 import Control.Monad ( when, unless )
@@ -46,7 +45,7 @@ import Darcs.Patch ( RepoPatch, xmlSummary )
 import Darcs.Patch.Apply ( ApplyState )
 import Darcs.Patch.Depends
     ( areUnrelatedRepos
-    , findCommon
+    , findCommonWithThem
     , patchSetUnion
     )
 import Darcs.Patch.Info ( toXml )
@@ -60,7 +59,7 @@ import Darcs.Patch.Match
     )
 import Darcs.Patch.PatchInfoAnd ( PatchInfoAnd, info, hopefullyM )
 import Darcs.Patch.Set ( PatchSet, SealedPatchSet, Origin, emptyPatchSet )
-import Darcs.Patch.Witnesses.Ordered ( Fork(..), FL, (:>)(..), dropRight, mapFL )
+import Darcs.Patch.Witnesses.Ordered ( FL, (:>)(..), mapFL )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(..), Sealed2(..) )
 
 import Darcs.Repository
@@ -263,7 +262,7 @@ getLastPatches :: RepoPatch p
                -> (PatchSet p :> FL (PatchInfoAnd p)) Origin wR
 getLastPatches matchFlags ps =
   case matchFirstPatchset matchFlags ps of
-    Just (Sealed p1s) -> dropRight $ findCommon ps p1s
+    Just (Sealed p1s) -> findCommonWithThem ps p1s
     Nothing -> error "precondition: getLastPatches requires a firstMatch"
 
 preselectPatches
@@ -285,7 +284,7 @@ preselectPatches opts repo = do
     nirs -> do
       (Sealed thems) <-
         remotePatches opts repo nirs
-      return $ dropRight $ findCommon allpatches thems
+      return $ findCommonWithThem allpatches thems
 
 matchRange :: MatchableRP p
            => [MatchFlag]
@@ -294,8 +293,8 @@ matchRange :: MatchableRP p
 matchRange matchFlags ps =
   case (sp1s, sp2s) of
     (Sealed p1s, Sealed p2s) ->
-      case findCommon p2s p1s of
-        Fork _ us _ -> Sealed2 us
+      case findCommonWithThem p2s p1s of
+        _ :> us -> Sealed2 us
   where
     sp1s = fromMaybe (Sealed emptyPatchSet) $ matchFirstPatchset matchFlags ps
     sp2s = fromMaybe (Sealed ps) $ matchSecondPatchset matchFlags ps
@@ -327,15 +326,4 @@ historyEditHelp = formatWords
   , "by using an appropriate `--match` option with the `author` keyword."
   , "For instance, you could add something like `<cmd> match Your Name`"
   , "to your `" ++ globalPrefsDirDoc ++ "defaults`."
-  ]
-
-commonHelpWithPrefsTemplates :: Doc
-commonHelpWithPrefsTemplates = formatWords
-  [ "Initialize and clone commands create the preferences files in"
-  , "_darcs/prefs/ directory of the newly created repository. With option"
-  , "--with-prefs-templates `boring` and `binaries` preferences files will be"
-  , "filled with default templates. If you want to leave these files empty"
-  , "use --no-prefs-templates option. If you prefer to keep the relevant"
-  , "settings globally, it will be convenient to add 'ALL no-prefs-templates'"
-  , "to your ~/darcs/defaults file."
   ]

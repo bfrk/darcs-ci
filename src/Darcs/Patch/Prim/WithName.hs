@@ -14,10 +14,11 @@ import Darcs.Patch.Ident
     , PatchId
     , SignedId(..)
     , StorableId(..)
+    , IdEq2(..)
     )
 import Darcs.Patch.Inspect ( PatchInspect(..) )
 import Darcs.Patch.FileHunk ( IsHunk(..) )
-import Darcs.Patch.Prim.Class ( PrimApply(..), PrimDetails(..) )
+import Darcs.Patch.Prim.Class ( PrimApply(..), PrimClassify(..), PrimDetails(..) )
 import Darcs.Patch.Invert ( Invert(..) )
 import Darcs.Patch.Merge ( CleanMerge(..) )
 import Darcs.Patch.Read ( ReadPatch(..) )
@@ -48,6 +49,8 @@ type instance PatchId (PrimWithName name p) = name
 
 instance SignedId name => Ident (PrimWithName name p) where
   ident = wnName
+
+instance (SignedId name, Eq2 p) => IdEq2 (PrimWithName name p)
 
 instance (Eq name, Eq2 p) => Eq2 (PrimWithName name p) where
   PrimWithName i p =\/= PrimWithName j q
@@ -91,6 +94,18 @@ instance IsHunk p => IsHunk (PrimWithName name p) where
 
 instance PrimApply p => PrimApply (PrimWithName name p) where
   applyPrimFL = applyPrimFL . mapFL_FL wnPatch
+
+instance PrimClassify p => PrimClassify (PrimWithName name p) where
+  primIsAddfile = primIsAddfile . wnPatch
+  primIsRmfile = primIsRmfile . wnPatch
+  primIsAdddir = primIsAdddir . wnPatch
+  primIsRmdir = primIsRmdir . wnPatch
+  primIsHunk = primIsHunk . wnPatch
+  primIsMove = primIsMove . wnPatch
+  primIsBinary = primIsBinary . wnPatch
+  primIsTokReplace = primIsTokReplace . wnPatch
+  primIsSetpref = primIsSetpref . wnPatch
+  is_filepatch = is_filepatch . wnPatch
 
 instance PrimDetails p => PrimDetails (PrimWithName name p) where
   summarizePrim = summarizePrim . wnPatch

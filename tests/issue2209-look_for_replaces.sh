@@ -25,12 +25,9 @@
 
 . lib
 
-rm -rf R
-mkdir R
+darcs init R
 cd R
-
 # simple full complete replace (record)
-darcs init
 echo "foo" > file
 darcs record -al -m "add file"
 echo "bar_longer" > file          # replace by token of different length
@@ -90,16 +87,6 @@ diff -u log log.expected
 rm -rf *
 
 # partial replace (only some of the words/chunks replaced) (amend-record)
-# note that coalescing simplifies
-#     hunk ./file 1
-#     +foo foo
-#     replace ./file [A-Za-z_0-9] foo bar
-#     hunk ./file 1
-#     -bar bar
-#     +bar foo
-# to
-#     hunk ./file 1
-#     +bar foo
 darcs init
 echo "foo foo" > file
 darcs record -al -m "add file"
@@ -110,6 +97,10 @@ cat > log.expected <<EOF
   * add file
     addfile ./file
     hunk ./file 1
+    +foo foo
+    replace ./file [A-Za-z_0-9] foo bar
+    hunk ./file 1
+    -bar bar
     +bar foo
 EOF
 diff -u log log.expected
@@ -331,7 +322,9 @@ rm -rf *
 
 # 2
 
-darcs init
+cd ..
+darcs init S
+cd S
 echo 'Example content' > f
 echo 'This is golden content , super interesting content' >> f
 
@@ -343,11 +336,12 @@ sed -i "s/content/matter/g" f
 sed -i "s/content/topic/g" g
 darcs whatsnew --look-for-replace | grep replace
 # replace same token differently in different files is OK
-rm -rf *
 
 # 3
 
-darcs init
+cd ..
+darcs init T
+cd T
 echo 'Example content' > f
 echo 'This is golden content , super interesting content' >> f
 
@@ -369,5 +363,3 @@ darcs whatsnew --look-for-replace > out
 grep "^replace ./e" out  # 1 replace in e
 not grep "^replace ./f" out  # 0 replace in f
 grep "^replace ./g" out  # 1 replace in g
-
-cd ..

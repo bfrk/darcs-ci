@@ -16,7 +16,7 @@
 -- Boston, MA 02110-1301, USA.
 
 module Darcs.UI.PrintPatch
-    ( contextualPrintPatchWithPager
+    ( contextualPrintPatch
     , printContent
     , printContentWithPager
     , printFriendly
@@ -29,18 +29,21 @@ import Darcs.Prelude
 
 import Darcs.Patch ( description, showContextPatch, content, summary )
 import Darcs.Patch.Apply ( ApplyState )
-import Darcs.Patch.ApplyMonad ( ApplyMonadTrans, runApplyMonad )
 import Darcs.Patch.Show ( ShowContextPatch, ShowPatch, ShowPatchFor(ForDisplay) )
 import Darcs.UI.External ( viewDocWith )
-import Darcs.UI.Options.All ( Verbosity(..), WithSummary(..) )
+import Darcs.UI.Options.All ( Verbosity(..), WithContext(..), WithSummary(..) )
 import Darcs.Util.Printer ( Doc, prefix, putDocLnWith, ($$) )
 import Darcs.Util.Printer.Color ( fancyPrinters )
+import Darcs.Util.Tree ( Tree )
+import Darcs.Util.Tree.Monad ( virtualTreeIO )
 
 -- | @'printFriendly' opts patch@ prints @patch@ in accordance with the flags
 -- in opts, ie, whether @--verbose@ or @--summary@ were passed at the
 -- command-line.
-printFriendly :: ShowPatch p => Verbosity -> WithSummary -> p wX wY -> IO ()
-printFriendly v s = putDocLnWith fancyPrinters . showFriendly v s
+printFriendly :: (ShowPatch p, ShowContextPatch p, ApplyState p ~ Tree) => Maybe (Tree IO)
+              -> Verbosity -> WithSummary -> WithContext -> p wX wY -> IO ()
+printFriendly (Just pristine) _ _ YesContext = contextualPrintPatch pristine
+printFriendly _ v s _ = putDocLnWith fancyPrinters . showFriendly v s
 
 -- | @'showFriendly' flags patch@ returns a 'Doc' representing the right
 -- way to show @patch@ given the list @flags@ of flags darcs was invoked with.
@@ -64,13 +67,10 @@ printContent = putDocLnWith fancyPrinters . prefix "    " . content
 printContentWithPager :: ShowPatch p => p wX wY -> IO ()
 printContentWithPager = viewDocWith fancyPrinters . prefix "    " . content
 
--- | Print a patch, together with its context, on standard output, using a
--- pager.
-contextualPrintPatchWithPager
-  :: (ApplyMonadTrans (ApplyState p) IO, ShowContextPatch p)
-  => ApplyState p IO
-  -> p wX wY
-  -> IO ()
-contextualPrintPatchWithPager s p = do
-    (doc, _) <- runApplyMonad (showContextPatch ForDisplay p) s
-    viewDocWith fancyPrinters doc
+-- | 'contextualPrintPatch' prints a patch, together with its context, on
+-- standard output.
+contextualPrintPatch :: (ShowContextPatch p, ApplyState p ~ Tree) => Tree IO
+                     -> p wX wY -> IO ()
+contextualPrintPatch s p = do
+    (contextedPatch, _) <- virtualTreeIO (showContextPatch ForDisplay p) s
+    putDocLnWith fancyPrinters contextedPatch

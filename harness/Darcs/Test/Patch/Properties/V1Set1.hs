@@ -9,7 +9,7 @@ import Darcs.Prelude
 import Darcs.Patch
      ( commute, invert, merge, effect
      , readPatch, showPatch
-     , canonizeFL )
+     , canonize, sortCoalesceFL )
 import Darcs.Patch.FromPrim ( fromAnonymousPrim )
 import Darcs.Patch.Merge ( Merge )
 import Darcs.Patch.Read ( ReadPatch )
@@ -48,7 +48,7 @@ checkMerge :: ((FL Patch:\/: FL Patch) wX wY, FL Patch wY wZ) -> TestResult
 checkMerge (p1:\/:p2,p1') =
    case merge (p1:\/:p2) of
    _ :/\: p1a ->
-       if isIsEq (p1a =\/= p1')
+       if isIsEq (p1a `eqFL` p1')
        then succeeded
        else failed $ text $ "Merge gave wrong value!\n"++show p1++show p2
             ++"I expected\n"++show p1'
@@ -75,7 +75,7 @@ checkMergeSwap (p1, p2) =
         _ :/\: p1' ->
             case commute (p1 :> p2') of
             Just (_ :> p1'b) ->
-                if not $ p1'b `unsafeCompare` p1'
+                if not $ p1'b `eqFLUnsafe` p1'
                 then failed $ text $ "Merge swapping problem with...\np1 "++
                       show p1++"merged with\np2 "++
                       show p2++"p1' is\np1' "++
@@ -89,17 +89,17 @@ checkMergeSwap (p1, p2) =
 
 checkCanon :: forall wX wY . (FL Patch wX wY, FL Patch wX wY) -> TestResult
 checkCanon (p1,p2) =
-    if isIsEq $ p1_myers =\/= p2
-    then if isIsEq $ p1_patience =\/= p2
+    if isIsEq $ eqFL p1_ p2
+    then if isIsEq $ eqFL p1_p p2
          then succeeded
          else failed $ text $ "Canonization with Patience Diff failed:\n"++show p1++"canonized is\n"
-               ++ show p1_patience
+               ++ show p1_p
                ++"which is not\n"++show p2
     else failed $ text $ "Canonization with Myers Diff failed:\n"++show p1++"canonized is\n"
-          ++ show p1_myers
+          ++ show p1_
           ++"which is not\n"++show p2
-    where p1_myers = mapFL_FL fromAnonymousPrim $ canonizeFL D.MyersDiff $ effect p1
-          p1_patience = mapFL_FL fromAnonymousPrim $ canonizeFL D.PatienceDiff $ effect p1
+    where p1_ = mapFL_FL fromAnonymousPrim $ concatFL $ mapFL_FL (canonize D.MyersDiff) $ sortCoalesceFL $ effect p1
+          p1_p = mapFL_FL fromAnonymousPrim $ concatFL $ mapFL_FL (canonize D.PatienceDiff) $ sortCoalesceFL $ effect p1
 
 checkCommute :: ((FL Patch :> FL Patch) wX wY, (FL Patch :> FL Patch) wX wY) -> TestResult
 checkCommute (p2 :> p1,p1' :> p2') =

@@ -26,13 +26,23 @@
 
 . lib
 
-rm -rf repo srepo
-darcs init repo
-ln -s repo srepo
-DIR=`pwd`
-cd srepo
-not darcs pull -a "$DIR/repo" 2>&1 | tee err >&2
-grep 'Can.t pull from current repository' err
-not darcs pull -a "$DIR/srepo" 2>&1 | tee err >&2
-grep 'Can.t pull from current repository' err
+rm -rf temp
+mkdir temp
+cd temp
+
+mkdir repo
+cd repo
+darcs init
 cd ..
+
+ln -s repo srepo
+cd srepo
+DIR=`pwd`
+echo $DIR
+not darcs pull --debug -a "$DIR" 2> out
+cat out
+grep 'Can.t pull from current repository' out
+cd ..
+
+cd ..
+rm -rf temp

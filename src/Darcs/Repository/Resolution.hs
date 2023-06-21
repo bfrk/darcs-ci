@@ -74,6 +74,7 @@ import Darcs.Util.Lock ( withTempDir )
 import Darcs.Util.File ( copyTree )
 import Darcs.Repository.Flags
     ( AllowConflicts (..)
+    , ExternalMerge (..)
     , WantGuiPause (..)
     , DiffAlgorithm (..)
     )
@@ -149,9 +150,10 @@ showUnravelled sep =
 announceConflicts :: PrimPatch prim
                   => String
                   -> AllowConflicts
+                  -> ExternalMerge
                   -> StandardResolution prim wX
                   -> IO Bool
-announceConflicts cmd allowConflicts conflicts =
+announceConflicts cmd allowConflicts externalMerge conflicts =
   case nubSort (conflictedPaths conflicts) of
     [] -> return False
     cfs -> do
@@ -159,6 +161,7 @@ announceConflicts cmd allowConflicts conflicts =
         "We have conflicts in the following files:" : map (text . displayPath) cfs
       when (allowConflicts == YesAllowConflictsAndMark) $ warnUnmangled conflicts
       if allowConflicts `elem` [YesAllowConflicts,YesAllowConflictsAndMark]
+              || externalMerge /= NoExternalMerge
         then return True
         else fail $
           "Refusing to "++cmd++" patches leading to conflicts.\n"++

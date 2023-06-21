@@ -1,11 +1,11 @@
 module Darcs.Repository.Working
     ( applyToWorking
-    , setAllScriptsExecutable
+    , setScriptsExecutable
     , setScriptsExecutablePatches
     )  where
 
 import Control.Monad ( when, unless, filterM )
-import System.Directory ( doesFileExist, withCurrentDirectory )
+import System.Directory ( doesFileExist )
 import System.IO.Error ( catchIOError )
 
 import qualified Data.ByteString as B ( readFile
@@ -15,6 +15,7 @@ import qualified Data.ByteString.Char8 as BC (pack)
 
 import Darcs.Prelude
 
+import Darcs.Util.File ( withCurrentDirectory )
 import Darcs.Util.Progress ( debugMessage )
 import Darcs.Util.Workaround ( setExecutable )
 import Darcs.Util.Tree ( Tree )
@@ -63,8 +64,8 @@ setScriptsExecutable_ paths = do
     debugMessage "Making scripts executable"
     mapM_ setExecutableIfScript paths
 
-setAllScriptsExecutable :: IO ()
-setAllScriptsExecutable = do
+setScriptsExecutable :: IO ()
+setScriptsExecutable = do
     tree <- readWorking (TreeFilter id)
     setScriptsExecutable_ [anchorPath "." p | (p, Tree.File _) <- Tree.list tree]
 

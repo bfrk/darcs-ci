@@ -20,7 +20,6 @@
 -- CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 -- SOFTWARE.
 
-{-# OPTIONS_GHC -Wno-incomplete-record-updates #-}
 module Darcs.UI.Commands.ShowIndex
     ( showIndex
     , showPristine
@@ -40,7 +39,7 @@ import Darcs.Repository.Paths ( indexPath )
 import Darcs.Util.Hash ( showHash )
 import Darcs.Util.Tree( list, expand, itemHash, Tree, TreeItem( SubTree ) )
 import Darcs.Util.Index( IndexEntry(..), dumpIndex )
-import Darcs.Util.Path( anchorPath, AbsolutePath, anchoredRoot, realPath )
+import Darcs.Util.Path( anchorPath, AbsolutePath, floatPath, realPath )
 import Darcs.Util.Printer ( Doc, putDocLn, text, vcat )
 
 import System.Posix.Types ( FileID )
@@ -91,7 +90,7 @@ dump opts fileids tree = do
                        Just fileids' -> " " ++ (show $ fromJust $ M.lookup path fileids')
         line $ hash ++ fileid ++ " " ++ path ++ isdir
   x <- expand tree
-  mapM_ output $ (anchoredRoot, SubTree x) : list x
+  mapM_ output $ (floatPath ".", SubTree x) : list x
 
 showIndexCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 showIndexCmd _ opts _ = withRepository (useCache ? opts) $ RepoJob $ \_repo -> do

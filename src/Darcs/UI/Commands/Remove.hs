@@ -30,7 +30,7 @@ import Darcs.UI.Commands
 import Darcs.UI.Completion ( knownFileArgs )
 import Darcs.UI.Flags
     ( DarcsFlag, diffingOpts
-    , useCache, umask, diffAlgorithm, pathsFromArgs )
+    , useCache, umask, diffAlgorithm, quiet, pathsFromArgs )
 import Darcs.UI.Options ( (^), parseFlags, (?) )
 import qualified Darcs.UI.Options.All as O
 
@@ -38,6 +38,7 @@ import Darcs.Repository
     ( Repository
     , withRepoLock
     , RepoJob(..)
+    , UpdatePending(..)
     , addToPending
     , finalizeRepositoryChanges
     , readPristineAndPending
@@ -48,7 +49,7 @@ import Darcs.Repository.Diff( treeDiff )
 import Darcs.Patch ( RepoPatch, PrimOf, PrimPatch, adddir, rmdir, addfile, rmfile,
                      listTouchedFiles )
 import Darcs.Patch.Apply( ApplyState )
-import Darcs.Patch.Witnesses.Ordered ( FL(..), concatGapsFL, nullFL )
+import Darcs.Patch.Witnesses.Ordered ( FL(..), (+>+), nullFL )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(..), Gap(..), FreeLeft, unFreeLeft )
 import Darcs.Repository.Prefs ( filetypeFunction, FileType )
 import Darcs.Util.Tree( Tree, TreeItem(..), explodePaths )
@@ -104,11 +105,12 @@ removeCmd fps opts relargs = do
                 then reverse . explodePaths recorded_and_pending
                 else id) paths
         Sealed p <- makeRemovePatch opts repository exploded_paths
-        when (nullFL p && not (null paths)) $
+        -- TODO whether command fails depends on verbosity BAD BAD BAD
+        when (nullFL p && not (null paths) && not (quiet opts)) $
             fail "No files were removed."
         addToPending repository (diffingOpts opts) p
-        void $ finalizeRepositoryChanges repository
-            (O.compress ? opts) (O.dryRun ? opts)
+        void $ finalizeRepositoryChanges repository YesUpdatePending
+          (O.compress ? opts) (O.dryRun ? opts)
         putInfo opts $ vcat $ map text $ ["Will stop tracking:"] ++
             map displayPath (listTouchedFiles p)
 
@@ -119,27 +121,24 @@ removeCmd fps opts relargs = do
 makeRemovePatch :: (RepoPatch p, ApplyState p ~ Tree)
                 => [DarcsFlag] -> Repository rt p wU wR
                 -> [AnchoredPath] -> IO (Sealed (FL (PrimOf p) wU))
-makeRemovePatch opts repository files = do
-  recorded <- T.expand =<< readPristineAndPending repository
-  unrecorded <- readUnrecorded repository (O.useIndex ? opts) $ Just files
-  ftf <- filetypeFunction
-  result <- foldM removeOnePath (ftf, recorded, unrecorded, []) files
-  case result of
-    (_, _, _, patches) ->
-      return $
-      unFreeLeft $ concatGapsFL $ reverse patches
-  where
-    removeOnePath (ftf, recorded, unrecorded, patches) f = do
-      let recorded' = T.modifyTree recorded f Nothing
-          unrecorded' = T.modifyTree unrecorded f Nothing
-      local <- makeRemoveGap opts ftf recorded unrecorded unrecorded' f
-      -- we can tell if the remove succeeded by looking if local is
-      -- empty. If the remove succeeded, we should pass on updated
-      -- recorded and unrecorded that reflect the removal
-      return $
-        case local of
-          Just gap -> (ftf, recorded', unrecorded', gap : patches)
-          _ -> (ftf, recorded, unrecorded, patches)
+makeRemovePatch opts repository files =
+                          do recorded <- T.expand =<< readPristineAndPending repository
+                             unrecorded <- readUnrecorded repository (O.useIndex ? opts) $ Just files
+                             ftf <- filetypeFunction
+                             result <- foldM removeOnePath (ftf,recorded,unrecorded, []) files
+                             case result of
+                                 (_, _, _, patches) -> return $
+                                                         unFreeLeft $ foldr (joinGap (+>+)) (emptyGap NilFL) $ reverse patches
+    where removeOnePath (ftf, recorded, unrecorded, patches) f = do
+            let recorded' = T.modifyTree recorded f Nothing
+                unrecorded' = T.modifyTree unrecorded f Nothing
+            local <- makeRemoveGap opts ftf recorded unrecorded unrecorded' f
+            -- we can tell if the remove succeeded by looking if local is
+            -- empty. If the remove succeeded, we should pass on updated
+            -- recorded and unrecorded that reflect the removal
+            return $ case local of
+                       Just gap -> (ftf, recorded', unrecorded', gap : patches)
+                       _        -> (ftf, recorded, unrecorded, patches)
 
 -- | Takes a file path and returns the FL of patches to remove that, wrapped in
 --   a 'Gap'.

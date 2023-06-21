@@ -1,7 +1,8 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module Darcs.Patch.Prim
     ( PrimApply(..)
-    , PrimCoalesce(..)
+    , PrimCanonize(..)
+    , PrimClassify(..)
     , PrimConstruct(..)
     , PrimDetails(..)
     , PrimMangleUnravelled(..)
@@ -11,13 +12,12 @@ module Darcs.Patch.Prim
     , PrimSift(..)
     , Mangled
     , Unravelled
-    , canonizeFL
-    , coalesce
     ) where
 
 import Darcs.Patch.Prim.Class
     ( PrimApply(..)
-    , PrimCoalesce(..)
+    , PrimCanonize(..)
+    , PrimClassify(..)
     , PrimConstruct(..)
     , PrimDetails(..)
     , PrimMangleUnravelled(..)
@@ -28,5 +28,3 @@ import Darcs.Patch.Prim.Class
     , Mangled
     , Unravelled
     )
-import Darcs.Patch.Prim.Canonize ( canonizeFL )
-import Darcs.Patch.Prim.Coalesce ( coalesce )

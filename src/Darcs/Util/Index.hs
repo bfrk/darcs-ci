@@ -118,7 +118,6 @@ import qualified Darcs.Util.File ( getFileStatus )
 import Darcs.Util.Global ( debugMessage )
 import Darcs.Util.Hash ( Hash(..), mkHash, rawHash, sha256 )
 import Darcs.Util.Tree
-import Darcs.Util.Tree.Hashed ( darcsTreeHash )
 import Darcs.Util.Path
     ( AnchoredPath(..)
     , realPath
@@ -315,8 +314,10 @@ peekItem fp off =
 
 -- | Update an existing 'Item' with new size and hash. The hash must be
 -- not be 'Nothing'.
-updateItem :: Item -> Int64 -> Hash -> IO ()
-updateItem item size hash =
+updateItem :: Item -> Int64 -> Maybe Hash -> IO ()
+updateItem item _ Nothing =
+    fail $ "Index.update Nothing: " ++ iPath item
+updateItem item size (Just hash) =
     do poke (iSize item) size
        unsafePokeBS (iHash item) (rawHash hash)
 
@@ -353,6 +354,7 @@ mmapIndex indexpath req_size = do
 
 data IndexM m = Index { mmap :: (ForeignPtr ())
                       , basedir :: FilePath
+                      , hashtree :: Tree m -> Maybe Hash
                       , predicate :: AnchoredPath -> TreeItem m -> Bool }
               | EmptyIndex
 
@@ -427,11 +429,9 @@ readItem progressKey index state = do
             makeTree
               [ (n, fromJust $ treeitem s)
               | (Just n, s) <- inferiors, isJust $ treeitem s ]
-          treehash = if we_changed then Just (darcsTreeHash tree') else oldhash
+          treehash = if we_changed then hashtree index tree' else oldhash
           tree = tree' { treeHash = treehash }
-      when (exists && we_changed) $
-          -- fromJust is justified because we_changed implies (isJust treehash)
-          updateItem item 0 (fromJust treehash)
+      when (exists && we_changed) $ updateItem item 0 treehash
       return $ Result { changed = not exists || we_changed
                       , next = following
                       , treeitem = if want then Just $ SubTree tree
@@ -451,7 +451,7 @@ readItem progressKey index state = do
                hash = iHash' item
            when (exists && we_changed) $
                 do hash' <- sha256 `fmap` readblob
-                   updateItem item size' hash'
+                   updateItem item size' (Just hash')
                    updateTime item mtime'
                    when (fileid == 0) $ updateFileID item (fileID st)
            return $ Result { changed = not exists || we_changed
@@ -571,14 +571,16 @@ readFileFileID _ state item =
 
 -- * Reading and writing 'Tree's from/to the index
 
--- | Initialize an 'Index' from the given index file.
-openIndex :: FilePath -> IO Index
-openIndex indexpath = do
+-- | Initialize an 'Index' from the given index file and an optional hash
+-- function for 'TreeItem's.
+openIndex :: FilePath -> (Tree IO -> Maybe Hash) -> IO Index
+openIndex indexpath ht = do
   (mmap_ptr, mmap_size) <- mmapIndex indexpath 0
   base <- getCurrentDirectory
   return $ if mmap_size == 0 then EmptyIndex
                              else Index { mmap = mmap_ptr
                                         , basedir = base
+                                        , hashtree = ht
                                         , predicate = \_ _ -> True }
 
 formatIndex :: ForeignPtr () -> Tree IO -> Tree IO -> IO ()
@@ -599,8 +601,7 @@ formatIndex mmap_ptr old reference =
                     Just ti -> do let hash = itemHash ti
                                       mtime = modificationTime st
                                       size = fileSize st
-                                  -- TODO prove that isNothing hash is impossible
-                                  updateItem i (fromIntegral size) (fromJust hash)
+                                  updateItem i (fromIntegral size) hash
                                   updateTime i mtime
                   return $ off + itemNext i
           create (SubTree s) path' off =
@@ -609,10 +610,8 @@ formatIndex mmap_ptr old reference =
                   updateFileID i (fileID st)
                   case find old path' of
                     Nothing -> return ()
-                    Just ti ->
-                      case itemHash ti of
-                        Nothing -> return ()
-                        Just h -> updateItem i 0 h
+                    Just ti | itemHash ti == Nothing -> return ()
+                            | otherwise -> updateItem i 0 $ itemHash ti
                   let subs [] = return $ off + itemNext i
                       subs ((name,x):xs) = do
                         let path'' = path' `appendPath` name
@@ -624,14 +623,13 @@ formatIndex mmap_ptr old reference =
           create (Stub _ _) path' _ =
                fail $ "Cannot create index from stubbed Tree at " ++ show path'
 
--- | Add and remove entries in the given 'Index' to make it match the given
--- 'Tree'. If an object in the 'Tree' does not exist in the current working
--- directory, its index entry will have zero hash, size, aux, and fileID. For
--- the hash this translates to 'Nothing', see 'iHash''.
-updateIndexFrom :: FilePath -> Tree IO -> IO Index
-updateIndexFrom indexpath ref =
+-- | Add and remove files in the given 'Index' to make it match the 'Tree'
+-- object given (it is an error for the 'Tree' to contain a file or directory
+-- that does not exist in a plain form in current working directory).
+updateIndexFrom :: FilePath -> (Tree IO -> Maybe Hash) -> Tree IO -> IO Index
+updateIndexFrom indexpath hashtree' ref =
     do debugMessage "Updating the index ..."
-       old_tree <- treeFromIndex =<< openIndex indexpath
+       old_tree <- treeFromIndex =<< openIndex indexpath hashtree'
        reference <- expand ref
        let len_root = itemAllocSize anchoredRoot
            len = len_root + sum [ itemAllocSize p | (p, _) <- list reference ]
@@ -645,7 +643,7 @@ updateIndexFrom indexpath ref =
        (mmap_ptr, _) <- mmapIndex indexpath len
        formatIndex mmap_ptr old_tree reference
        debugMessage "Done updating the index, reopening it ..."
-       openIndex indexpath
+       openIndex indexpath hashtree'
 
 -- | Read an 'Index', starting with the root, to create a 'Tree'.
 treeFromIndex :: Index -> IO (Tree IO)

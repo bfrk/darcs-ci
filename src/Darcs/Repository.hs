@@ -49,11 +49,10 @@ module Darcs.Repository
     , readPatches
     , prefsUrl
     , addToPending
-    , unsafeAddToPending
+    , addPendingDiffToPending
     , tentativelyAddPatch
-    , tentativelyAddPatches
     , tentativelyRemovePatches
-    , setTentativePending
+    , tentativelyAddToPending
     , tentativelyRemoveFromPW
     , withManualRebaseUpdate
     , tentativelyMergePatches
@@ -73,7 +72,7 @@ module Darcs.Repository
     , PatchSet
     , SealedPatchSet
     , PatchInfoAnd
-    , setAllScriptsExecutable
+    , setScriptsExecutable
     , setScriptsExecutablePatches
     , modifyCache
     -- * Recorded and unrecorded and pending.
@@ -92,7 +91,7 @@ import Darcs.Repository.State
     , readPendingAndWorking
     , readPristineAndPending
     , filterOutConflicts
-    , unsafeAddToPending
+    , addPendingDiffToPending
     , addToPending
     )
 
@@ -110,23 +109,23 @@ import Darcs.Repository.Identify
 import Darcs.Repository.Hashed
     ( readPatches
     , tentativelyAddPatch
-    , tentativelyAddPatches
     , tentativelyRemovePatches
+    , revertRepositoryChanges
+    , finalizeRepositoryChanges
     , reorderInventory
     )
 import Darcs.Repository.Pristine
     ( createPristineDirectoryTree
     , writePristine
     )
-import Darcs.Repository.Transaction
-    ( revertRepositoryChanges
-    , finalizeRepositoryChanges
-    )
 import Darcs.Repository.Traverse ( cleanRepository )
-import Darcs.Repository.Pending ( setTentativePending, tentativelyRemoveFromPW )
+import Darcs.Repository.Pending
+    ( tentativelyAddToPending
+    , tentativelyRemoveFromPW
+    )
 import Darcs.Repository.Working
     ( applyToWorking
-    , setAllScriptsExecutable
+    , setScriptsExecutable
     , setScriptsExecutablePatches
     )
 import Darcs.Repository.Job

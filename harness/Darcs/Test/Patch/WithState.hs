@@ -315,7 +315,7 @@ instance
     shrinkState @s @prim @p w
 
 propagatePrim
-  :: (Eq2 prim, PrimCoalesce prim, Invert prim, Commute prim)
+  :: (Eq2 prim, PrimCanonize prim, Invert prim, Commute prim)
   => (prim :> prim) wX wY -> Maybe ((Maybe2 prim :> Maybe2 prim) wX wY)
 propagatePrim (p1 :> p2)
   | IsEq <- invert p1 =\/= p2 = Just (Nothing2 :> Nothing2)

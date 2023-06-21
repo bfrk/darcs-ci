@@ -27,7 +27,6 @@ import Darcs.Util.ByteString
     , prop_unlinesPS_length
     , spec_betweenLinesPS
     , betweenLinesPS
-    , linesPS, unlinesPS
     )
 import Darcs.Util.Diff.Myers ( shiftBoundaries )
 
@@ -36,11 +35,10 @@ import qualified Darcs.Test.Misc.Encoding as Encoding
 import qualified Darcs.Test.Misc.Graph as Graph
 import qualified Darcs.Test.Misc.URL as URL
 
-import qualified Data.ByteString.Char8 as BC ( elem, unpack, pack )
+import qualified Data.ByteString.Char8 as BC ( unpack, pack, snoc )
 import qualified Data.ByteString as B ( ByteString, pack, empty, null )
+import Data.Char ( ord )
 import Data.Array.Base
-import Data.Coerce ( coerce )
-import Data.Maybe ( isJust )
 import Control.Monad.ST
 import Test.HUnit ( assertBool, assertEqual, assertFailure )
 import Test.Framework.Providers.QuickCheck2 ( testProperty )
@@ -73,61 +71,28 @@ byteStringUtilsTestSuite = testGroup "Darcs.Util.ByteString"
                            (Right "hello world"))
   , testProperty "Checking that hex conversion works" propHexConversion
   , testProperty "unlinesPS is left inverse of linesPS" prop_unlinesPS_linesPS_left_inverse
-  , testProperty "linesPS is right inverse of unlinesPS" prop_linesPS_unlinesPS_right_inverse
   , testProperty "linesPS length property" prop_linesPS_length
   , testProperty "unlinesPS length property" prop_unlinesPS_length
   , testProperty "betweenLinesPS behaves like its spec" prop_betweenLinesPS
   ]
 
+-- tweak the probabilities in favor of newline characters
 instance Arbitrary B.ByteString where
-  arbitrary = fmap B.pack $ listOf arbitrary
+  arbitrary = fmap B.pack $ listOf $ frequency
+    [ (1, return (fromIntegral (ord '\n')))
+    , (4, arbitrary)
+    ]
 
-{- | 'SimpleLines' newtype wrapper for 'B.ByteString' tweaks the
-probabilities in favor of newline characters and line collisions. With the
-instance below the probability that betweenLinesPS succeeds in
-prop_betweenLinesPS should be roughly 6%.
-
-Unfortunately the QC adapter for test-framework does not display the
-classification. To see it run
-
-> ghci -isrc -iharness -XTypeSynonymInstances -XFlexibleInstances \
-  -XFlexibleContexts -XRankNTypes -XBangPatterns harness/Darcs/Test/Misc.hs
-
-and then manually issue
-
-> quickCheck prop_betweenLinesPS
--}
-newtype SimpleLines = SimpleLines { unwrapSimpleLines :: B.ByteString } deriving Show
-
-instance Arbitrary SimpleLines where
-  arbitrary = SimpleLines . BC.pack <$> listOf (elements ['a','b','\n'])
-
--- | A non-empty 'SimpleLines' without newlines.
-newtype SimpleLine = SimpleLine B.ByteString deriving Show
-
-instance Arbitrary SimpleLine where
-  arbitrary = SimpleLine <$> (unwrapSimpleLines <$> arbitrary) `suchThat` condition
-    where
-      condition s = not (B.null s) && not (BC.elem '\n' s)
-
-prop_betweenLinesPS :: SimpleLine -> SimpleLine -> SimpleLines -> Property
-prop_betweenLinesPS (SimpleLine start) (SimpleLine end) (SimpleLines ps) =
-  let result = betweenLinesPS start end ps in
-  classify (isJust result) "non-trivial" $
-  result == spec_betweenLinesPS start end ps
-
--- | A non-empty 'B.ByteString' without newlines.
-newtype Line = Line B.ByteString deriving Show
-
-instance Arbitrary Line where
-  arbitrary = Line <$> arbitrary `suchThat` condition
-    where
-      condition s = not (B.null s) && not (BC.elem '\n' s)
-
-prop_linesPS_unlinesPS_right_inverse :: [Line] -> Bool
-prop_linesPS_unlinesPS_right_inverse x =
-  let x' = coerce x in
-    linesPS (unlinesPS x') == if null x' then [B.empty] else x'
+-- betweenLinesPS and spec_betweenLinesPS are equivalent only
+-- if certain conditions are met
+prop_betweenLinesPS :: B.ByteString -> B.ByteString -> B.ByteString -> Property
+prop_betweenLinesPS start end ps =
+  not (B.null start) && not (B.null end)
+  ==> betweenLinesPS start end (twist ps) == spec_betweenLinesPS start end (twist ps)
+  where
+    twist s
+      | B.null s = s
+      | otherwise = s `BC.snoc` '\n'
 
 -- ----------------------------------------------------------------------
 -- * LCS

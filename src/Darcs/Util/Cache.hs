@@ -40,7 +40,6 @@ import System.Directory
     , getDirectoryContents
     , getPermissions
     , removeFile
-    , withCurrentDirectory
     )
 import qualified System.Directory as SD ( writable )
 import System.FilePath.Posix ( dropFileName, joinPath, (</>) )
@@ -60,6 +59,7 @@ import Darcs.Util.File
     , fetchFilePS
     , gzFetchFilePS
     , speculateFileOrUrl
+    , withCurrentDirectory
     , withTemp
     )
 import Darcs.Util.Global ( darcsdir, defaultRemoteDarcsCmd )
@@ -414,7 +414,7 @@ fetchFileUsingCachePrivate fromWhere (Ca cache) hash = do
                             fail $ "Hash failure in " ++ cacheFile
                         return x2
                      else return x1
-            mapM_ (tryLinking cacheFile filename subdir) cs `catchall` return ()
+            mapM_ (tryLinking cacheFile filename subdir) cs
             return (cacheFile, x)
             `catchall` do
                 debugMessage "Caught exception, now attempt creating cache."
@@ -442,10 +442,7 @@ fetchFileUsingCachePrivate fromWhere (Ca cache) hash = do
 
     ffuc [] = fail ("Couldn't fetch " ++ filename ++ "\nin subdir "
                           ++ hashedDir subdir ++ " from sources:\n"
-                          ++ show (Ca cache)
-                          ++ if subdir == HashedPristineDir
-                             then "\nRun `darcs repair` to fix this problem."
-                             else "")
+                          ++ show (Ca cache))
 
 tryLinking :: FilePath -> FilePath -> HashedDir -> CacheLoc -> IO ()
 tryLinking source filename subdir c =
@@ -493,7 +490,7 @@ writeFileUsingCache (Ca cache) compr content = do
               GzipCompression -> gzWriteAtomicFilePS cacheFile content
             -- create links in all other writable locations
             debugMessage $ "writeFileUsingCache remaining sources:\n"++show (Ca cs)
-            mapM_ (tryLinking cacheFile filename subdir) cs `catchall` return ()
+            mapM_ (tryLinking cacheFile filename subdir) cs
             return hash
     wfuc [] = fail $ "No location to write file " ++ (hashedDir subdir </> filename)
 

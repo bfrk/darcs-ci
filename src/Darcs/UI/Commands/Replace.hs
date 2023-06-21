@@ -25,7 +25,7 @@ import Darcs.Prelude
 import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString as B
-import Data.Char ( isAscii, isPrint, isSpace )
+import Data.Char ( isSpace )
 import Data.List.Ordered ( nubSort )
 import Data.Maybe ( fromJust, isJust )
 import Control.Monad ( unless, filterM, void, when )
@@ -47,6 +47,7 @@ import Darcs.Patch.RegChars ( regChars )
 import Darcs.Repository
     ( withRepoLock
     , RepoJob(..)
+    , UpdatePending(..)
     , addToPending
     , finalizeRepositoryChanges
     , applyToWorking
@@ -57,14 +58,7 @@ import Darcs.Repository.Prefs ( FileType(TextFile) )
 import Darcs.Util.Path ( AnchoredPath, displayPath )
 import Darcs.Util.Printer ( Doc, formatWords, vsep )
 import Darcs.Util.SignalHandler ( withSignalsBlocked )
-import Darcs.Patch.Witnesses.Ordered
-    ( FL(..)
-    , concatFL
-    , consGapFL
-    , joinGapsFL
-    , nullFL
-    , (+>+)
-    )
+import Darcs.Patch.Witnesses.Ordered ( FL(..), (+>+), concatFL, freeLeftToFL, nullFL )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(..), mapSeal, FreeLeft, Gap(..), unFreeLeft, unseal )
 
 replaceDescription :: String
@@ -168,14 +162,14 @@ replaceCmd fps opts (old : new : args@(_ : _)) =
         mapM_ checkToken [ old, new ]
         working <- readUnrecorded _repository (O.useIndex ? opts) Nothing
         files <- filterM (exists working) paths
-        Sealed replacePs <- mapSeal concatFL . unFreeLeft . joinGapsFL <$>
+        Sealed replacePs <- mapSeal concatFL . freeLeftToFL <$>
             mapM (doReplace toks working) files
         withSignalsBlocked $ do
           -- Note: addToPending takes care of commuting the replace patch and
           -- everything it depends on past the diff between pending and working
           addToPending _repository (diffingOpts opts) replacePs
           _repository <-
-            finalizeRepositoryChanges _repository
+            finalizeRepositoryChanges _repository YesUpdatePending
               (O.compress ? opts) (O.dryRun ? opts)
           unless (O.yes (O.dryRun ? opts)) $
             void $ applyToWorking _repository (verbosity ? opts) replacePs
@@ -195,7 +189,7 @@ replaceCmd fps opts (old : new : args@(_ : _)) =
         workReplaced <- maybeApplyToTree replacePatch work
         case workReplaced of
           Just _ -> do
-            return $ consGapFL replacePatch gapNilFL
+            return $ joinGap (:>:) (freeGap replacePatch) gapNilFL
           Nothing
             | O.forceReplace ? opts -> getForceReplace f toks work
             | otherwise -> putStrLn existsMsg >> return gapNilFL
@@ -260,11 +254,7 @@ chooseToks (Just t) a b
     | '^' == head tok && length tok == 1 =
         badTokenSpec "Must be at least one character in the complementary set"
     | any isSpace t =
-        badTokenSpec "Space is not allowed"
-    | any (not . isAscii) t =
-        badTokenSpec "Only ASCII characters are allowed"
-    | any (not . isPrint) t =
-        badTokenSpec "Only printable characters are allowed"
+        badTokenSpec "Space is not allowed in the spec"
     | any isSpace a = badTokenSpec $ spaceyToken a
     | any isSpace b = badTokenSpec $ spaceyToken b
     | not (isTok tok a) = badTokenSpec $ notAToken a
@@ -272,7 +262,7 @@ chooseToks (Just t) a b
     | otherwise = return tok
   where
     tok = init $ tail t :: String
-    badTokenSpec msg = fail $ "Bad token spec: " ++ show t ++ " (" ++ msg ++ ")"
+    badTokenSpec msg = fail $ "Bad token spec: '" ++ t ++ "' (" ++ msg ++ ")"
     spaceyToken x = x ++ " must not contain any space"
     notAToken x = x ++ " is not a token, according to your spec"
 

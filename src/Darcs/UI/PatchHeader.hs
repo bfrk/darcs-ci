@@ -1,7 +1,6 @@
 module Darcs.UI.PatchHeader
     ( getLog
     , getAuthor
-    , editLog
     , updatePatchHeader, AskAboutDeps(..)
     , PatchHeaderConfig
     , patchHeaderConfig
@@ -11,32 +10,28 @@ module Darcs.UI.PatchHeader
 
 import Darcs.Prelude
 
-import Darcs.Patch ( PrimOf, RepoPatch, summaryFL )
+import Darcs.Patch
+    ( RepoPatch, PrimPatch, PrimOf
+    , summaryFL
+    )
 import Darcs.Patch.Apply ( ApplyState )
-import Darcs.Patch.Info
-    ( PatchInfo
-    , patchinfo
-    , piAuthor
-    , piDateString
-    , piLog
-    , piName
-    )
+import Darcs.Patch.Info ( PatchInfo,
+                          piAuthor, piName, piLog, piDateString,
+                          patchinfo
+                        )
 import Darcs.Patch.Named
-    ( Named
-    , adddeps
-    , getdeps
-    , infopatch
-    , patch2patchinfo
-    , patchcontents
-    , setinfo
-    )
+   ( Named, patchcontents, patch2patchinfo, infopatch, getdeps, adddeps
+   )
 import Darcs.Patch.PatchInfoAnd ( PatchInfoAnd, n2pia )
 import Darcs.Patch.Prim ( canonizeFL )
-import Darcs.Patch.Set ( Origin, PatchSet )
 
 import Darcs.Patch.Witnesses.Ordered ( FL(..), (+>+) )
 
-import Darcs.Util.Lock ( readTextFile, writeTextFile )
+import Darcs.Repository ( AccessType(RW), Repository )
+import Darcs.Util.Lock
+    ( readTextFile
+    , writeTextFile
+    )
 
 import Darcs.UI.External ( editFile )
 import Darcs.UI.Flags ( getEasyAuthor, promptAuthor, getDate )
@@ -50,7 +45,7 @@ import Darcs.Util.English ( capitalize )
 import Darcs.Util.Global ( darcsLastMessage )
 import Darcs.Util.Path ( FilePathLike, toFilePath )
 import Darcs.Util.Prompt ( PromptConfig(..), askUser, promptChar, promptYorn )
-import Darcs.Util.Printer ( Doc, text, ($+$), vcat, prefixLines, renderString )
+import Darcs.Util.Printer ( text, ($+$), vcat, prefixLines, renderString )
 import qualified Darcs.Util.Ratified as Ratified ( hGetContents )
 
 import Darcs.Util.Tree ( Tree )
@@ -89,12 +84,13 @@ type HijackT = StateT HijackOptions
 -- It ensures the patch name is not empty nor starts with the prefix TAG.
 --
 -- The last result component is a possible path to a temporary file that should be removed later.
-getLog :: Maybe String                          -- ^ patchname option
+getLog :: forall prim wX wY . PrimPatch prim
+       => Maybe String                          -- ^ patchname option
        -> Bool                                  -- ^ pipe option
        -> O.Logfile                             -- ^ logfile option
        -> Maybe O.AskLongComment                -- ^ askLongComment option
        -> Maybe (String, [String])              -- ^ possibly an existing patch name and long description
-       -> Doc                                   -- ^ summary of changes to record
+       -> FL prim wX wY                         -- ^ changes to record
        -> IO (String, [String], Maybe String)   -- ^ patch name, long description and possibly the path
                                                 --   to the temporary file that should be removed later
 getLog m_name has_pipe log_file ask_long m_old chs =
@@ -223,21 +219,11 @@ getLog m_name has_pipe log_file ask_long m_old chs =
         , text "#"
         , text "# Summary of selected changes:"
         , text "#"
-        , prefixLines (text "#") chs
+        , prefixLines (text "#") (summaryFL chs)
         ]
 
-editLog :: Named prim wX wY -> IO (Named prim wX wY)
-editLog p = do
-  let pi = patch2patchinfo p
-  (name, log, _) <-
-    getLog Nothing False (O.Logfile Nothing False)
-      (Just O.YesEditLongComment) (Just (piName pi, piLog pi)) mempty
-  pi' <- patchinfo (piDateString pi) name (piAuthor pi) log
-  return $ setinfo pi' p
-
--- | Specify whether to ask about dependencies with respect to a particular
--- 'PatchSet', or not
-data AskAboutDeps p wX = AskAboutDeps (PatchSet p Origin wX) | NoAskAboutDeps
+-- |specify whether to ask about dependencies with respect to a particular repository, or not
+data AskAboutDeps p wU wR = AskAboutDeps (Repository 'RW p wU wR) | NoAskAboutDeps
 
 -- | Run a job that involves a hijack confirmation prompt.
 --
@@ -267,19 +253,17 @@ patchHeaderConfig cfg = PatchHeaderConfig
 -- | Update the metadata for a patch.
 --   This potentially involves a bit of interactivity, so we may return @Nothing@
 --   if there is cause to abort what we're doing along the way
-updatePatchHeader :: forall p wX wY wZ . (RepoPatch p, ApplyState p ~ Tree)
+updatePatchHeader :: forall p wX wY wU wR . (RepoPatch p, ApplyState p ~ Tree)
                   => String -- ^ verb: command name
-                  -> AskAboutDeps p wX
+                  -> AskAboutDeps p wU wR
                   -> S.PatchSelectionOptions
                   -> PatchHeaderConfig
-                  -> Named (PrimOf p) wX wY
-                  -- ^ patch to edit, must be conflict-free as conflicts can't
-                  -- be preserved when changing the identity of a patch. If
-                  -- necessary this can be achieved by calling @fmapFL_Named
-                  -- effect@ on an @Named p@ first, but some callers might
-                  -- already have @Named (PrimOf p)@ available.
-                  -> FL (PrimOf p) wY wZ -- ^new primitives to add
-                  -> HijackT IO (Maybe String, PatchInfoAnd p wX wZ)
+                  -> Named (PrimOf p) wR wX
+                  -- ^ patch to edit, must be conflict-free as conflicts can't be preserved when changing
+                  -- the identity of a patch. If necessary this can be achieved by calling @fmapFL_Named effect@
+                  -- on an @Named p@ first, but some callers might already have @Named (PrimOf p)@ available.
+                  -> FL (PrimOf p) wX wY -- ^new primitives to add
+                  -> HijackT IO (Maybe String, PatchInfoAnd p wR wY)
 updatePatchHeader verb ask_deps pSelOpts PatchHeaderConfig{..} oldp chs = do
 
     let newchs = canonizeFL diffAlgorithm (patchcontents oldp +>+ chs)
@@ -287,7 +271,7 @@ updatePatchHeader verb ask_deps pSelOpts PatchHeaderConfig{..} oldp chs = do
     let old_pdeps = getdeps oldp
     newdeps <-
         case ask_deps of
-           AskAboutDeps patches -> liftIO $ askAboutDepends patches newchs pSelOpts old_pdeps
+           AskAboutDeps repository -> liftIO $ askAboutDepends repository newchs pSelOpts old_pdeps
            NoAskAboutDeps -> return old_pdeps
 
     let old_pinf = patch2patchinfo oldp
@@ -296,7 +280,7 @@ updatePatchHeader verb ask_deps pSelOpts PatchHeaderConfig{..} oldp chs = do
     new_author <- getAuthor verb selectAuthor author old_pinf
     liftIO $ do
         (new_name, new_log, mlogf) <- getLog
-            patchname False (O.Logfile Nothing False) askLongComment (Just prior) (summaryFL chs)
+            patchname False (O.Logfile Nothing False) askLongComment (Just prior) chs
         new_pinf <- patchinfo date new_name new_author new_log
         let newp = n2pia (adddeps (infopatch new_pinf newchs) newdeps)
         return (mlogf, newp)

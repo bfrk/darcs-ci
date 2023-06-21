@@ -18,6 +18,8 @@
 module Darcs.Util.Lock
     ( withLock
     , withLockCanFail
+    , getLock
+    , releaseLock
     , environmentHelpLocks
     , withTempDir
     , withPermDir
@@ -37,6 +39,7 @@ module Darcs.Util.Lock
     , gzWriteAtomicFilePSs
     , gzWriteDocFile
     , removeFileMayNotExist
+    , canonFilename
     , maybeRelink
     , tempdirLoc
     , environmentHelpTmpdir
@@ -72,13 +75,11 @@ import System.Directory
     , doesDirectoryExist
     , createDirectory
     , getTemporaryDirectory
-    , makeAbsolute
     , removePathForcibly
     , renameFile
     , renameDirectory
     )
 import System.FilePath.Posix ( splitDirectories, splitFileName )
-import System.Directory ( withCurrentDirectory )
 import System.Environment ( lookupEnv )
 import System.IO.Temp ( createTempDirectory )
 
@@ -94,7 +95,8 @@ import Darcs.Util.Exception
     ( firstJustIO
     , catchall
     )
-import Darcs.Util.File ( removeFileMayNotExist )
+import Darcs.Util.File ( withCurrentDirectory
+                       , removeFileMayNotExist )
 import Darcs.Util.Path ( AbsolutePath, FilePathLike, toFilePath,
                         getCurrentDirectory, setCurrentDirectory )
 
@@ -106,7 +108,8 @@ import Darcs.Util.Printer ( Doc, hPutDoc, packedString, empty, renderPSs )
 import Darcs.Util.AtExit ( atexit )
 import Darcs.Util.Global ( darcsdir )
 import Darcs.Util.Compat
-    ( maybeRelink
+    ( canonFilename
+    , maybeRelink
     , atomicCreate
     , sloppyAtomicCreate
     )
@@ -123,7 +126,7 @@ releaseLock = removeFileMayNotExist
 -- Otherwise, just gives up without doing the task
 withLockCanFail :: String -> IO a -> IO (Either () a)
 withLockCanFail s job =
-  bracket (takeLock s `catchall` return False)
+  bracket (takeLock s)
           (\l -> when l $ releaseLock s)
           (\l -> if l then Right <$> job
                       else return $ Left ())
@@ -133,7 +136,7 @@ getLock l 0 = do yorn <- askUser $ "Couldn't get lock "++l++". Abort (yes or any
                  case yorn of
                     ('y':_) -> exitWith $ ExitFailure 1
                     _ -> getLock l 30
-getLock lbad tl = do l <- makeAbsolute lbad
+getLock lbad tl = do l <- canonFilename lbad
                      gotit <- takeLock l
                      if gotit then return l
                               else do putStrLn $ "Waiting for lock "++l

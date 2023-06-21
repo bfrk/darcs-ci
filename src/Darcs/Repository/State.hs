@@ -34,7 +34,7 @@ module Darcs.Repository.State
     -- * Utilities
     , filterOutConflicts
     -- * Pending-related functions that depend on repo state
-    , unsafeAddToPending, addToPending
+    , addPendingDiffToPending, addToPending
     ) where
 
 import Darcs.Prelude
@@ -46,20 +46,20 @@ import Data.Ord ( comparing )
 import Data.List ( sortBy, union, delete )
 
 import System.Directory( doesFileExist, renameFile )
-import System.FilePath ( (<.>) )
+import System.FilePath ( (<.>), (</>) )
 
 import qualified Data.ByteString as B ( ByteString, concat )
 import qualified Data.ByteString.Char8 as BC ( pack, unpack )
 import qualified Data.ByteString.Lazy as BL ( toChunks )
 
-import Darcs.Patch ( RepoPatch, PrimOf, canonizeFL
+import Darcs.Patch ( RepoPatch, PrimOf, sortCoalesceFL
                    , PrimPatch, maybeApplyToTree
                    , tokreplace, forceTokReplace, move )
 import Darcs.Patch.Named ( anonymous )
 import Darcs.Patch.Apply ( ApplyState, applyToTree, effectOnPaths )
-import Darcs.Patch.Witnesses.Ordered ( FL(..), (+>+), consGapFL
+import Darcs.Patch.Witnesses.Ordered ( FL(..), (+>+)
                                      , (:>)(..), reverseRL, reverseFL
-                                     , mapFL, concatFL, joinGapsFL, nullFL )
+                                     , mapFL, concatFL, freeLeftToFL, nullFL )
 import Darcs.Patch.Witnesses.Eq ( EqCheck(IsEq, NotEq) )
 import Darcs.Patch.Witnesses.Unsafe ( unsafeCoerceP, unsafeCoercePEnd )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(Sealed), seal, unFreeLeft, mapSeal
@@ -90,7 +90,8 @@ import Darcs.Repository.Prefs ( filetypeFunction, isBoring )
 import Darcs.Repository.Pristine ( readPristine )
 import Darcs.Repository.Diff ( treeDiff )
 import Darcs.Repository.Paths
-    ( indexPath
+    ( patchesDirPath
+    , indexPath
     , indexInvalidPath
     )
 
@@ -108,6 +109,7 @@ import Darcs.Util.Tree( Tree, restrict, FilterTree, expand, emptyTree, overlay, 
                       , ItemType(..), itemType, readBlob, modifyTree, findFile, TreeItem(..)
                       , makeBlobBS, expandPath )
 import qualified Darcs.Util.Tree.Plain as PlainTree ( readPlainTree )
+import Darcs.Util.Tree.Hashed ( darcsTreeHash )
 import Darcs.Util.Index
     ( Index
     , indexFormatValid
@@ -229,9 +231,9 @@ unrecordedChanges :: (RepoPatch p, ApplyState p ~ Tree)
                   => DiffOpts
                   -> Repository rt p wU wR
                   -> Maybe [AnchoredPath] -> IO (FL (PrimOf p) wR wU)
-unrecordedChanges dopts@DiffOpts{..} r paths = do
+unrecordedChanges dopts r paths = do
   (pending :> working) <- readPendingAndWorking dopts r paths
-  return $ canonizeFL diffAlg (pending +>+ working)
+  return $ sortCoalesceFL (pending +>+ working)
 
 -- Implementation note: it is important to do things in the right order: we
 -- first have to read the pending patch, then detect moves, then detect adds,
@@ -441,10 +443,13 @@ readPending :: (RepoPatch p, ApplyState p ~ Tree)
 readPending repo = do
   pristine <- readPristine repo
   Sealed pending <- Pending.readPending repo
-  catch ((\t -> (t, seal pending)) <$> applyToTree pending pristine) $ \(e::IOException) -> do
-    fail $
-      "Cannot apply pending patch, please run `darcs repair`\n"
-      ++ show e
+  catch ((\t -> (t, seal pending)) <$> applyToTree pending pristine) $
+    \(err :: IOException) -> do
+       putStrLn $ "Yikes, pending has conflicts! " ++ show err
+       putStrLn "Stashing the buggy pending as _darcs/patches/pending_buggy"
+       renameFile (patchesDirPath </> "pending")
+                  (patchesDirPath </> "pending_buggy")
+       return (pristine, seal NilFL)
 
 -- | Open the index or re-create it in case it is invalid or non-existing.
 readIndex :: (RepoPatch p, ApplyState p ~ Tree)
@@ -453,17 +458,15 @@ readIndex repo = do
   okay <- checkIndex
   if not okay
     then internalUpdateIndex repo
-    else openIndex indexPath
+    else openIndex indexPath (Just . darcsTreeHash)
 
 -- | Update the index so that it matches pristine+pending. If the index does
 -- not exist or is invalid, create a new one. Returns the updated index.
 internalUpdateIndex :: (RepoPatch p, ApplyState p ~ Tree)
             => Repository rt p wU wR -> IO Index
 internalUpdateIndex repo = do
-  pris <-
-    readPristineAndPending repo
-    `catch` \(_::IOException) -> readPristine repo
-  idx <- updateIndexFrom indexPath pris
+  pris <- readPristineAndPending repo
+  idx <- updateIndexFrom indexPath (Just . darcsTreeHash) pris
   removeFileMayNotExist indexInvalidPath
   return idx
 
@@ -632,7 +635,7 @@ getReplaces YesLookForReplaces diffalg _repo pending working = do
       flip runStateT pending $
         forM replaces $ \(path, a, b) ->
           doReplace defaultToks path (BC.unpack a) (BC.unpack b)
-    return (new_pending, mapSeal concatFL $ unFreeLeft $ joinGapsFL patches)
+    return (new_pending, mapSeal concatFL $ freeLeftToFL patches)
   where
     modifiedTokens :: PrimOf p wX wY -> [(AnchoredPath, B.ByteString, B.ByteString)]
     modifiedTokens p = case isHunk p of
@@ -659,7 +662,7 @@ getReplaces YesLookForReplaces diffalg _repo pending working = do
           Nothing -> getForceReplace path toks old new
           Just pend' -> do
             put pend'
-            return $ consGapFL replacePatch (emptyGap NilFL)
+            return $ joinGap (:>:) (freeGap replacePatch) (emptyGap NilFL)
       where
         replacePatch = tokreplace path toks old new
 
@@ -693,10 +696,12 @@ getReplaces YesLookForReplaces diffalg _repo pending working = do
                 return patches
 
 -- | Add an 'FL' of patches started from the pending state to the pending patch.
-unsafeAddToPending :: (RepoPatch p, ApplyState p ~ Tree)
-                   => Repository 'RW p wU wR
-                   -> FreeLeft (FL (PrimOf p)) -> IO ()
-unsafeAddToPending repo newP = do
+-- TODO: add witnesses for pending so we can make the types precise: currently
+-- the passed patch can be applied in any context, not just after pending.
+addPendingDiffToPending :: (RepoPatch p, ApplyState p ~ Tree)
+                        => Repository 'RW p wU wR
+                        -> FreeLeft (FL (PrimOf p)) -> IO ()
+addPendingDiffToPending repo newP = do
     (_, Sealed toPend) <- readPending repo
     case unFreeLeft newP of
         (Sealed p) -> do

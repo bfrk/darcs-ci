@@ -38,8 +38,9 @@ import Darcs.Prelude
 
 import Darcs.Util.Cache ( Cache )
 import Darcs.Repository.Format ( RepoFormat )
+import Darcs.Util.File ( withCurrentDirectory )
 import Darcs.Util.Path ( AbsoluteOrRemotePath, toPath )
-import System.Directory ( withCurrentDirectory )
+import GHC.Stack ( HasCallStack )
 import Unsafe.Coerce ( unsafeCoerce )
 
 data PristineType
@@ -60,10 +61,8 @@ data SAccessType (rt :: AccessType) where
 -- [@rt@] the access type (whether we are in a transaction or not),
 -- [@p@]  the patch type,
 -- [@wU@] the witness for the unrecorded state (what's in the working tree now).
--- [@wR@] the witness for
---
---        * the recorded state when outside a transaction, or
---        * the tentative state when inside a transaction.
+-- [@wR@] the witness for the recorded state of the repository,
+--        (what darcs get would retrieve).
 data Repository (rt :: AccessType) (p :: * -> * -> *) wU wR =
   Repo !String !RepoFormat !PristineType Cache (SAccessType rt)
 
@@ -74,7 +73,7 @@ repoLocation (Repo loc _ _ _ _) = loc
 
 -- | Perform an action with the current working directory set to the
 -- 'repoLocation'.
-withRepoDir :: Repository rt p wU wR -> IO a -> IO a
+withRepoDir :: HasCallStack => Repository rt p wU wR -> IO a -> IO a
 withRepoDir repo = withCurrentDirectory (repoLocation repo)
 
 repoFormat :: Repository rt p wU wR -> RepoFormat

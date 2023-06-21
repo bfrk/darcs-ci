@@ -98,6 +98,4 @@ data DarcsFlag = Version | ExactVersion | ListCommands
                | PatchIndexFlag
                | NoPatchIndexFlag
                | EnumPatches | NoEnumPatches
-               | WithPrefsTemplates | NoPrefsTemplates
-               | OptimizeDeep | OptimizeShallow
                  deriving ( Eq, Show )

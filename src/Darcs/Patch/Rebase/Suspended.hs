@@ -11,11 +11,13 @@ module Darcs.Patch.Rebase.Suspended
 import Darcs.Prelude
 
 import Darcs.Patch.Effect ( Effect(..) )
+import Darcs.Patch.Format ( PatchListFormat(..) )
 import Darcs.Patch.Invert ( invert )
 import Darcs.Patch.Named ( Named(..) )
+import Darcs.Patch.Commute ( Commute(..) )
 import Darcs.Patch.Info ( replaceJunk )
 import Darcs.Patch.Read ( ReadPatch(..) )
-import Darcs.Patch.FromPrim ( PrimPatchBase(..) )
+import Darcs.Patch.FromPrim ( PrimPatchBase(..), FromPrim(..), FromPrim(..) )
 import Darcs.Patch.Read ( bracketedFL )
 import Darcs.Patch.Rebase.Fixup ( RebaseFixup(..), namedToFixups )
 import Darcs.Patch.Rebase.Name ( RebaseName(..) )
@@ -42,7 +44,7 @@ data Suspended p wX where
 
 deriving instance (Show2 p, Show2 (PrimOf p)) => Show (Suspended p wX)
 
-showSuspended :: PrimPatchBase p
+showSuspended :: (PrimPatchBase p, PatchListFormat p, ShowPatchBasic p)
               => ShowPatchFor -> Suspended p wX -> Doc
 showSuspended f (Items ps)
        = blueText "rebase" <+> text "0.2" <+> blueText "{"
@@ -82,7 +84,7 @@ countToEdit (Items ps) = lengthFL ps
 
 -- |add fixups for the name and effect of a patch to a 'Suspended'
 addFixupsToSuspended
-  :: (PrimPatchBase p, Effect p)
+  :: (PrimPatchBase p, Commute p, FromPrim p, Effect p)
   => Named p wX wY
   -> Suspended p wY
   -> Suspended p wX
@@ -91,7 +93,7 @@ addFixupsToSuspended p = simplifyPushes D.MyersDiff (namedToFixups p)
 -- | Remove fixups (actually, add their inverse) for the name and effect of
 -- a patch to a 'Suspended'.
 removeFixupsFromSuspended
-  :: (PrimPatchBase p, Effect p)
+  :: (PrimPatchBase p, Commute p, FromPrim p, Effect p)
   => Named p wX wY
   -> Suspended p wX
   -> Suspended p wY
@@ -125,7 +127,7 @@ addToEditsToSuspended da (NamedP old ds ps :>: qs) items = do
     Change.simplifyPush da (NameFixup (Rename new old)) items'
 
 simplifyPush
-  :: PrimPatchBase p
+  :: (PrimPatchBase p, Commute p, FromPrim p, Effect p)
   => D.DiffAlgorithm
   -> RebaseFixup (PrimOf p) wX wY
   -> Suspended p wY
@@ -134,7 +136,7 @@ simplifyPush da fixups (Items ps) =
   unseal Items (Change.simplifyPush da fixups ps)
 
 simplifyPushes
-  :: PrimPatchBase p
+  :: (PrimPatchBase p, Commute p, FromPrim p, Effect p)
   => D.DiffAlgorithm
   -> FL (RebaseFixup (PrimOf p)) wX wY
   -> Suspended p wY

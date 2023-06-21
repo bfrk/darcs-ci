@@ -70,6 +70,11 @@ cd C
 darcs pull -a ../R*
 cd ..
 
+# The maximal non-conflicting subsets are:
+#  {p1, p3, p5}, {p1, p4}, {p2, p4} {p2, p5}
+# They are what I would expect conflict resolution
+# to display as alternatives to the baseline.
+
 baseline='
 a
 b
@@ -78,69 +83,6 @@ d
 e
 f
 '
-
-# p1 .. p5 are for darcs-3
-
-p1='
-a1
-b1
-c
-d
-e
-f
-'
-
-p2='
-a
-b2
-c2
-d
-e
-f
-'
-
-p2X='
-a
-b2X
-c2X
-d
-e
-f
-'
-
-p3='
-a
-b
-c3
-d3
-e
-f
-'
-
-p4='
-a
-b
-c
-d4
-e4
-f
-'
-
-p5='
-a
-b
-c
-d
-e5
-f5
-'
-
-# p25 .. p135 are for darcs-1
-
-# The maximal non-conflicting subsets are:
-#  {p1, p3, p5}, {p1, p4}, {p2, p4} {p2, p5}
-# They are what I would expect conflict resolution
-# to display as alternatives to the baseline.
 
 p25='
 a
@@ -186,22 +128,13 @@ test $(grep -cF 'v v v v v v v' f) = 1
 test $(grep -cF '=============' f) = 1
 test $(grep -cF '^ ^ ^ ^ ^ ^ ^' f) = 1
 
-cat f | tr '\n' 'X' > xf
-
-declare -a alternatives
-if test "$format" = "darcs-3"; then
-  alternatives=("$baseline" "$p1" "$p2" "$p2X" "$p3" "$p4" "$p5")
-else
-  alternatives=("$baseline" "$p25" "$p24" "$p14" "$p135")
-fi
-
 # * each of the alternatives occur at least once
 cat f | tr '\n' 'X' > xf
-for p in $alternatives; do
+for p in "$baseline" "$p25" "$p24" "$p14" "$p135"; do
   grep $(echo -n "$p" | tr '\n' 'X') xf
 done
 
-# * there are (number of alternatives to the baseline minus one) separators
-test $(grep -cF '*************' f) = $(($#alternatives - 1))
+# * there are 4 alternatives to the baseline
+test $(grep -cF '*************' f) = 3
 
 cd ..

@@ -58,10 +58,7 @@ import Darcs.UI.Flags
     )
 import Darcs.UI.Options ( (?), (^) )
 import qualified Darcs.UI.Options.All as O
-import Darcs.UI.Commands.Util
-    ( commonHelpWithPrefsTemplates
-    , getUniqueRepositoryName
-    )
+import Darcs.UI.Commands.Util ( getUniqueRepositoryName )
 import Darcs.Patch.Match ( MatchFlag(..) )
 import Darcs.Repository ( cloneRepository )
 import Darcs.Repository.Format ( identifyRepoFormat
@@ -122,7 +119,6 @@ cloneHelp = vsep $
   [ cloneHelpTag
   , cloneHelpSSE
   , cloneHelpInheritDefault
-  , commonHelpWithPrefsTemplates
   ]
 
 clone :: DarcsCommand
@@ -148,12 +144,7 @@ clone = DarcsCommand
       ^ O.inheritDefault
       ^ O.setScriptsExecutable
       ^ O.withWorkingDir
-    cloneAdvancedOpts
-      = O.usePacks
-      ^ O.patchIndexNo
-      ^ O.umask
-      ^ O.remoteDarcs
-      ^ O.withPrefsTemplates
+    cloneAdvancedOpts = O.usePacks ^ O.patchIndexNo ^ O.umask ^ O.remoteDarcs
     cloneOpts = cloneBasicOpts `withStdOpts` cloneAdvancedOpts
 
 get :: DarcsCommand
@@ -216,7 +207,6 @@ cloneCmd (_,o) opts [inrepodir] = do
                          (patchIndexNo ? opts)
                          (usePacks ? opts)
                          YesForgetParent
-                         (O.withPrefsTemplates ? opts)
          setCurrentDirectory currentDir
          (scp, args) <- getSSH SCP
          putInfo opts $ text $ "Transferring clone using " ++ scp ++ "..."
@@ -241,7 +231,6 @@ cloneCmd (_,o) opts [inrepodir] = do
                   (patchIndexNo ? opts)
                   (usePacks ? opts)
                   NoForgetParent
-                  (O.withPrefsTemplates ? opts)
       putFinished opts "cloning"
 
 cloneCmd _ _ _ = fail "You must provide 'clone' with either one or two arguments."

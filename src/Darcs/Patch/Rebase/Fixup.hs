@@ -53,7 +53,7 @@ data RebaseFixup prim wX wY where
   PrimFixup :: prim wX wY -> RebaseFixup prim wX wY
   NameFixup :: RebaseName wX wY -> RebaseFixup prim wX wY
 
-namedToFixups :: Effect p => Named p wX wY -> FL (RebaseFixup (PrimOf p)) wX wY
+namedToFixups :: (PrimPatch (PrimOf p), Effect p) => Named p wX wY -> FL (RebaseFixup (PrimOf p)) wX wY
 namedToFixups (NamedP p _ contents) = NameFixup (AddName p) :>: mapFL_FL PrimFixup (effect contents)
 
 instance Show2 prim => Show (RebaseFixup prim wX wY) where

@@ -36,11 +36,10 @@ import Darcs.Repository.Format
     , writeRepoFormat
     )
 import Darcs.Repository.Flags
-    ( PatchFormat(..)
-    , UseCache(..)
-    , WithPatchIndex(..)
-    , WithPrefsTemplates(..)
-    , WithWorkingDir(..)
+    ( UseCache(..)
+    , WithWorkingDir (..)
+    , WithPatchIndex (..)
+    , PatchFormat (..)
     )
 import Darcs.Repository.Paths
     ( pristineDirPath
@@ -69,8 +68,8 @@ import Darcs.Util.Lock ( writeBinFile )
 import Darcs.Util.Path ( AbsoluteOrRemotePath, ioAbsoluteOrRemote )
 import Darcs.Util.Tree( Tree, emptyTree )
 
-createRepositoryFiles :: PatchFormat -> WithWorkingDir -> WithPrefsTemplates -> IO RepoFormat
-createRepositoryFiles patchfmt withWorkingDir withPrefsTemplates = do
+createRepositoryFiles :: PatchFormat -> WithWorkingDir -> IO RepoFormat
+createRepositoryFiles patchfmt withWorkingDir = do
   cwd <- getCurrentDirectory
   x <- seekRepo
   when (isJust x) $ do
@@ -84,7 +83,7 @@ createRepositoryFiles patchfmt withWorkingDir withPrefsTemplates = do
   createDirectory patchesDirPath
   createDirectory inventoriesDirPath
   createDirectory prefsDirPath
-  writeDefaultPrefs withPrefsTemplates
+  writeDefaultPrefs
   let repo_format = createRepoFormat patchfmt withWorkingDir
   writeRepoFormat repo_format formatPath
   -- note: all repos we create nowadays are hashed
@@ -96,10 +95,10 @@ data EmptyRepository where
                   => Repository 'RO p Origin Origin
                   -> EmptyRepository
 
-createRepository :: PatchFormat -> WithWorkingDir -> WithPatchIndex -> UseCache -> WithPrefsTemplates
+createRepository :: PatchFormat -> WithWorkingDir -> WithPatchIndex -> UseCache
                  -> IO EmptyRepository
-createRepository patchfmt withWorkingDir withPatchIndex useCache withPrefsTemplates = do
-  rfmt <- createRepositoryFiles patchfmt withWorkingDir withPrefsTemplates
+createRepository patchfmt withWorkingDir withPatchIndex useCache = do
+  rfmt <- createRepositoryFiles patchfmt withWorkingDir
   rdir <- ioAbsoluteOrRemote here
   cache <- getCaches useCache Nothing
   repo@(EmptyRepository r) <- case patchfmt of
@@ -132,10 +131,10 @@ mkRepoV3
 mkRepoV3 rdir repofmt cache = mkRepo rdir repofmt HashedPristine cache
 
 createRepositoryV1
-  :: WithWorkingDir -> WithPatchIndex -> UseCache -> WithPrefsTemplates
+  :: WithWorkingDir -> WithPatchIndex -> UseCache
   -> IO (Repository 'RO (RepoPatchV1 V1.Prim) Origin Origin)
-createRepositoryV1 withWorkingDir withPatchIndex useCache withPrefsTemplates = do
-  rfmt <- createRepositoryFiles PatchFormat1 withWorkingDir withPrefsTemplates
+createRepositoryV1 withWorkingDir withPatchIndex useCache = do
+  rfmt <- createRepositoryFiles PatchFormat1 withWorkingDir
   rdir <- ioAbsoluteOrRemote here
   cache <- getCaches useCache Nothing
   let repo = mkRepoV1 rdir rfmt cache
@@ -144,10 +143,10 @@ createRepositoryV1 withWorkingDir withPatchIndex useCache withPrefsTemplates = d
   return repo
 
 createRepositoryV2
-  :: WithWorkingDir -> WithPatchIndex -> UseCache -> WithPrefsTemplates
+  :: WithWorkingDir -> WithPatchIndex -> UseCache
   -> IO (Repository 'RO (RepoPatchV2 V2.Prim) Origin Origin)
-createRepositoryV2 withWorkingDir withPatchIndex useCache withPrefsTemplates = do
-  rfmt <- createRepositoryFiles PatchFormat2 withWorkingDir withPrefsTemplates
+createRepositoryV2 withWorkingDir withPatchIndex useCache = do
+  rfmt <- createRepositoryFiles PatchFormat2 withWorkingDir
   rdir <- ioAbsoluteOrRemote here
   cache <- getCaches useCache Nothing
   let repo = mkRepoV2 rdir rfmt cache

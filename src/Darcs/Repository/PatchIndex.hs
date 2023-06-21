@@ -18,7 +18,6 @@ should attempt to automatically create the patch-index.
 
 See <http://darcs.net/Internals/PatchIndex> for more information.
 -}
-{-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 module Darcs.Repository.PatchIndex
     ( doesPatchIndexExist
     , isPatchIndexDisabled
@@ -38,17 +37,17 @@ module Darcs.Repository.PatchIndex
 import Darcs.Prelude
 
 import Control.Exception ( catch )
-import Control.Monad ( forM_, unless, when, (>=>) )
+import Control.Monad ( forM_, unless, when )
 import Control.Monad.State.Strict ( evalState, execState, State, gets, modify )
 
 import Data.Binary ( Binary, encodeFile, decodeFileOrFail )
 import qualified Data.ByteString as B
 import Data.Int ( Int8 )
-import Data.List ( mapAccumL, sort, nub, (\\) )
-import Data.Maybe ( catMaybes, fromJust, fromMaybe )
-import qualified Data.IntSet as I
+import Data.List ( group, mapAccumL, sort, nub, (\\) )
+import Data.Maybe ( fromJust, fromMaybe, isJust )
 import qualified Data.Map as M
 import qualified Data.Set as S
+import Data.Word ( Word32 )
 
 import System.Directory
     ( createDirectory
@@ -64,15 +63,7 @@ import System.IO ( openFile, IOMode(WriteMode), hClose )
 import Darcs.Patch ( RepoPatch, listTouchedFiles )
 import Darcs.Patch.Apply ( ApplyState(..) )
 import Darcs.Patch.Index.Types
-    ( FileId(..)
-    , PatchId
-    , makePatchID
-    , pid2string
-    , short
-    , showFileId
-    , zero
-    )
-import Darcs.Patch.Index.Monad ( FileMod(..), applyToFileMods )
+import Darcs.Patch.Index.Monad ( applyToFileMods, makePatchID )
 import Darcs.Patch.Inspect ( PatchInspect )
 import Darcs.Patch.PatchInfoAnd ( PatchInfoAnd, info )
 import Darcs.Patch.Progress (progressFL )
@@ -95,14 +86,13 @@ import Darcs.Repository.Paths ( hashedInventoryPath )
 import Darcs.Util.Global ( darcsdir )
 import Darcs.Util.Hash ( sha256sum, showAsHex )
 import Darcs.Util.Lock ( withPermDir )
-import Darcs.Util.Path ( AnchoredPath, displayPath, isRoot, parents, toFilePath )
+import Darcs.Util.Path ( AnchoredPath, displayPath, toFilePath, isPrefix )
 import Darcs.Util.Progress ( debugMessage )
 import Darcs.Util.SignalHandler ( catchInterrupt )
 import Darcs.Util.Tree ( Tree(..) )
 
 type Map = M.Map
 type Set = S.Set
-type IntSet = I.IntSet
 
 data FileIdSpan = FidSpan
   !FileId                   -- ^ the fileid has some fixed name in the
@@ -116,10 +106,10 @@ data FilePathSpan = FpSpan
   !(Maybe PatchId)          -- ^ and (maybe) ending here
   deriving (Show, Eq, Ord)
 
--- | info about a given fileid
+-- | info about a given fileid, e.g.. is a file or a directory
 data FileInfo = FileInfo
-  { isFile :: Bool          -- ^ whether file or dir
-  , touching :: IntSet      -- ^ first words of patch hashes
+  { isFile :: Bool
+  , touching :: Set Word32  -- ^ first word of patch hash
   } deriving (Show, Eq, Ord)
 
 -- | timespans where a certain filename corresponds to a file with a given id
@@ -136,7 +126,7 @@ data PatchIndex = PatchIndex
   { pids :: [PatchId]
     -- ^ all the 'PatchId's tracked by this patch index, with the most
     -- recent patch at the head of the list (note, stored in the
-    -- reverse order on disk for backwards compatibility
+    -- reverse order to this on disk for backwards compatibility
     -- with an older format).
   , fidspans :: FileIdSpans
   , fpspans :: FilePathSpans
@@ -148,62 +138,53 @@ data PatchIndex = PatchIndex
 --           2 changes the pids order to newer-to-older
 --           3 changes FileName to AnchoredPath everywhere, which has
 --             different Binary (and Ord) instances
---           4 adds all parent dirs of each file or dir as
---             being touched by a patch
---           5 replaces Set Word32 with IntSet
-
 version :: Int8
-version = 5
+version = 3
 
 type PIM a = State PatchIndex a
 
 -- | 'applyPatchMods pmods pindex' applies a list of PatchMods to the given
 --   patch index pindex
-applyPatchMods :: [(PatchId, [FileMod AnchoredPath])] -> PatchIndex -> PatchIndex
+applyPatchMods :: [(PatchId, [PatchMod AnchoredPath])] -> PatchIndex -> PatchIndex
 applyPatchMods pmods pindex =
   flip execState pindex $ mapM_ goList pmods
- where goList :: (PatchId, [FileMod AnchoredPath]) -> PIM ()
+ where goList :: (PatchId, [PatchMod AnchoredPath]) -> PIM ()
        goList (pid, mods) = do
            modify (\pind -> pind{pids = pid:pids pind})
-           mapM_ (curry go pid) mods
-       go :: (PatchId, FileMod AnchoredPath) -> PIM ()
+           mapM_ (curry go pid) (nubSeq mods)
+       -- nubSeq handles invalid patch in darcs repo:
+       --   move with identical target name "rename darcs_patcher to darcs-patcher."
+       nubSeq = map head . group
+       go :: (PatchId, PatchMod AnchoredPath) -> PIM ()
        go (pid, PCreateFile fn) = do
          fid <- createFidStartSpan fn pid
          startFpSpan fid fn pid
          createInfo fid True
-         insertTouch pid fid
-         insertParentsTouch pid fn
+         insertTouch fid pid
        go (pid, PCreateDir fn) = do
          fid <- createFidStartSpan fn pid
          startFpSpan fid fn pid
          createInfo fid False
-         insertTouch pid fid
-         insertParentsTouch pid fn
+         insertTouch fid pid
        go (pid, PTouch fn) = do
          fid <- lookupFid fn
-         insertTouch pid fid
-         insertParentsTouch pid fn
+         insertTouch fid pid
        go (pid, PRename oldfn newfn) = do
          fid <- lookupFid oldfn
          stopFpSpan fid pid
          startFpSpan fid newfn pid
-         insertTouch pid fid
-         insertParentsTouch pid oldfn
-         insertParentsTouch pid newfn
+         insertTouch fid pid
          stopFidSpan oldfn pid
          startFidSpan newfn pid fid
        go (pid, PRemove fn) = do
          fid <- lookupFid fn
-         insertTouch pid fid
-         insertParentsTouch pid fn
+         insertTouch fid pid
          stopFidSpan fn pid
          stopFpSpan fid pid
        go (pid, PDuplicateTouch fn) = do
          fidm <- gets fidspans
          case M.lookup fn fidm of
-           Just (FidSpan fid _ _:_) -> do
-             insertTouch pid fid
-             insertParentsTouch pid fn
+           Just (FidSpan fid _ _:_) -> insertTouch fid pid
            Nothing -> return ()
            Just [] -> error $ "applyPatchMods: impossible, no entry for "++show fn
                               ++" in FileIdSpans in duplicate, empty list"
@@ -255,20 +236,14 @@ stopFidSpan fn pend = modify (\pind -> pind {fidspans=M.alter alt fn (fidspans p
 -- | insert touching patchid for given file id
 createInfo :: FileId -> Bool -> PIM ()
 createInfo fid isF = modify (\pind -> pind {infom=M.alter alt fid (infom pind)})
-  where alt Nothing = Just (FileInfo isF I.empty)
-        alt (Just _) = Just (FileInfo isF I.empty) -- forget old false positives
+  where alt Nothing = Just (FileInfo isF S.empty)
+        alt (Just _) = Just (FileInfo isF S.empty) -- forget old false positives
 
 -- | insert touching patchid for given file id
-insertTouch :: PatchId -> FileId -> PIM ()
-insertTouch pid fid = modify (\pind -> pind {infom=M.alter alt fid (infom pind)})
+insertTouch :: FileId -> PatchId -> PIM ()
+insertTouch fid pid = modify (\pind -> pind {infom=M.alter alt fid (infom pind)})
   where alt Nothing =  error "impossible: Fileid does not exist"
-        alt (Just (FileInfo isF pids)) = Just (FileInfo isF (I.insert (short pid) pids))
-
--- | insert touching patchid for the parents of a given path
-insertParentsTouch :: PatchId -> AnchoredPath -> PIM ()
-insertParentsTouch pid path =
-  forM_ (filter (not . isRoot) (parents path)) $
-    lookupFid >=> insertTouch pid
+        alt (Just (FileInfo isF pids)) = Just (FileInfo isF (S.insert (short pid) pids))
 
 -- | lookup current fid of filepath
 lookupFid :: AnchoredPath -> PIM FileId
@@ -287,6 +262,42 @@ lookupFid' fn = do
     _ -> return Nothing
 
 
+-- | lookup all the file ids of a given path
+lookupFidf' :: AnchoredPath -> PIM [FileId]
+lookupFidf' fn = do
+   fidm <- gets fidspans
+   case M.lookup fn fidm of
+      Just spans -> return $ map (\(FidSpan fid _ _) -> fid) spans
+      Nothing ->
+         error $ "lookupFidf': no entry for " ++ show fn ++ " in FileIdSpans"
+
+-- |  return all fids of matching subpaths
+--    of the given filepath
+lookupFids :: AnchoredPath -> PIM [FileId]
+lookupFids fn = do
+   fid_spans <- gets fidspans
+   file_idss <- mapM lookupFidf' $
+      filter (isPrefix fn) (fpSpans2filePaths' fid_spans)
+   return $ nub $ concat file_idss
+
+-- | returns a single file id if the given path is a file
+--   if it is a directory, if returns all the file ids of all paths inside it,
+--   at any point in repository history
+lookupFids' :: AnchoredPath -> PIM [FileId]
+lookupFids' fn = do
+  info_map <- gets infom
+  fps_spans <- gets fpspans
+  a <- lookupFid' fn
+  if isJust a then do
+                let fid = fromJust a
+                case M.lookup fid info_map of
+                  Just (FileInfo True _) -> return [fid]
+                  Just (FileInfo False _) ->
+                    let file_names = map (\(FpSpan x _ _) -> x) (fps_spans M.! fid)
+                    in nub . concat <$> mapM lookupFids file_names
+                  Nothing -> error "lookupFids' : could not find file"
+              else return []
+
 -- | Creates patch index that corresponds to all patches in repo.
 createPatchIndexDisk
   :: (RepoPatch p, ApplyState p ~ Tree)
@@ -295,12 +306,12 @@ createPatchIndexDisk
   -> IO ()
 createPatchIndexDisk repository ps = do
   let patches = mapFL Sealed2 $ progressFL "Create patch index" $ patchSet2FL ps
-  createPatchIndexFrom repository $ patches2fileMods patches S.empty
+  createPatchIndexFrom repository $ patches2patchMods patches S.empty
 
 -- | convert patches to patchmods
-patches2fileMods :: (Apply p, PatchInspect p, ApplyState p ~ Tree)
-                  => [Sealed2 (PatchInfoAnd p)] -> Set AnchoredPath -> [(PatchId, [FileMod AnchoredPath])]
-patches2fileMods patches fns = snd $ mapAccumL go fns patches
+patches2patchMods :: (Apply p, PatchInspect p, ApplyState p ~ Tree)
+                  => [Sealed2 (PatchInfoAnd p)] -> Set AnchoredPath -> [(PatchId, [PatchMod AnchoredPath])]
+patches2patchMods patches fns = snd $ mapAccumL go fns patches
   where
     go filenames (Sealed2 p) = (filenames', (pid, pmods_effect ++ pmods_dup))
       where pid = makePatchID . info $ p
@@ -372,7 +383,7 @@ updatePatchIndexDisk repo patches = do
         cdir = repodir </> indexDir
     -- reread to prevent holding onto patches for too long
     let newpatches = drop len_common $ mapFL seal2 flpatches
-        newpmods = patches2fileMods newpatches filenames
+        newpmods = patches2patchMods newpatches filenames
     inv_hash <- getInventoryHash repodir
     storePatchIndex cdir inv_hash (applyPatchMods newpmods pindex')
   where
@@ -386,7 +397,7 @@ updatePatchIndexDisk repo patches = do
 -- | 'createPatchIndexFrom repo pmods' creates a patch index from the given
 --   patchmods.
 createPatchIndexFrom :: Repository rt p wU wR
-                     -> [(PatchId, [FileMod AnchoredPath])] -> IO ()
+                     -> [(PatchId, [PatchMod AnchoredPath])] -> IO ()
 createPatchIndexFrom repo pmods = do
     inv_hash <- getInventoryHash repodir
     storePatchIndex cdir inv_hash (applyPatchMods pmods emptyPatchIndex)
@@ -421,11 +432,7 @@ loadSafePatchIndex repo ps = do
    can_use <- isPatchIndexInSync repo
    (_,_,_,pi) <-
      if can_use
-       then do
-          debugMessage "Loading patch index..."
-          r <- loadPatchIndex repodir
-          debugMessage "Done."
-          return r
+       then loadPatchIndex repodir
        else do createOrUpdatePatchIndexDisk repo ps
                loadPatchIndex repodir
    return pi
@@ -611,14 +618,18 @@ dumpFilePathSpans fpspans =
            | (fid, fns) <- M.toList fpspans, FpSpan fn from mto <- fns]
 
 dumpTouchingMap :: InfoMap -> String
-dumpTouchingMap infom = unlines [showFileId fid++(if isF then "" else "/")++" -> "++ showAsHex (fromIntegral i)
-                                | (fid,FileInfo isF w32s) <- M.toList infom, i <- I.elems w32s]
+dumpTouchingMap infom = unlines [showFileId fid++(if isF then "" else "/")++" -> "++ showAsHex w32
+                                | (fid,FileInfo isF w32s) <- M.toList infom, w32 <- S.elems w32s]
 
 -- | return set of current filepaths in patch index
 fpSpans2filePaths :: FilePathSpans -> InfoMap -> [FilePath]
 fpSpans2filePaths fpSpans infom =
   sort [displayPath fn ++ (if isF then "" else "/") | (fid,FpSpan fn _ Nothing:_) <- M.toList fpSpans,
                                                 let Just (FileInfo isF _) = M.lookup fid infom]
+
+-- | return set of current filepaths in patch index, for internal use
+fpSpans2filePaths' :: FileIdSpans -> [AnchoredPath]
+fpSpans2filePaths' fidSpans = [fp | (fp, _)  <- M.toList fidSpans]
 
 -- | Checks if patch index can be created and build it with interrupt.
 attemptCreatePatchIndex
@@ -661,25 +672,24 @@ getRelevantSubsequence pxes repository ps fns = do
     pi@(PatchIndex _ _ _ infom) <- loadSafePatchIndex repository ps
     let fids = map (\fn -> evalState (lookupFid fn) pi) fns
         pidss = map ((\(FileInfo _ a) -> a) . fromJust . (`M.lookup` infom)) fids
-        pids = I.unions pidss
+        pids = S.unions pidss
     let flpxes = reverseRL $ unseal unsafeCoercePEnd pxes
     return . seal $ keepElems flpxes NilRL pids
   where
     keepElems :: (RepoPatch p, ApplyState p ~ Tree, a ~ PatchInfoAnd p)
-              => FL a wX wY -> RL a wB wX -> IntSet -> RL a wP wQ
+              => FL a wX wY -> RL a wB wX -> S.Set Word32 -> RL a wP wQ
     keepElems NilFL acc _ = unsafeCoerceP acc
     keepElems (x :>: xs) acc pids
-      | short (makePatchID $ info x) `I.member` pids = keepElems xs (acc :<: x) pids
+      | short (makePatchID $ info x) `S.member` pids = keepElems xs (acc :<: x) pids
       | otherwise = keepElems (unsafeCoerceP xs) acc pids
 
 type PatchFilter p = [AnchoredPath] -> [Sealed2 (PatchInfoAnd p)] -> IO [Sealed2 (PatchInfoAnd p)]
 
--- | If a patch index is available, returns a filter that takes a list of files
---   and returns a @PatchFilter@ that only keeps patches that modify the given
---   list of files. If patch-index cannot be used, return the original input.
---   If patch-index does not exist and is not explicitely disabled, silently
---   create it. (Also, if it is out-of-sync, which should not happen, silently
---   update it).
+-- | If a patch index is available, returns a filter that takes a list of files and returns
+--   a @PatchFilter@ that only keeps patches that modify the given list of files.
+--   If patch-index cannot be used, return the original input.
+--   If patch-index does not exist and is not explicitely disabled, silently create it.
+--   (Also, if it is out-of-sync, which should not happen, silently update it).
 maybeFilterPatches
     :: (RepoPatch p, ApplyState p ~ Tree)
     => Repository rt p wU wR  -- ^ The repository
@@ -690,10 +700,10 @@ maybeFilterPatches repo ps fps ops = do
     if usePI
       then do
         pi@(PatchIndex _ _ _ infom) <- loadSafePatchIndex repo ps
-        let fids = catMaybes $ map ((\fn -> evalState (lookupFid' fn) pi)) fps
-            npids = I.unions $ map (touching.fromJust.(`M.lookup` infom)) fids
+        let fids = concatMap ((\fn -> evalState (lookupFids' fn) pi)) fps
+            npids = S.unions $ map (touching.fromJust.(`M.lookup` infom)) fids
         return $ filter
-          (flip I.member npids . (unseal2 (short . makePatchID . info))) ops
+          (flip S.member npids . (unseal2 (short . makePatchID . info))) ops
       else return ops
 
 -- | Dump information in patch index. Patch-index should be checked to exist beforehand. Read-only.
@@ -757,7 +767,7 @@ piTest repodir = do
    putStrLn "infom"
    putStrLn "==========="
    putStrLn $ "Valid fid test: " ++ (show.and $ map (`M.member` fpspans) (M.keys infom))
-   putStrLn $ "Valid pid test: " ++ (show.flip I.isSubsetOf (I.fromList $ map short pids)  . I.unions . map touching . M.elems $ infom)
+   putStrLn $ "Valid pid test: " ++ (show.flip S.isSubsetOf (S.fromList $ map short pids)  . S.unions . map touching . M.elems $ infom)
    where
           isInOrder :: Eq a => [a] -> [a] -> Bool
           isInOrder (x:xs) (y:ys) | x == y = isInOrder xs ys

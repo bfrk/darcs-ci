@@ -128,7 +128,7 @@ toHash = OptSpec {..} where
   oparse k fs = k [ UpToHash s | F.UpToHash s <- fs ]
   ocheck _ = []
   odesc = [ strArg [] ["to-hash"] F.UpToHash "HASH"
-    "select changes up to a patch whose hash prefix matches HASH" ]
+    "select changes up to a patch with HASH" ]
 
 context = OptSpec {..} where
   ounparse k mfs = k [ F.Context p | Context p <- mfs ]
@@ -163,7 +163,7 @@ fromHash = OptSpec {..} where
   oparse k fs = k [ AfterHash s | F.AfterHash s <- fs ]
   ocheck _ = []
   odesc = [ strArg [] ["from-hash"] F.AfterHash "HASH"
-    "select changes starting with a patch whose hash prefix matches HASH" ]
+    "select changes starting with a patch with HASH" ]
 
 fromTag = OptSpec {..} where
   ounparse k mfs = k [ F.AfterTag s | AfterTag s <- mfs ]
@@ -203,7 +203,7 @@ hash = OptSpec {..} where
   oparse k fs = k [ OneHash s | F.OneHash s <- fs ]
   ocheck _ = []
   odesc = [ strArg ['h'] ["hash"] F.OneHash "HASH"
-    "select a single patch whose hash prefix matches HASH" ]
+    "select a single patch with HASH" ]
 
 match = OptSpec {..} where
   ounparse k mfs = k [ F.OnePattern s | OnePattern s <- mfs ]

@@ -6,7 +6,7 @@ import Darcs.Util.IndexedMonad
 
 import Darcs.Patch.Witnesses.Ordered ( FL(..), RL(..) )
 
-import Darcs.UI.Commands.Test.Impl ( PatchSeq(..) )
+import Darcs.UI.Commands.Test.Impl ( PatchTree(..) )
 
 -- our own indexed monad Apply class
 class IndexedApply p where
@@ -28,8 +28,8 @@ instance IndexedApply p => IndexedApply (RL p) where
   unapply NilRL = return ()
   unapply (ps :<: p) = unapply p >> unapply ps
 
-instance IndexedApply p => IndexedApply (PatchSeq p) where
-  type ApplyState (PatchSeq p) = ApplyState p
+instance IndexedApply p => IndexedApply (PatchTree p) where
+  type ApplyState (PatchTree p) = ApplyState p
   apply (Single p) = apply p
   apply (Joined p1 p2) = apply p1 >> apply p2
   unapply (Single p) = unapply p

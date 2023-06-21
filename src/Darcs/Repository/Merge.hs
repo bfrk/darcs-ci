@@ -41,6 +41,7 @@ import Darcs.Patch
     , effect
     , listConflictedFiles )
 import Darcs.Patch.Apply ( ApplyState )
+import Darcs.Patch.Ident ( merge2FL )
 import Darcs.Patch.Named ( patchcontents, anonymous )
 import Darcs.Patch.PatchInfoAnd ( PatchInfoAnd, n2pia, hopefully )
 import Darcs.Patch.Progress( progressFL, progressRL )
@@ -235,8 +236,9 @@ tentativelyMergePatches_ :: (RepoPatch p, ApplyState p ~ Tree)
                          -> IO (Sealed (FL (PrimOf p) wU))
 tentativelyMergePatches_ mc _repo cmd allowConflicts externalMerge wantGuiPause
   compression verbosity reorder diffingOpts@DiffOpts{..} (Fork context us them) = do
-    (them' :/\: us') <-
-      return $ merge (progressFL "Merging us" us :\/: progressFL "Merging them" them)
+    (them' :/\: us')
+         <- return $ merge2FL (progressFL "Merging us" us)
+                              (progressFL "Merging them" them)
     pw <- unrecordedChanges diffingOpts _repo Nothing
     -- Note: we use anonymous here to wrap the unrecorded changes.
     -- This is benign because we only retain the effect of the results
@@ -257,7 +259,8 @@ tentativelyMergePatches_ mc _repo cmd allowConflicts externalMerge wantGuiPause
         conflictedPaths conflicts
 
     debugMessage "Announcing conflicts..."
-    have_conflicts <- announceConflicts cmd allowConflicts conflicts
+    have_conflicts <-
+        announceConflicts cmd allowConflicts externalMerge conflicts
 
     debugMessage "Checking for unrecorded conflicts..."
     let pw'content = concatFL $ mapFL_FL (patchcontents . hopefully) pw'

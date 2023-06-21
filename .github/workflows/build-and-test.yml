@@ -10,48 +10,20 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os:
-#           - ubuntu-18.04
-#           - ubuntu-20.04
-          - ubuntu-22.04
-#           - macOS-10.15
-#           - macOS-11
-          - macOS-12
-#           - windows-2019
-          - windows-2022
-        ghc:
-          - 8.2.2
-          - 8.4.4
-          - 8.6.5
-          - 8.8.2
-          - 8.10.7
-          - 9.0.2
-          - 9.2.7
-          - 9.4.4
-        cabal:
-          - 3.8
+        # os: [ubuntu-18.04, ubuntu-20.04, macOS-10.15, macOS-11, windows-2016, windows-2019, windows-2022]
+        # faster, less comprehensive:
+        os: [ubuntu-20.04, macOS-10.15, windows-2019]
+        ghc: ['8.2', '8.4', '8.6', '8.8', '8.10', '9.0']
+        cabal: ['latest']
         exclude:
           # can't build basement (indirect dependency)
           - os: ubuntu-18.04
-            ghc: 8.4.4
-          # ghc-8.2.2 fails to install
-          - os: ubuntu-22.04
-            ghc: 8.2.2
-          # on windows-2019:
-          # - with ghc < 8.10: can't build process
-          # - with ghc >= 9.0 && < 9.4: can't build hsc2hs
-          # - with ghc 9.4: darcs-test crashes immediately
-          - os: windows-2019
+            ghc: 8.4
     env:
-      builddocs: ${{ matrix.ghc == '9.4.4' }}
-      runtests: ${{ matrix.ghc == '8.4.4' || matrix.ghc == '9.4.4' }}
-      # for some reason this test randomly fails with darcs.net server
-      # timeouts or similar errors; works fine on my machine
-      tests-to-run: -t='!network/log'
+      runtests: ${{ matrix.ghc == '8.2' || matrix.ghc == '9.0' }}
+      tests-to-run: # e.g. -t=EXAMPLE
       testcmd: cabal run -- darcs-test -j=6 -f=123 -i=yn -c=yn --hide
       ACTIONS_ALLOW_UNSECURE_COMMANDS: true
-      # avoid occasional timeouts in test scripts that access darcs.net:
-      DARCS_CONNECTION_TIMEOUT: 15
 
     steps:
     - name: Configure git
@@ -59,7 +31,7 @@ jobs:
       run: git config --global core.autocrlf input
 
     - name: Checkout
-      uses: actions/checkout@v3
+      uses: actions/checkout@v2
 
     - name: Setup Haskell
       id: setup-haskell-cabal
@@ -68,38 +40,33 @@ jobs:
         ghc-version: ${{ matrix.ghc }}
         cabal-version: ${{ matrix.cabal }}
 
+    - name: Cache cabal store
+      uses: actions/cache@v2
+      with:
+        path: ${{ steps.setup-haskell-cabal.outputs.cabal-store }}
+        key: cabal-store-${{ matrix.os }}-ghc-${{ matrix.ghc }}-${{ hashFiles('dist-newstyle/cache/plan.json') }}
+        restore-keys: |
+          cabal-store-${{ matrix.os }}-ghc-${{ matrix.ghc }}
+
     - name: Configure
       run: cabal configure --enable-tests -fwarn-as-error
 
-    - name: Cabal freeze
-      run: cabal freeze
+    - name: Build dependencies
+      run: cabal build --only-dependencies
 
-    - name: Restore cabal store from cache
-      uses: actions/cache/restore@v3
+    - name: Cache dist-newstyle
+      uses: actions/cache@v2
       with:
-        path: ${{ steps.setup-haskell-cabal.outputs.cabal-store }}
-        key: cabal-store-${{ matrix.os }}-ghc-${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}
-        restore-keys: cabal-store-${{ matrix.os }}-ghc-${{ matrix.ghc }}-
-
-    - name: Build dependencies (with docs)
-      if: env.builddocs == 'true'
-      run: cabal build --only-dependencies --enable-documentation
-
-    - name: Build dependencies (without docs)
-      if: env.builddocs == 'false'
-      run: cabal build --only-dependencies --disable-documentation
-
-    - name: Save cabal store to cache
-      uses: actions/cache/save@v3
-      with:
-        path: ${{ steps.setup-haskell-cabal.outputs.cabal-store }}
-        key: cabal-store-${{ matrix.os }}-ghc-${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}
+        path: dist-newstyle/build
+        key: dist-newstyle-${{ matrix.os }}-ghc-${{ matrix.ghc }}-${{ hashFiles('dist-newstyle/cache/plan.json','Setup.hs','*.cabal','cabal*','darcs/*','src/**','harness/**','shelly/src/**','release/*') }}
+        restore-keys: |
+          dist-newstyle-${{ matrix.os }}-ghc-${{ matrix.ghc }}
 
     - name: Build
       run: cabal build
 
     - name: Haddock
-      if: env.builddocs == 'true'
+      if: matrix.ghc != '8.2' && matrix.ghc != '8.4'
       run: cabal haddock lib:darcs
 
     - name: Run tests on Linux

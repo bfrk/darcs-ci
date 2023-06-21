@@ -54,7 +54,7 @@ import Darcs.Patch.Witnesses.Ordered
 import Darcs.Patch.Witnesses.Sealed ( Sealed(..), unFreeLeft )
 
 import Darcs.Patch.Info ( PatchInfo, patchinfo )
-import Darcs.Patch.Prim ( canonizeFL )
+import Darcs.Patch.Prim ( sortCoalesceFL )
 
 import Darcs.Repository
     ( EmptyRepository(..)
@@ -86,8 +86,8 @@ import Darcs.UI.Commands.Convert.Util
     , emptyMarks
     , getMark
     , patchHash
+    , updatePending
     )
-import Darcs.UI.Commands.Util ( commonHelpWithPrefsTemplates )
 import Darcs.UI.Completion (noArgs)
 import Darcs.UI.Flags
     ( DarcsFlag
@@ -113,12 +113,12 @@ import Darcs.Util.Path
     ( AbsolutePath
     , AnchoredPath(..)
     , appendPath
-    , unsafeFloatPath
+    , floatPath
     , makeName
     , parent
     , darcsdirName
     )
-import Darcs.Util.Printer ( Doc, text, ($+$) )
+import Darcs.Util.Printer ( Doc, text )
 import qualified Darcs.Util.Tree as T
 import Darcs.Util.Tree
     ( Tree
@@ -136,7 +136,7 @@ import Darcs.Util.Tree.Monad hiding (createDirectory, exists, rename)
 
 
 convertImportHelp :: Doc
-convertImportHelp = text (unlines
+convertImportHelp = text $ unlines
  [ "This command imports git repositories into new darcs repositories."
  , "Further options are accepted (see `darcs help init`)."
  , ""
@@ -148,8 +148,7 @@ convertImportHelp = text (unlines
  , "         use at your own risks."
  , ""
  , "Incremental import with marksfiles is currently not supported."
- ])
- $+$ commonHelpWithPrefsTemplates
+ ]
 
 convertImport :: DarcsCommand
 convertImport = DarcsCommand
@@ -171,12 +170,7 @@ convertImport = DarcsCommand
       ^ O.setScriptsExecutable
       ^ O.patchFormat
       ^ O.withWorkingDir
-    advancedOpts
-      = O.diffAlgorithm
-      ^ O.patchIndexNo
-      ^ O.compress
-      ^ O.umask
-      ^ O.withPrefsTemplates
+    advancedOpts = O.diffAlgorithm ^ O.patchIndexNo ^ O.compress ^ O.umask
     opts = basicOpts `withStdOpts` advancedOpts
 
 type Marked = Maybe Int
@@ -230,14 +224,14 @@ fastImport _ opts [outrepo] =
       (withWorkingDir ? opts)
       (patchIndexNo ? opts)
       (useCache ? opts)
-      (O.withPrefsTemplates ? opts)
     -- TODO implement --dry-run, which would be read-only?
-    _repo <- revertRepositoryChanges _repo
+    _repo <- revertRepositoryChanges _repo (updatePending opts)
     marks <-
       fastImport' _repo (O.compress ? opts) (O.diffAlgorithm ? opts) emptyMarks
     cleanRepository _repo
     _repo <-
-      finalizeRepositoryChanges _repo (O.compress ? opts) (O.dryRun ? opts)
+      finalizeRepositoryChanges _repo (updatePending opts)
+        (O.compress ? opts) (O.dryRun ? opts)
     createPristineDirectoryTree _repo "." (withWorkingDir ? opts)
     return marks
 fastImport _ _ _ = fail "I need exactly one output repository."
@@ -262,7 +256,7 @@ fastImport' repo compression diffalg marks = do
 
         -- sort marks into buckets, since there can be a *lot* of them
         markpath :: Int -> AnchoredPath
-        markpath n = unsafeFloatPath (darcsdir </> "marks")
+        markpath n = floatPath (darcsdir </> "marks")
                         `appendPath` (either error id $ makeName $ show (n `div` 1000))
                         `appendPath` (either error id $ makeName $ show (n `mod` 1000))
 
@@ -293,7 +287,7 @@ fastImport' repo compression diffalg marks = do
         --   but only for blobs and excluding anything under _darcs
         -- * it also returns the resulting tree with _darcs filtered out
         updateHashes = do
-          let nodarcs = \(AnchoredPath xs) _ -> head xs /= darcsdirName
+          let nodarcs = \(AnchoredPath (x:_)) _ -> x /= darcsdirName
               hashblobs (File blob@(T.Blob con Nothing)) =
                 do hash <- sha256 `fmap` readBlob blob
                    return $ File (T.Blob con (Just hash))
@@ -317,7 +311,7 @@ fastImport' repo compression diffalg marks = do
                       -- Either missing (not possible) or non-empty.
                       _ -> return ()
 
-        -- generate Hunk primitive patches from diffing
+        -- generate a Hunk primitive patch from diffing
         diffCurrent :: State p -> TreeIO (State p)
         diffCurrent (InCommit mark ancestors branch start ps info_) = do
           current <- updateHashes
@@ -443,8 +437,7 @@ fastImport' repo compression diffalg marks = do
               liftIO $ putStrLn $ "WARNING: Linearising non-linear ancestry " ++ show list
 
           {- current <- updateHashes -} -- why not?
-          (prims :: FL (PrimOf p) cX cY) <-
-            return $ canonizeFL diffalg $ reverseRL ps
+          (prims :: FL (PrimOf p) cX cY)  <- return $ sortCoalesceFL $ reverseRL ps
           let patch :: Named p cX cY
               patch = infopatch info_ prims
           liftIO $
@@ -622,4 +615,4 @@ parseObject = next' mbObject
                fail $ "Error parsing stream. " ++ err ++ "\nContext: " ++ show ctx
 
 decodePath :: BC.ByteString -> AnchoredPath
-decodePath = unsafeFloatPath . decodeLocale
+decodePath = floatPath . decodeLocale

@@ -26,6 +26,7 @@ import Darcs.UI.Flags
 import qualified Darcs.UI.Options.All as O
 import Darcs.UI.Options ( (?) )
 import Darcs.UI.Commands.Util ( testTentativeAndMaybeExit )
+import Darcs.Repository.Flags ( UpdatePending(..) )
 import Darcs.Repository
     ( Repository
     , AccessType(..)
@@ -140,7 +141,7 @@ applyPatchesFinish :: (RepoPatch p, ApplyState p ~ Tree)
 applyPatchesFinish cmdName opts _repository pw any_applied = do
     withSignalsBlocked $ do
         _repository <-
-            finalizeRepositoryChanges _repository (compress ? opts)
+            finalizeRepositoryChanges _repository YesUpdatePending (compress ? opts)
                 (O.dryRun ? opts)
         void $ applyToWorking _repository (verbosity ? opts) pw
         when (setScriptsExecutable ? opts == O.YesSetScriptsExecutable) $

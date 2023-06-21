@@ -12,16 +12,12 @@ darcs log --repo=http://darcs.net GNUmakefile --last 30
 
 # no _darcs should remain
 test ! -d _darcs
-
 # go to a directory where we have no write access
-trap "chmod u+w $PWD/ro" EXIT
-mkdir ro
-chmod a-w ro
-cd ro
+# (I dearly hope nobody tries to run the tests as root!)
+cd /
 # and try again (with less patches to fetch)
 darcs log --repo=http://darcs.net GNUmakefile --last 3
 # an absolute path should give an error
 not darcs log --repo=http://darcs.net /GNUmakefile --last 3
 # also test that it works without any filename arguments
 darcs log --repo=http://darcs.net --last 1
-cd ..

@@ -155,7 +155,7 @@ darcs init temp1
 cd temp1
 touch foo
 darcs add foo
-darcs rec -m t1 -a
+darcs rec -m t1 -a -A tester
 echo 1 >> foo
 darcs what -s | grep -v No\ changes
 darcs what -l | grep -v No\ changes

@@ -51,6 +51,7 @@ import qualified Darcs.UI.Options.All as O
 import Darcs.Repository
     ( withRepoLock
     , RepoJob(..)
+    , UpdatePending(..)
     , addToPending
     , finalizeRepositoryChanges
     , applyToWorking
@@ -217,7 +218,7 @@ markconflictsCmd fps opts args = do
     addToPending _repository (diffingOpts opts) to_add
     withSignalsBlocked $ do
       _repository <-
-        finalizeRepositoryChanges _repository
+        finalizeRepositoryChanges _repository YesUpdatePending
           (O.compress ? opts) (O.dryRun ? opts)
       unless (O.yes (O.dryRun ? opts)) $
         void $ applyToWorking _repository (verbosity ? opts) to_add

@@ -41,7 +41,7 @@ import Darcs.Patch.Witnesses.Unsafe
 import Darcs.Patch.FileHunk( IsHunk(..) )
 import Darcs.Patch.Invert ( Invert(..) )
 import Darcs.Patch.Inspect ( PatchInspect(..) )
-import Darcs.Patch.Prim.Class ( PrimConstruct(..) )
+import Darcs.Patch.Prim.Class ( PrimConstruct(..), PrimClassify(..) )
 import Darcs.Patch.Prim.FileUUID.ObjectMap
 
 -- -----------------------------------------------------------------------------
@@ -93,6 +93,19 @@ deriving instance Show (Prim wX wY)
 instance Show1 (Prim wX)
 
 instance Show2 Prim
+
+-- TODO: PrimClassify doesn't make sense for FileUUID prims
+instance PrimClassify Prim where
+  primIsAddfile _ = False
+  primIsRmfile _ = False
+  primIsAdddir _ = False
+  primIsRmdir _ = False
+  primIsHunk _ = False
+  primIsMove _ = False
+  primIsBinary _ = False
+  primIsTokReplace _ = False
+  primIsSetpref _ = False
+  is_filepatch _ = Nothing
 
 -- TODO: PrimConstruct makes no sense for FileUUID prims
 instance PrimConstruct Prim where

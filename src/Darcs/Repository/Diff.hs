@@ -54,7 +54,7 @@ import Darcs.Util.Path( AnchoredPath, anchorPath )
 import Darcs.Util.ByteString ( isFunky )
 import Darcs.Patch  ( PrimPatch
                     , hunk
-                    , canonizeFL
+                    , canonize
                     , binary
                     , addfile
                     , rmfile
@@ -63,7 +63,7 @@ import Darcs.Patch  ( PrimPatch
                     , invert
                     )
 import Darcs.Repository.Prefs ( FileType(..) )
-import Darcs.Patch.Witnesses.Ordered ( FL(..), (+>+), concatGapsFL, consGapFL )
+import Darcs.Patch.Witnesses.Ordered ( FL(..), (+>+) )
 import Darcs.Patch.Witnesses.Sealed ( Gap(..) )
 import Darcs.Repository.Flags ( DiffAlgorithm(..) )
 
@@ -91,7 +91,7 @@ treeDiff :: forall m w prim . (Monad m, Gap w, PrimPatch prim)
 treeDiff da ft t1 t2 = do
     (from, to) <- diffTrees t1 t2
     diffs <- mapM (uncurry diff) $ sortBy organise $ zipTrees getDiff from to
-    return $ concatGapsFL diffs
+    return $ foldr (joinGap (+>+)) (emptyGap NilFL) diffs
   where
     -- sort into removes, changes, adds, with removes in reverse-path order
     -- and everything else in forward order
@@ -117,7 +117,7 @@ treeDiff da ft t1 t2 = do
         return $ freeGap (adddir p :>: NilFL)
     diff p (Added b'@(File _)) =
         do diff' <- diff p (Changed (File emptyBlob) b')
-           return $ consGapFL (addfile p) diff'
+           return $ joinGap (:>:) (freeGap (addfile p)) diff'
     diff p (Removed a'@(File _)) =
         do diff' <- diff p (Changed a' (File emptyBlob))
            return $ joinGap (+>+) diff' (freeGap (rmfile p :>: NilFL))
@@ -174,7 +174,7 @@ treeDiff da ft t1 t2 = do
                     = freeGap (line_diff p (linesB $ BLC.init a) (linesB $ BLC.init b))
         | otherwise = freeGap (line_diff p (linesB a) (linesB b))
 
-    line_diff p a b = canonizeFL da (hunk p 1 a b :>: NilFL)
+    line_diff p a b = canonize da (hunk p 1 a b)
 
     diff_to_empty p x | BLC.last x == '\n' = line_diff p (init $ linesB x) []
                       | otherwise = line_diff p (linesB x) [B.empty]

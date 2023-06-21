@@ -43,21 +43,21 @@ import Test.Framework.Providers.QuickCheck2
 --
 
 blobs :: [(AnchoredPath, BLC.ByteString)]
-blobs = [ (unsafeFloatPath "foo_a", BLC.pack "a\n")
-        , (unsafeFloatPath "foo_dir/foo_a", BLC.pack "a\n")
-        , (unsafeFloatPath "foo_dir/foo_b", BLC.pack "b\n")
-        , (unsafeFloatPath "foo_dir/foo_subdir/foo_a", BLC.pack "a\n")
-        , (unsafeFloatPath "foo space/foo\nnewline", BLC.pack "newline\n")
-        , (unsafeFloatPath "foo space/foo\\backslash", BLC.pack "backslash\n")
-        , (unsafeFloatPath "foo space/foo_a", BLC.pack "a\n") ]
+blobs = [ (floatPath "foo_a", BLC.pack "a\n")
+        , (floatPath "foo_dir/foo_a", BLC.pack "a\n")
+        , (floatPath "foo_dir/foo_b", BLC.pack "b\n")
+        , (floatPath "foo_dir/foo_subdir/foo_a", BLC.pack "a\n")
+        , (floatPath "foo space/foo\nnewline", BLC.pack "newline\n")
+        , (floatPath "foo space/foo\\backslash", BLC.pack "backslash\n")
+        , (floatPath "foo space/foo_a", BLC.pack "a\n") ]
 
 files :: [AnchoredPath]
 files = map fst blobs
 
 dirs :: [AnchoredPath]
-dirs = [ unsafeFloatPath "foo_dir"
-       , unsafeFloatPath "foo_dir/foo_subdir"
-       , unsafeFloatPath "foo space" ]
+dirs = [ floatPath "foo_dir"
+       , floatPath "foo_dir/foo_subdir"
+       , floatPath "foo space" ]
 
 emptyStub :: TreeItem IO
 emptyStub = Stub (return emptyTree) Nothing
@@ -152,7 +152,7 @@ index = [ testCase "index versioning" check_index_versions
                exist <- doesFileExist "_darcs/index"
                performGC -- required in win32 to trigger file close
                when exist $ removeFile "_darcs/index"
-               idx <- treeFromIndex =<< updateIndexFrom "_darcs/index" x
+               idx <- treeFromIndex =<< updateIndexFrom "_darcs/index" (Just . darcsTreeHash) x
                return (x, idx)
           check_index = extractRepoAndRun $
             do (pris, idx) <- build_index
@@ -203,48 +203,48 @@ tree = [ testCase "modifyTree" check_modify
           name = unsafeMakeName
           check_modify =
               let t = makeTree [(name "foo", blob "bar")]
-                  modify = modifyTree t (unsafeFloatPath "foo") (Just $ blob "bla")
-               in do x <- readBlob $ fromJust $ findFile t (unsafeFloatPath "foo")
-                     y <- readBlob $ fromJust $ findFile modify (unsafeFloatPath "foo")
+                  modify = modifyTree t (floatPath "foo") (Just $ blob "bla")
+               in do x <- readBlob $ fromJust $ findFile t (floatPath "foo")
+                     y <- readBlob $ fromJust $ findFile modify (floatPath "foo")
                      assertEqual "old version" x (BLC.pack "bar")
                      assertEqual "new version" y (BLC.pack "bla")
                      assertBool "list has foo" $
-                                isJust (Prelude.lookup (unsafeFloatPath "foo") $ list modify)
+                                isJust (Prelude.lookup (floatPath "foo") $ list modify)
                      length (list modify) @?= 1
           check_modify_complex =
               let t = makeTree [ (name "foo", blob "bar")
                                , (name "bar", SubTree t1) ]
                   t1 = makeTree [ (name "foo", blob "bar") ]
-                  modify = modifyTree t (unsafeFloatPath "bar/foo") (Just $ blob "bla")
-               in do foo <- readBlob $ fromJust $ findFile t (unsafeFloatPath "foo")
-                     foo' <- readBlob $ fromJust $ findFile modify (unsafeFloatPath "foo")
+                  modify = modifyTree t (floatPath "bar/foo") (Just $ blob "bla")
+               in do foo <- readBlob $ fromJust $ findFile t (floatPath "foo")
+                     foo' <- readBlob $ fromJust $ findFile modify (floatPath "foo")
                      bar_foo <- readBlob $ fromJust $
-                                findFile t (unsafeFloatPath "bar/foo")
+                                findFile t (floatPath "bar/foo")
                      bar_foo' <- readBlob $ fromJust $
-                                 findFile modify (unsafeFloatPath "bar/foo")
+                                 findFile modify (floatPath "bar/foo")
                      assertEqual "old foo" foo (BLC.pack "bar")
                      assertEqual "old bar/foo" bar_foo (BLC.pack "bar")
                      assertEqual "new foo" foo' (BLC.pack "bar")
                      assertEqual "new bar/foo" bar_foo' (BLC.pack "bla")
                      assertBool "list has bar/foo" $
-                                isJust (Prelude.lookup (unsafeFloatPath "bar/foo") $ list modify)
+                                isJust (Prelude.lookup (floatPath "bar/foo") $ list modify)
                      assertBool "list has foo" $
-                                isJust (Prelude.lookup (unsafeFloatPath "foo") $ list modify)
+                                isJust (Prelude.lookup (floatPath "foo") $ list modify)
                      length (list modify) @?= length (list t)
           check_modify_remove =
               let t1 = makeTree [(name "foo", blob "bar")]
                   t2 :: Tree Identity = makeTree [ (name "foo", blob "bar")
                                                  , (name "bar", SubTree t1) ]
-                  modify1 = modifyTree t1 (unsafeFloatPath "foo") Nothing
-                  modify2 = modifyTree t2 (unsafeFloatPath "bar") Nothing
-                  file = findFile modify1 (unsafeFloatPath "foo")
-                  subtree = findTree modify2 (unsafeFloatPath "bar")
+                  modify1 = modifyTree t1 (floatPath "foo") Nothing
+                  modify2 = modifyTree t2 (floatPath "bar") Nothing
+                  file = findFile modify1 (floatPath "foo")
+                  subtree = findTree modify2 (floatPath "bar")
                in do assertBool "file is gone" (isNothing file)
                      assertBool "subtree is gone" (isNothing subtree)
 
           no_stubs t = null [ () | (_, Stub _ _) <- list t ]
-          path = unsafeFloatPath "substub/substub/file"
-          badpath = unsafeFloatPath "substub/substub/foo"
+          path = floatPath "substub/substub/file"
+          badpath = floatPath "substub/substub/foo"
           check_expand = do
             x <- expand testTree
             assertBool "no stubs in testTree" $ not (no_stubs testTree)
@@ -256,7 +256,7 @@ tree = [ testCase "modifyTree" check_modify
             test_exp <- expand testTree
             t <- expandPath testTree path
             t' <- expandPath test_exp path
-            t'' <- expandPath testTree $ unsafeFloatPath "substub/x"
+            t'' <- expandPath testTree $ floatPath "substub/x"
             assertBool "path not reachable in testTree" $ path `notElem` (map fst $ list testTree)
             assertBool "path reachable in t" $ path `elem` (map fst $ list t)
             assertBool "path reachable in t'" $ path `elem` (map fst $ list t')
@@ -271,24 +271,24 @@ tree = [ testCase "modifyTree" check_modify
                        badpath `notElem` (map fst $ list t')
 
           check_expand_path_sub = do
-            t <- expandPath testTree $ unsafeFloatPath "substub"
-            t' <- expandPath testTree $ unsafeFloatPath "substub/stub"
-            t'' <- expandPath testTree $ unsafeFloatPath "subtree/stub"
+            t <- expandPath testTree $ floatPath "substub"
+            t' <- expandPath testTree $ floatPath "substub/stub"
+            t'' <- expandPath testTree $ floatPath "subtree/stub"
             assertBool "leaf is not a Stub" $
-                isNothing (findTree testTree $ unsafeFloatPath "substub")
-            assertBool "leaf is not a Stub" $ isJust (findTree t $ unsafeFloatPath "substub")
-            assertBool "leaf is not a Stub (2)" $ isJust (findTree t' $ unsafeFloatPath "substub/stub")
-            assertBool "leaf is not a Stub (3)" $ isJust (findTree t'' $ unsafeFloatPath "subtree/stub")
+                isNothing (findTree testTree $ floatPath "substub")
+            assertBool "leaf is not a Stub" $ isJust (findTree t $ floatPath "substub")
+            assertBool "leaf is not a Stub (2)" $ isJust (findTree t' $ floatPath "substub/stub")
+            assertBool "leaf is not a Stub (3)" $ isJust (findTree t'' $ floatPath "subtree/stub")
 
           check_diffTrees = extractRepoAndRun $
                  do Prelude.writeFile "foo_dir/foo_a" "b\n"
                     working_plain <- filter nondarcs `fmap` readPlainTree "."
                     working <- treeFromIndex =<<
-                                 updateIndexFrom "_darcs/index" working_plain
+                                 updateIndexFrom "_darcs/index" (Just . darcsTreeHash) working_plain
                     pristine <- readDarcsPristine "."
                     (working', pristine') <- diffTrees working pristine
-                    let foo_work = findFile working' (unsafeFloatPath "foo_dir/foo_a")
-                        foo_pris = findFile pristine' (unsafeFloatPath "foo_dir/foo_a")
+                    let foo_work = findFile working' (floatPath "foo_dir/foo_a")
+                        foo_pris = findFile pristine' (floatPath "foo_dir/foo_a")
                     working' `shapeEq` pristine'
                              @? show working' ++ " `shapeEq` " ++ show pristine'
                     assertBool "foo_dir/foo_a is in working'" $ isJust foo_work
@@ -347,15 +347,15 @@ monad :: [TF.Test]
 monad = [ testCase "path expansion" check_virtual
         , testCase "rename" check_rename ]
     where check_virtual = virtualTreeMonad run testTree >> return ()
-              where run = do file <- readFile (unsafeFloatPath "substub/substub/file")
-                             file2 <- readFile (unsafeFloatPath "substub/substub/file2")
+              where run = do file <- readFile (floatPath "substub/substub/file")
+                             file2 <- readFile (floatPath "substub/substub/file2")
                              lift $ BLC.unpack file @?= ""
                              lift $ BLC.unpack file2 @?= "foo"
           check_rename = do (_, t) <- virtualTreeMonad run testTree
                             t' <- darcsAddMissingHashes =<< expand t
                             forM_ [ (p, i) | (p, i) <- list t' ] $ \(p,i) ->
                                assertBool ("have hash: " ++ show p) $ itemHash i /= Nothing
-              where run = do rename (unsafeFloatPath "substub/substub/file") (unsafeFloatPath "substub/file2")
+              where run = do rename (floatPath "substub/substub/file") (floatPath "substub/file2")
 
 ----------------------------------
 -- Arbitrary instances

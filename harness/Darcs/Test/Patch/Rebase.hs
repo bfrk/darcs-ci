@@ -21,7 +21,7 @@ import Darcs.Patch.Witnesses.Ordered
 import Darcs.Test.Patch.Arbitrary.Generic
 import Darcs.Test.TestOnly.Instance ()
 
-import Darcs.Util.Path ( unsafeFloatPath )
+import Darcs.Util.Path ( floatPath )
 
 testSuite :: forall p . (RepoPatch p, ArbitraryPrim (PrimOf p)) => [Test]
 testSuite =
@@ -41,7 +41,7 @@ duplicateConflictedEffect =
         unless (all (/= Okay) cStatuses) $
             assertFailure ("unexpected conflicted effect: " ++ show cEffect)
     where
-        corePrim = addfile (unsafeFloatPath "file")
+        corePrim = addfile (floatPath "file")
         rebase :: RebaseChange (PrimOf p) WX WX
         rebase =
           RC (PrimFixup (invert corePrim) :>: NilFL)

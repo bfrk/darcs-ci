@@ -41,7 +41,9 @@ import Darcs.Patch ( PrimOf )
 import Darcs.Patch.Prim.V1 ( Prim )
 import Darcs.Patch.RepoPatch ( RepoPatch )
 
-import Darcs.Repository.Flags ( UMask(..), UseCache(..) )
+import Darcs.Repository.Flags
+    ( UseCache(..), UpdatePending(..), UMask (..)
+    )
 import Darcs.Repository.Format
     ( RepoProperty( Darcs2
                   , Darcs3
@@ -53,7 +55,7 @@ import Darcs.Repository.Format
     , writeProblem
     )
 import Darcs.Repository.Identify ( identifyRepository )
-import Darcs.Repository.Transaction( revertRepositoryChanges )
+import Darcs.Repository.Hashed( revertRepositoryChanges )
 import Darcs.Repository.InternalTypes
     ( Repository
     , AccessType(..)
@@ -277,10 +279,9 @@ runJob patchType hasRebase repo repojob = do
 -- transaction.
 withRepoLock :: UseCache -> UMask -> RepoJob 'RW a -> IO a
 withRepoLock useCache um repojob =
-  withLock lockPath $
-    withRepository useCache $ onRepoJob repojob $ \job repository -> do
-      maybe (return ()) fail $ writeProblem (repoFormat repository)
-      withUMaskFlag um $ revertRepositoryChanges repository >>= job
+  withRepository useCache $ onRepoJob repojob $ \job repository -> do
+    maybe (return ()) fail $ writeProblem (repoFormat repository)
+    withUMaskFlag um $ revertRepositoryChanges repository YesUpdatePending >>= job
 
 -- | run a lock-taking job in an old-fashion repository.
 --   only used by `darcs optimize upgrade`.

@@ -28,6 +28,7 @@
 ## SOFTWARE.
 
 . lib
+abort_windows                   # Skip test on Windows
 
 rm -rf R
 darcs init R
@@ -42,106 +43,124 @@ cd ..
 
 # extended test extracted from the bug report
 
-rm -rf R log
-mkdir log
+extended_test () {
 
-# initialize the repository
-darcs init R
+  rm -rf R log
+  mkdir log
 
-cd R
-echo ImmutableFile > file
-darcs rec -lam init
+  # initialize the repository
+  darcs init R
 
-# add a test file and record the patch
-echo TemporaryFile > maybeFile
-darcs rec -lam 'Add maybeFile'
+  cd R
+  echo ImmutableFile > file
+  darcs rec -lam init
 
-# remove the just added file and check that darcs recognizes the
-# removal
-rm maybeFile
-darcs wh -s > ../log/before-ln-wh-s
-darcs wh -ls > ../log/before-ln-wh-ls
+  # add a test file and record the patch
+  echo TemporaryFile > maybeFile
+  darcs rec -lam 'Add maybeFile'
 
-diff -u ../log/before-ln-wh-s ../log/before-ln-wh-ls
+  # remove the just added file and check that darcs recognizes the
+  # removal
+  rm maybeFile
+  darcs wh -s > ../log/before-ln-wh-s
+  darcs wh -ls > ../log/before-ln-wh-ls
 
-# create a symbolic link with the same name of the just removed
-# file pointing to an existent file (does not need to be in the
-# repodir)
-ln -s file maybeFile
+  diff -u ../log/before-ln-wh-s ../log/before-ln-wh-ls
 
-# now you get different opinions about what changed depending on
-# the use of the '--look-for-adds' option. In both case 'maybeFile'
-# is wrongly reported as changed (the current content of 'maybeFile'
-# is assumed to be the one of the file the link points to), anyway
-# using the '-l' option you also get the right information that
-# 'maybeFile' has been removed.
-darcs wh -s > ../log/after-ln-wh-s
-darcs wh -ls > ../log/after-ln-wh-ls
+  # create a symbolic link with the same name of the just removed
+  # file pointing to an existent file (does not need to be in the
+  # repodir)
+  ln -s file maybeFile
 
-diff -u ../log/before-ln-wh-s ../log/after-ln-wh-s
-diff -u ../log/before-ln-wh-ls ../log/after-ln-wh-ls
+  # now you get different opinions about what changed depending on
+  # the use of the '--look-for-adds' option. In both case 'maybeFile'
+  # is wrongly reported as changed (the current content of 'maybeFile'
+  # is assumed to be the one of the file the link points to), anyway
+  # using the '-l' option you also get the right information that
+  # 'maybeFile' has been removed.
+  darcs wh -s > ../log/after-ln-wh-s
+  darcs wh -ls > ../log/after-ln-wh-ls
 
-# trying to record the changes without the use of '-l' leads to
-# the wrong patch being recorded
-darcs rec -am 'Maybe remove maybeFile'
-darcs log --last 1 -s | not grep 'M ./maybeFile'
+  diff -u ../log/before-ln-wh-s ../log/after-ln-wh-s
+  diff -u ../log/before-ln-wh-ls ../log/after-ln-wh-ls
 
-# unrecord the wrong patch
-darcs unrec --last 1 -a
+  # trying to record the changes without the use of '-l' leads to
+  # the wrong patch being recorded
+  darcs rec -am 'Maybe remove maybeFile'
+  darcs log --last 1 -s | not grep 'M ./maybeFile'
 
-# passing '-l' to the record command leads to the right patch
-# being  recorded.
-darcs rec -lam 'Remove maybeFile'
-darcs log --last 1 -s | grep -F './maybeFile' > ../log/after-record-l
+  # unrecord the wrong patch
+  darcs unrec --last 1 -a
 
-diff -u -w ../log/after-record-l ../log/after-ln-wh-ls
+  # passing '-l' to the record command leads to the right patch
+  # being  recorded.
+  darcs rec -lam 'Remove maybeFile'
+  darcs log --last 1 -s | grep -F './maybeFile' > ../log/after-record-l
 
-# now if you unrecord the last patch the `-l' option does not
-# make a difference anymore
-darcs unrec --last 1 -a
-darcs wh -s > ../log/after-unrec-wh-s
-darcs wh -ls > ../log/after-unrec-wh-ls
+  diff -u -w ../log/after-record-l ../log/after-ln-wh-ls
 
-# use -w to ignore different indentation
-diff -u -w ../log/after-record-l ../log/after-unrec-wh-s
-diff -u -w ../log/after-record-l ../log/after-unrec-wh-ls
+  # now if you unrecord the last patch the `-l' option does not
+  # make a difference anymore
+  darcs unrec --last 1 -a
+  darcs wh -s > ../log/after-unrec-wh-s
+  darcs wh -ls > ../log/after-unrec-wh-ls
 
-# create again the issue, this time giving the file the same
-# content as the file referenced by the link
-echo ImmutableFile > maybeFileThree
-darcs rec -lam 'Add maybeFileThree'
-rm maybeFileThree
+  # use -w to ignore different indentation
+  diff -u -w ../log/after-record-l ../log/after-unrec-wh-s
+  diff -u -w ../log/after-record-l ../log/after-unrec-wh-ls
 
-darcs wh -s > ../log/before-ln-wh-s
-darcs wh -ls > ../log/before-ln-wh-ls
+  # create again the issue, this time giving the file the same
+  # content as the file referenced by the link
+  echo ImmutableFile > maybeFileThree
+  darcs rec -lam 'Add maybeFileThree'
+  rm maybeFileThree
 
-ln -s file maybeFileThree
+  darcs wh -s > ../log/before-ln-wh-s
+  darcs wh -ls > ../log/before-ln-wh-ls
 
-darcs wh -s > ../log/after-ln-wh-s
-darcs wh -ls > ../log/after-ln-wh-ls
+  ln -s file maybeFileThree
 
-diff -u ../log/before-ln-wh-s ../log/after-ln-wh-s
-diff -u ../log/before-ln-wh-ls ../log/after-ln-wh-ls
+  darcs wh -s > ../log/after-ln-wh-s
+  darcs wh -ls > ../log/after-ln-wh-ls
 
-darcs rec -lam 'Remove maybeFileThree'
+  diff -u ../log/before-ln-wh-s ../log/after-ln-wh-s
+  diff -u ../log/before-ln-wh-ls ../log/after-ln-wh-ls
 
-# create again the problem, pointing the symbolic link to a
-# not-existent file
-echo JustAnotherTemporaryFile > maybeFileFour
-darcs rec -lam 'Add maybeFileFour'
-rm maybeFileFour
+  darcs rec -lam 'Remove maybeFileThree'
 
-darcs wh -s > ../log/before-ln-wh-s
-darcs wh -ls > ../log/before-ln-wh-ls
+  # create again the problem, pointing the symbolic link to a
+  # not-existent file
+  echo JustAnotherTemporaryFile > maybeFileFour
+  darcs rec -lam 'Add maybeFileFour'
+  rm maybeFileFour
 
-ln -s not-existent maybeFileFour
+  darcs wh -s > ../log/before-ln-wh-s
+  darcs wh -ls > ../log/before-ln-wh-ls
 
-darcs wh -s > ../log/after-ln-wh-s
-darcs wh -ls > ../log/after-ln-wh-ls
+  ln -s not-existent maybeFileFour
 
-diff -u ../log/before-ln-wh-s ../log/after-ln-wh-s
-diff -u ../log/before-ln-wh-ls ../log/after-ln-wh-ls
+  darcs wh -s > ../log/after-ln-wh-s
+  darcs wh -ls > ../log/after-ln-wh-ls
 
-darcs rec -lam 'Remove maybeFileFour'
+  diff -u ../log/before-ln-wh-s ../log/after-ln-wh-s
+  diff -u ../log/before-ln-wh-ls ../log/after-ln-wh-ls
 
-cd ..
+  darcs rec -lam 'Remove maybeFileFour'
+
+  cd ..
+}
+
+echo ############ --no-ignore-times ################
+
+extended_test
+
+echo ############## --ignore-times #################
+
+restore_defaults () {
+  # delete the last line
+  sed -i '$d' $1/.darcs/defaults
+}
+echo "ALL ignore-times" >> .darcs/defaults
+
+trap "restore_defaults '$PWD'" EXIT
+extended_test

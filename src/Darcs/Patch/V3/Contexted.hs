@@ -42,7 +42,6 @@ import Darcs.Patch.Invert
 import Darcs.Patch.Inspect
 import Darcs.Patch.Merge ( CleanMerge(..) )
 import Darcs.Patch.Read ( ReadPatch(..) )
-import Darcs.Patch.Permutations ( (=\~/=) )
 import Darcs.Util.Parser ( Parser, lexString )
 import Darcs.Patch.Show ( ShowPatchBasic(..), ShowPatchFor )
 import Darcs.Patch.Viewing ()
@@ -77,6 +76,15 @@ data Contexted p wX where
 -- context. (This assumes witnesses aren't coerced in an unsafe manner.)
 instance Ident p => Eq (Contexted p wX) where
   c1 == c2 = ctxId c1 == ctxId c2
+{-
+-- Comparing the contexts is inefficient and unnecessary
+-- if the patches have identities, see 'prop_ctxEq'.
+instance (Commute p, Eq2 p) => Eq (Contexted p wX) where
+  Contexted cx x == Contexted cy y
+    | IsEq <- cx =\/= cy
+    , IsEq <- x =\/= y = True
+    | otherwise = False
+-}
 
 instance Ident p => Ord (Contexted p wX) where
   cp `compare` cq = ctxId cp `compare` ctxId cq
@@ -118,12 +126,11 @@ prop_ctxNotInv (Contexted NilFL _) = True
 prop_ctxNotInv (Contexted (p :>: ps) _) =
   invertId (ident p) `notElem` mapFL ident ps
 
--- | This property states that equal 'Contexted' patches have equal content
--- up to reorderings of the context patches.
+-- This property states that equal 'Contexted' patches have equal content.
 prop_ctxEq :: (Commute p, Eq2 p, Ident p) => Contexted p wX -> Contexted p wX -> Bool
 prop_ctxEq cp@(Contexted ps p) cq@(Contexted qs q)
   | cp == cq =
-      case ps =\~/= qs of
+      case ps =\/= qs of
         IsEq -> isIsEq (p =\/= q)
         NotEq -> False
 prop_ctxEq _ _ = True

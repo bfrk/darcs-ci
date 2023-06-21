@@ -38,7 +38,7 @@ import Darcs.UI.Commands.Util ( printDryRunMessageAndExit, checkUnrelatedRepos )
 import Darcs.UI.Completion ( prefArgs )
 import Darcs.UI.Flags
     ( DarcsFlag
-    , isInteractive, verbosity
+    , isInteractive, verbosity, withContext
     , xmlOutput, selectDeps, applyAs
     , changesReverse, dryRun, useCache, remoteRepos, setDefault, fixUrl )
 import Darcs.UI.Options ( parseFlags, (?), (^) )
@@ -57,7 +57,7 @@ import Darcs.Repository
 import Darcs.Patch ( RepoPatch, description )
 import Darcs.Patch.Apply( ApplyState )
 import Darcs.Patch.Witnesses.Ordered
-    ( Fork(..), (:>)(..), RL, FL, nullRL,
+    ( (:>)(..), RL, FL, nullRL,
     nullFL, reverseFL, mapFL_FL, mapRL )
 import Darcs.Repository.Prefs ( addRepoSource, getPreflist )
 import Darcs.UI.External ( signString, darcsProgram
@@ -72,7 +72,7 @@ import Darcs.UI.SelectChanges
     , runSelection
     )
 import qualified Darcs.UI.SelectChanges as S ( PatchSelectionOptions (..) )
-import Darcs.Patch.Depends ( findCommon, countUsThem )
+import Darcs.Patch.Depends ( findCommonWithThem, countUsThem )
 import Darcs.Patch.Bundle ( makeBundle )
 import Darcs.Patch.Show( ShowPatch )
 import Darcs.Patch.Set ( PatchSet, Origin )
@@ -164,7 +164,7 @@ pushCmd (_, o) opts [unfixedrepodir] = do
   when (repodir == here) $ die "Cannot push from repository to itself."
   bundle <-
     withRepository (useCache ? opts) $ RepoJob $ prepareBundle opts repodir
-  sbundle <- signString (O.sign ? opts) bundle
+  sbundle <- signString (parseFlags O.sign opts) bundle
   let body =
         if isValidLocalPath repodir
           then sbundle
@@ -178,7 +178,7 @@ pushCmd (_, o) opts [unfixedrepodir] = do
 pushCmd _ _ [] = die "No default repository to push to, please specify one."
 pushCmd _ _ _ = die "Cannot push to more than one repo."
 
-prepareBundle :: (RepoPatch p, ApplyState p ~ Tree)
+prepareBundle :: forall rt p wR wU. (RepoPatch p, ApplyState p ~ Tree)
               => [DarcsFlag] -> String -> Repository rt p wU wR -> IO Doc
 prepareBundle opts repodir repository = do
   old_default <- getPreflist "defaultrepo"
@@ -189,18 +189,18 @@ prepareBundle opts repodir repository = do
   addRepoSource repodir (dryRun ? opts) (remoteRepos ? opts)
       (setDefault False opts) (O.inheritDefault ? opts) (isInteractive True opts)
   us <- readPatches repository
-  Fork common only_us _ <- return $ findCommon us them
+  common :> only_us <- return $ findCommonWithThem us them
   prePushChatter opts us (reverseFL only_us) them
   let direction = if changesReverse ? opts then FirstReversed else First
       selection_config = selectionConfig direction "push" (pushPatchSelOpts opts) Nothing Nothing
   runSelection only_us selection_config
                    >>= bundlePatches opts common
 
-prePushChatter :: (RepoPatch p, ShowPatch a)
-               => [DarcsFlag] -> PatchSet p Origin wX
-               -> RL a wC wX -> PatchSet p Origin wY -> IO ()
+prePushChatter :: forall p a wX wY wC . (RepoPatch p, ShowPatch a) =>
+                 [DarcsFlag] -> PatchSet p Origin wX ->
+                 RL a wC wX -> PatchSet p Origin wY -> IO ()
 prePushChatter opts us only_us them = do
-  checkUnrelatedRepos (O.allowUnrelatedRepos ? opts) us them
+  checkUnrelatedRepos (parseFlags O.allowUnrelatedRepos opts) us them
   let num_to_pull = snd $ countUsThem us them
       pull_reminder = if num_to_pull > 0
                       then text $ "The remote repository has " ++ show num_to_pull
@@ -212,7 +212,7 @@ prePushChatter opts us only_us them = do
       putInfo opts $ text "No recorded local patches to push!"
       exitSuccess
 
-bundlePatches :: (RepoPatch p, ApplyState p ~ Tree)
+bundlePatches :: forall t p wZ wW wA. (RepoPatch p, ApplyState p ~ Tree)
               => [DarcsFlag] -> PatchSet p wA wZ
               -> (FL (PatchInfoAnd p) :> t) wZ wW
               -> IO Doc
@@ -240,17 +240,18 @@ checkOptionsSanity opts repodir =
        let lprot = takeWhile (/= ':') repodir
            msg = text ("Pushing to "++lprot++" URLs is not supported.")
        abortRun opts msg
-   else when (O.sign ? opts /= O.NoSign) $
+   else when (parseFlags O.sign opts /= O.NoSign) $
         abortRun opts $ text "Signing doesn't make sense for local repositories or when pushing over ssh."
 
 
 pushPatchSelOpts :: [DarcsFlag] -> S.PatchSelectionOptions
 pushPatchSelOpts flags = S.PatchSelectionOptions
     { S.verbosity = verbosity ? flags
-    , S.matchFlags = O.matchSeveral ? flags
+    , S.matchFlags = parseFlags O.matchSeveral flags
     , S.interactive = isInteractive True flags
     , S.selectDeps = selectDeps ? flags
     , S.withSummary = O.withSummary ? flags
+    , S.withContext = withContext ? flags
     }
 
 remoteApply :: [DarcsFlag] -> String -> Doc -> IO ExitCode

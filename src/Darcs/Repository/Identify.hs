@@ -16,10 +16,12 @@ module Darcs.Repository.Identify
     , amNotInRepository
     , amInHashedRepository
     , seekRepo
+    , findAllReposInDir
     ) where
 
 import Darcs.Prelude
 
+import Control.Monad ( forM )
 import Darcs.Repository.Format ( tryIdentifyRepoFormat
                                , readProblem
                                , transferProblem
@@ -28,7 +30,9 @@ import System.Directory ( doesDirectoryExist
                         , setCurrentDirectory
                         , createDirectoryIfMissing
                         , doesFileExist
+                        , listDirectory
                         )
+import System.FilePath.Posix ( (</>) )
 import System.IO ( hPutStrLn, stderr )
 import System.IO.Error ( catchIOError )
 import Data.Maybe ( fromMaybe )
@@ -57,6 +61,7 @@ import Darcs.Repository.InternalTypes
     , Repository
     , mkRepo
     , repoFormat
+    , repoPristineType
     )
 import Darcs.Util.Global ( darcsdir )
 
@@ -221,3 +226,24 @@ findRepository workrepo =
     _ -> fromMaybe (Right ()) <$> seekRepo
   `catchIOError` \e ->
     return (Left (show e))
+
+-- | @findAllReposInDir topDir@ returns all paths to repositories under @topDir@.
+findAllReposInDir :: FilePath -> IO [FilePath]
+findAllReposInDir topDir = do
+  isDir <- doesDirectoryExist topDir
+  if isDir
+    then do
+      status <- maybeIdentifyRepository NoUseCache topDir
+      case status of
+        GoodRepository repo
+          | HashedPristine <- repoPristineType repo -> return [topDir]
+          | otherwise -> return [] -- old fashioned or broken repo
+        _             -> getRecursiveDarcsRepos' topDir
+    else return []
+  where
+    getRecursiveDarcsRepos' d = do
+      names <- listDirectory d
+      paths <- forM names $ \name -> do
+        let path = d </> name
+        findAllReposInDir path
+      return (concat paths)

@@ -67,7 +67,7 @@ import Darcs.Patch.Witnesses.Sealed ( Sealed(Sealed) )
 import Darcs.Patch.Read ( peekfor )
 import Darcs.Patch.Show ( ShowPatchBasic, ShowPatchFor )
 import Darcs.Patch.Viewing ()
-import Darcs.Patch.Permutations ( (=\~/=), removeFL, commuteWhatWeCanFL )
+import Darcs.Patch.Permutations ( removeFL, commuteWhatWeCanFL )
 import Darcs.Util.Printer ( Doc, empty, vcat, hiddenPrefix, blueText, ($$) )
 import qualified Data.ByteString.Char8 as BC ( pack, singleton )
 
@@ -126,7 +126,7 @@ readNon = do Sealed ps <- readPatch'
 instance (Commute p, Eq2 p, Eq2 (PrimOf p)) => Eq (Non p wX) where
     Non (cx :: FL p wX wY1) (x :: PrimOf p wY1 wZ1)
      == Non (cy :: FL p wX wY2) (y :: PrimOf p wY2 wZ2) =
-      case cx =\~/= cy of
+      case cx =\/= cy of
         IsEq -> case x =\/= y :: EqCheck wZ1 wZ2 of
                   IsEq -> True
                   NotEq -> False

@@ -84,6 +84,7 @@ import Darcs.Patch.Witnesses.Ordered
     , (:\/:)(..)
     , FL(..)
     , RL(..)
+    , eqFL
     , mapFL
     )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(..) )
@@ -116,7 +117,7 @@ inverseComposition (Pair (a :> b)) =
   let ab = a:>:b:>:NilFL
       iab = invert ab
       ibia = invert b:>:invert a:>:NilFL
-  in case iab =\/= ibia of
+  in case eqFL iab ibia of
     IsEq -> succeeded
     NotEq ->
       failed $ redText "ab^ /= b^a^, where"

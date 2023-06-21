@@ -233,15 +233,11 @@ commandAlias alias msuper command =
     cmdName = unwords . map commandName . maybe id (:) msuper $ [command]
 
 commandStub :: String -> Doc -> String -> DarcsCommand -> DarcsCommand
-commandStub n h d command@DarcsCommand {} =
-  command
-    { commandName = n
-    , commandHelp = h
-    , commandDescription = d
-    , commandCommand = \_ _ _ -> viewDoc h
-    }
-commandStub _ _ _ SuperCommand {} =
-  error "commandStub called with SuperCommand argument"
+commandStub n h d c = c { commandName = n
+                        , commandHelp = h
+                        , commandDescription = d
+                        , commandCommand = \_ _ _ -> viewDoc h
+                        }
 
 superName :: Maybe (DarcsCommand) -> String
 superName Nothing  = ""
@@ -327,12 +323,10 @@ setEnvDarcsFiles ps = do
     setEnvCautiously "DARCS_FILES" $ unlines filepaths
 
 -- | Set some environment variable to the given value, unless said value is
--- longer than 100K characters, in which case do nothing.
+-- longer than 10K characters, in which case do nothing.
 setEnvCautiously :: String -> String -> IO ()
 setEnvCautiously e v
-    | toobig (100 * 1024) v =
-        hPutDocLn stderr $ text $
-          "Warning: not setting env var " ++ e ++ " (would exceed 100K)"
+    | toobig (10 * 1024) v = return ()
     | otherwise =
         setEnv e v `catchIOError` (\_ -> setEnv e (decodeLocale (packStringToUTF8 v)))
   where

@@ -48,13 +48,11 @@ module Darcs.Util.Global
 import Darcs.Prelude
 
 import Control.Monad ( when )
-import Data.IORef ( IORef, modifyIORef, newIORef, readIORef, writeIORef )
-import Data.Time.Clock.System ( getSystemTime, systemToTAITime )
-import Data.Time.Clock.TAI ( AbsoluteTime, diffAbsoluteTime )
-import Data.Time.Format ( defaultTimeLocale, formatTime )
+import Data.IORef ( modifyIORef, IORef, newIORef, readIORef, writeIORef )
+import System.IO.Unsafe (unsafePerformIO)
+import System.IO ( hPutStrLn, hPutStr, stderr )
+import System.Time ( calendarTimeToString, toCalendarTime, getClockTime )
 import System.FilePath.Posix ( combine, (<.>) )
-import System.IO ( hPutStr, hPutStrLn, stderr )
-import System.IO.Unsafe ( unsafePerformIO )
 
 
 -- Write-once-read-many global variables make it easier to implement flags, such
@@ -85,24 +83,24 @@ debugMessage m = whenDebugMode $ do putTiming; hPutStrLn stderr m
 
 
 putTiming :: IO ()
-putTiming = do
-  readIORef _timingsMode >>= \case
-    Nothing -> return ()
-    Just start -> do
-      now <- systemToTAITime <$> getSystemTime
-      hPutStr stderr (format (diffAbsoluteTime now start))
-  where
-    -- mm:ss.micros, similar to `ts -s "%m:%.S"`
-    format = formatTime defaultTimeLocale "%02m:%06ES "
+putTiming = when timingsMode $ do
+    t <- getClockTime >>= toCalendarTime
+    hPutStr stderr (calendarTimeToString t++": ")
 
-_timingsMode :: IORef (Maybe AbsoluteTime)
-_timingsMode = unsafePerformIO $ newIORef Nothing
+
+_timingsMode :: IORef Bool
+_timingsMode = unsafePerformIO $ newIORef False
 {-# NOINLINE _timingsMode #-}
 
+
 setTimingsMode :: IO ()
-setTimingsMode = do
-  start <- systemToTAITime <$> getSystemTime
-  writeIORef _timingsMode (Just start)
+setTimingsMode = writeIORef _timingsMode True
+
+
+timingsMode :: Bool
+timingsMode = unsafePerformIO $ readIORef _timingsMode
+{-# NOINLINE timingsMode #-}
+
 
 type CRCWarningList = [FilePath]
 _crcWarningList :: IORef CRCWarningList

@@ -30,7 +30,6 @@ cd ..
 # try to move a file that we don't have the right to do
 darcs get temp1 temp2 --to-patch aa
 cd temp2
-trap "test -d $PWD/a && chmod u+w $PWD/a" EXIT
 chmod u-w a
 darcs pull -a
 test -e b

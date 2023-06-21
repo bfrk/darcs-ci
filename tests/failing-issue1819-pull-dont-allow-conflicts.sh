@@ -16,26 +16,23 @@ for repo in R S; do
     cd ..
 done
 
-rm -rf S0
 darcs get S S0
 cd S0
-darcs pull --no-pause-for-gui --all --allow-conflicts --external-merge 'cp %2 %o' ../R
+# the 'echo |' is for the external merge prompt 'hit return to continue' prompt
+echo | darcs pull --all --allow-conflicts --external-merge 'cp %2 %o' ../R
 cd ..
 
-rm -rf S0b
 darcs get S S0b
 cd S0b
-not darcs pull --no-pause-for-gui --all --dont-allow-conflicts ../R
+echo | not darcs pull --all --dont-allow-conflicts ../R
 cd ..
 
-rm -rf S1
 darcs get S S1
 cd S1
-not darcs pull --no-pause-for-gui --all --external-merge 'cp %2 %o' --dont-allow-conflicts ../R
+echo | not darcs pull --all --external-merge 'cp %2 %o' --dont-allow-conflicts ../R
 cd ..
 
-rm -rf S2
 darcs get S S2
 cd S2
-not darcs pull --no-pause-for-gui --all --dont-allow-conflicts --external-merge 'cp %2 %o' ../R
+echo | not darcs pull --all --dont-allow-conflicts --external-merge 'cp %2 %o' ../R
 cd ..

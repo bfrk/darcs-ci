@@ -177,9 +177,9 @@ instance PrimPatch prim => ShowPatch (RebaseChange prim) where
     content = rebaseChangeContent
 
 -- TODO this is a dummy instance that does not actually show context
-instance (Apply prim, ShowPatchBasic prim, Invert prim, PatchListFormat prim)
+instance (ShowPatchBasic prim, Invert prim, PatchListFormat prim)
   => ShowContextPatch (RebaseChange prim) where
-    showContextPatch f p = apply p >> return (showPatch f p)
+    showContextPatch f p = return $ showPatch f p
 
 instance (ReadPatch prim, PatchListFormat prim) => ReadPatch (RebaseChange prim) where
   readPatch' = do

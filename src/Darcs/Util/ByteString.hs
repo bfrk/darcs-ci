@@ -63,7 +63,6 @@ import qualified Data.ByteString.Lazy       as BL
 import Data.ByteString (intercalate)
 import qualified Data.ByteString.Base16     as B16
 
-import System.Directory ( getFileSize )
 import System.IO ( withFile, IOMode(ReadMode)
                  , hSeek, SeekMode(SeekFromEnd,AbsoluteSeek)
                  , openBinaryFile, hClose, Handle, hGetChar
@@ -89,6 +88,7 @@ import Darcs.Util.Global ( addCRCWarning )
 import System.IO.MMap( mmapFileByteString )
 #endif
 import System.Mem( performGC )
+import System.Posix.Files( fileSize, getSymbolicLinkStatus )
 
 ------------------------------------------------------------------------
 -- A locale-independent isspace(3) so patches are interpreted the same everywhere.
@@ -154,15 +154,12 @@ breakLastPS c p = case BC.elemIndexEnd c p of
 -- linesPS and unlinesPS
 
 {-# INLINE linesPS #-}
--- | Split the input into lines, that is, sections separated by '\n' bytes,
--- unless it is empty, in which case the result has one empty line.
 linesPS :: B.ByteString -> [B.ByteString]
 linesPS ps
      | B.null ps = [B.empty]
      | otherwise = BC.split '\n' ps
 
 {-# INLINE unlinesPS #-}
--- | Concatenate the inputs with '\n' bytes in interspersed.
 unlinesPS :: [B.ByteString] -> B.ByteString
 unlinesPS = B.concat . intersperse (BC.singleton '\n')
 
@@ -282,7 +279,7 @@ readSegment :: FileSegment -> IO BL.ByteString
 readSegment (f,range) = do
     bs <- tryToRead
        `catchIOError` (\_ -> do
-                     size <- getFileSize f
+                     size <- fileSize `fmap` getSymbolicLinkStatus f
                      if size == 0
                         then return B.empty
                         else performGC >> tryToRead)
@@ -316,7 +313,7 @@ mmapFilePS = B.readFile
 mmapFilePS f =
   mmapFileByteString f Nothing
    `catchIOError` (\_ -> do
-                     size <- getFileSize f
+                     size <- fileSize `fmap` getSymbolicLinkStatus f
                      if size == 0
                         then return B.empty
                         else performGC >> mmapFileByteString f Nothing)
@@ -344,40 +341,25 @@ propHexConversion x = fromHex2PS (fromPS2Hex x) == Right x
 -- betweenLinesPS
 
 -- | Return the B.ByteString between the two lines given,
--- or Nothing if either of them does not appear.
---
--- Precondition: the first two arguments (start and end line)
--- must be non-empty and contain no newline bytes.
+-- or Nothing if they do not appear.
 betweenLinesPS :: B.ByteString -> B.ByteString -> B.ByteString
                -> Maybe B.ByteString
-betweenLinesPS start end ps = do
-  at_start <- findLine 0 start ps
-  at_end <- findLine 0 end (B.drop (at_start + B.length start) ps)
-  -- the "drop 1" eliminates the newline after start
-  -- (a trailing newline before end, if present, is retained)
-  return $ B.drop 1 $ B.take at_end $ B.drop (at_start + B.length start) ps
+betweenLinesPS start end ps =
+  case B.breakSubstring start_line ps of
+    (before_start, at_start)
+      | not (B.null at_start)
+      , B.null before_start || BC.last before_start == '\n' ->
+          case B.breakSubstring end_line (B.drop (B.length start_line) at_start) of
+            (before_end, at_end)
+              | not (B.null at_end)
+              , B.null before_end || BC.last before_end == '\n' -> Just before_end
+              | otherwise -> Nothing
+      | otherwise -> Nothing
   where
-    -- find index of substring x if it is a full line
-    findLine i x s =
-      case B.breakSubstring x s of
-        (before, at)
-          | B.null at -> Nothing -- not found at all
-          | not (B.null after) && BC.head after /= '\n' -> do
-              -- found but not followed by newline
-              next_nl <- BC.elemIndex '\n' after
-              findLine (i + i_after + next_nl) x (B.drop next_nl after)
-          | not (B.null before) && BC.last before /= '\n' ->
-              -- found, followed by newline but not preceded by newline
-              findLine (i + i_after) x after
-          | otherwise -> Just (i + i_before)
-          where
-            after = B.drop l_x at
-            l_x = B.length x
-            i_before = B.length before
-            i_after = i_before + l_x
+    start_line = BC.snoc start '\n'
+    end_line = BC.snoc end '\n'
 
--- | Simpler but less efficient variant of 'betweenLinesPS'. Note
--- that this is only equivalent under the stated preconditions.
+-- | Simpler but less efficient variant of 'betweenLinesPS'.
 spec_betweenLinesPS :: B.ByteString -> B.ByteString -> B.ByteString
                     -> Maybe B.ByteString
 spec_betweenLinesPS start end ps =
@@ -385,7 +367,7 @@ spec_betweenLinesPS start end ps =
     (_, _:after_start) ->
       case break (end ==) after_start of
         (before_end, _:_) ->
-          Just $ if null before_end then B.empty else BC.unlines before_end
+          Just $ BC.unlines before_end
         _ -> Nothing
     _ -> Nothing
 

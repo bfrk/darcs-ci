@@ -68,7 +68,7 @@ repo entries =
 
 example1
   :: forall p
-   . (PrimConstruct (OnlyPrim p), ModelOf p ~ V1Model)
+   . (FromPrim p, PrimConstruct (OnlyPrim p), ModelOf p ~ V1Model)
    => Sealed2 (WithStartState2 (MergeableSequence (Named p)))
 example1 =
   Sealed2
@@ -88,7 +88,7 @@ example1 =
 
 example2
   :: forall p
-   . (PrimConstruct (OnlyPrim p), ModelOf p ~ V1Model)
+   . (FromPrim p, PrimConstruct (OnlyPrim p), ModelOf p ~ V1Model)
    => Sealed2 (WithStartState2 (MergeableSequence (Named p)))
 example2 =
   let s3,s4 :: forall s . IsString s => [s]
@@ -119,7 +119,7 @@ example2 =
 
 example3
   :: forall p
-   . (PrimConstruct (OnlyPrim p), ModelOf p ~ V1Model)
+   . (FromPrim p, PrimConstruct (OnlyPrim p), ModelOf p ~ V1Model)
    => Sealed2 (WithStartState2 (MergeableSequence (Named p)))
 example3 =
   let
@@ -198,7 +198,7 @@ example4guts =
 
 example4
   :: forall p
-   . (PrimConstruct (OnlyPrim p), ModelOf p ~ V1Model)
+   . (FromPrim p, PrimConstruct (OnlyPrim p), ModelOf p ~ V1Model)
    => Sealed2 (WithStartState2 (MergeableSequence (Named p)))
 example4 =
   case example4guts @p of

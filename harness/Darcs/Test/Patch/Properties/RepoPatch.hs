@@ -19,18 +19,17 @@ import Darcs.Test.Patch.Merge.Checked ( CheckedMerge )
 import Darcs.Test.Patch.WithState
 import Darcs.Test.Patch.RepoModel ( RepoModel, repoApply, showModel, eqModel, RepoState
                                   , Fail, maybeFail, ModelOf )
-import Darcs.Test.Util.TestResult ( TestResult, failed, rejected, succeeded )
+import Darcs.Test.Util.TestResult ( TestResult, succeeded, failed )
 
 import Darcs.Util.Printer ( text, redText, ($$), vsep )
 
-import Darcs.Patch.Conflict ( Conflict(..), ConflictDetails(..), Unravelled )
+import Darcs.Patch.Conflict ( Conflict(..), ConflictDetails(..) )
 import Darcs.Patch.Apply ( Apply(..) )
 import Darcs.Patch.Merge ( Merge, mergeList )
-import Darcs.Patch.Permutations ( permutationsRL, (=\~/=) )
-import Darcs.Patch.RepoPatch ( Commute, RepoPatch )
+import Darcs.Patch.Permutations ( permutationsRL )
+import Darcs.Patch.RepoPatch ( RepoPatch )
 import Darcs.Patch.Show ( displayPatch )
 
-import Darcs.Patch.Witnesses.Eq ( Eq2, isIsEq )
 import Darcs.Patch.Witnesses.Ordered ( RL(..) )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(..), unseal, Sealed2(..) )
 import Darcs.Patch.Witnesses.Show ( Show2 )
@@ -85,60 +84,36 @@ propConsistentReorderings :: ( RepoPatch p
 propConsistentReorderings (Sealed2 (WithStartState2 start ms)) =
   case mapM (repoApply start) $ permutationsRL ps of
     Left e -> failed $ redText "could not apply all reorderings:" $$ text (show e)
-    Right [] -> error "we should have at least one permutation!"
-    Right [_] -> rejected -- only one permutation -> nothing to test
     Right results -> eql results
   where
-    eql [] = error "impossible"
+    eql [] = succeeded
     eql [_] = succeeded
     eql (r1:r2:rs)
-      | r1 `eqModel` r2 = eql (r2:rs)
-      | otherwise =
+      | r1 `eqModel` r2 =
           failed
           $ redText "result states differ: r1="
           $$ text (showModel r1)
           $$ redText "r2="
           $$ text (showModel r2)
+      | otherwise = eql (r2:rs)
     ps = mergeableSequenceToRL ms
 
 -- | This property states that the standard conflict resolutions for a
 -- sequence of patches are independent of any reordering of the sequence.
 propResolutionsOrderIndependent :: RepoPatch p => RL p wX wY -> TestResult
-propResolutionsOrderIndependent ps =
-    check $ map withConflictParts pss
+propResolutionsOrderIndependent patches =
+    eql $ map (catMaybes . map conflictMangled . resolveConflicts NilRL) $ permutationsRL patches
   where
-    withConflictParts qs =
-      (Sealed qs, map conflictParts $ resolveConflicts NilRL qs)
-    pss = permutationsRL ps
-    check [] = error "we should have at least one permutation!"
-    check [_] = rejected
-    check xs = eql xs
-    eql [] = error "impossible"
+    eql [] = succeeded
     eql [_] = succeeded
-    eql ((ps1,r1):(ps2,r2):rs)
-      | listEqBy eqUnravelled r1 r2 = eql ((ps2,r2):rs)
-      | otherwise =
-          failed $ vsep
-            [ redText "resolutions differ: r1="
-            , text (show r1)
-            , redText "r2="
-            , text (show r2)
-            , text "for patches"
-            , unseal displayPatch ps1
-            , text "versus"
-            , unseal displayPatch ps2
-            ]
-
--- | Equality for 'Unravelled' is modulo order of patches.
-eqUnravelled :: (Commute p, Eq2 p) => Unravelled p wX -> Unravelled p wX -> Bool
-eqUnravelled = listEqBy eq where
-  eq (Sealed ps) (Sealed qs) = isIsEq $ ps =\~/= qs
-
--- | Generic list equality with explicitly given comparison for elements.
-listEqBy :: (a -> a -> Bool) -> [a] -> [a] -> Bool
-listEqBy _ [] [] = True
-listEqBy eq (x:xs) (y:ys) = x `eq` y && listEqBy eq xs ys
-listEqBy _ _ _ = False
+    eql (r1:r2:rs)
+      | r1 /= r2 =
+          failed
+            $ redText "resolutions differ: r1="
+            $$ vsep (map (unseal displayPatch) r1)
+            $$ redText "r2="
+            $$ vsep (map (unseal displayPatch) r2)
+      | otherwise = eql (r2:rs)
 
 -- | This property states that the standard conflict resolutions for a
 -- sequence of patches do not themselves conflict with each other.

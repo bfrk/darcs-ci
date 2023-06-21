@@ -97,7 +97,7 @@ withManualRebaseUpdate r subFunc = do
       writeTentativeRebase r' (simplifyPushes MyersDiff fixups susp)
     return (r', x)
 
-checkOldStyleRebaseStatus :: Repository rt p wU wR -> IO ()
+checkOldStyleRebaseStatus :: RepoPatch p => Repository rt p wU wR -> IO ()
 checkOldStyleRebaseStatus repo = do
   let rf = repoFormat repo
   when (formatHas RebaseInProgress rf) $ do

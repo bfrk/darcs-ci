@@ -31,7 +31,7 @@ import Data.Foldable ( traverse_ )
 import System.Directory ( removeFile )
 import System.Exit ( ExitCode(..), exitFailure, exitSuccess )
 
-import Darcs.Patch ( PrimOf, RepoPatch, canonizeFL, summaryFL )
+import Darcs.Patch ( PrimOf, RepoPatch, sortCoalesceFL )
 import Darcs.Patch.Apply ( ApplyState )
 import Darcs.Patch.Info ( PatchInfo, patchinfo )
 import Darcs.Patch.Named ( adddeps, infopatch )
@@ -46,7 +46,6 @@ import Darcs.Repository
     , finalizeRepositoryChanges
     , readPendingAndWorking
     , readPristine
-    , readPatches
     , tentativelyAddPatch
     , tentativelyRemoveFromPW
     , withRepoLock
@@ -200,6 +199,7 @@ record = DarcsCommand
       ^ O.lookforreplaces
       ^ O.lookformoves
       ^ O.repoDir
+      ^ O.withContext
       ^ O.diffAlgorithm
     advancedOpts
       = O.logfile
@@ -264,21 +264,19 @@ doRecord repository cfg files pw@(pending :> working) = do
     date <- getDate (O.pipe ? cfg)
     my_author <- getAuthor (O.author ? cfg) (O.pipe ? cfg)
     debugMessage "I'm slurping the repository."
+    pristine <- readPristine repository
     debugMessage "About to select changes..."
-    let da = O.diffAlgorithm ? cfg
-    (chs :> _ ) <- runInvertibleSelection (canonizeFL da $ pending +>+ working) $
+    (chs :> _ ) <- runInvertibleSelection (sortCoalesceFL $ pending +>+ working) $
                       selectionConfigPrim
                           First "record" (patchSelOpts cfg)
                           (Just (primSplitter (O.diffAlgorithm ? cfg)))
-                          files
+                          files (Just pristine)
     when (not (O.askDeps ? cfg) && nullFL chs) $
               do putStrLn "Ok, if you don't want to record anything, that's fine!"
                  exitSuccess
     handleJust onlySuccessfulExits (\_ -> return ()) $
              do deps <- if O.askDeps ? cfg
-                        then do
-                          patches <- readPatches repository
-                          askAboutDepends patches chs (patchSelOpts cfg) []
+                        then askAboutDepends repository chs (patchSelOpts cfg) []
                         else return []
                 when (O.askDeps ? cfg) $ debugMessage "I've asked about dependencies."
                 if nullFL chs && null deps
@@ -287,7 +285,7 @@ doRecord repository cfg files pw@(pending :> working) = do
                           (name, my_log, logf) <-
                             getLog (O.patchname ? cfg) (O.pipe ? cfg)
                               (O.logfile ? cfg) (O.askLongComment ? cfg)
-                              Nothing (summaryFL chs)
+                              Nothing chs
                           debugMessage ("Patch name as received from getLog: " ++ show (map ord name))
                           doActualRecord repository cfg name date my_author my_log logf deps chs pw
 
@@ -302,7 +300,7 @@ doActualRecord _repository cfg name date my_author my_log logf deps chs
       (pending :> working) = do
     debugMessage "Writing the patch file..."
     myinfo <- patchinfo date name my_author my_log
-    let mypatch = infopatch myinfo $ progressFL "Writing changes" chs
+    let mypatch = infopatch myinfo $ progressFL "Writing changes:" chs
     let pia = n2pia $ adddeps mypatch deps
     _repository <-
       tentativelyAddPatch _repository (O.compress ? cfg) (O.verbosity ? cfg)
@@ -313,7 +311,7 @@ doActualRecord _repository cfg name date my_author my_log logf deps chs
       "record it" (Just failuremessage)
     tentativelyRemoveFromPW _repository chs pending working
     _repository <-
-      finalizeRepositoryChanges _repository (O.compress ? cfg) (O.dryRun ? cfg)
+      finalizeRepositoryChanges _repository YesUpdatePending (O.compress ? cfg) (O.dryRun ? cfg)
       `clarifyErrors` failuremessage
     debugMessage "Syncing timestamps..."
     removeLogFile logf
@@ -343,6 +341,7 @@ patchSelOpts cfg = S.PatchSelectionOptions
     , S.interactive = isInteractive cfg
     , S.selectDeps = O.PromptDeps -- option not supported, use default
     , S.withSummary = O.NoSummary -- option not supported, use default
+    , S.withContext = O.withContext ? cfg
     }
 
 isInteractive :: Config -> Bool

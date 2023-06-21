@@ -16,21 +16,22 @@
 --  Boston, MA 02110-1301, USA.
 
 {-# LANGUAGE OverloadedStrings #-}
-{-# OPTIONS_GHC -Wno-incomplete-record-updates #-}
 
 module Darcs.UI.Commands.Optimize ( optimize ) where
 
 import Darcs.Prelude
 
 import Control.Monad ( when, unless, forM_ )
+import Data.List ( nub )
+import Data.Maybe ( fromJust )
 import System.Directory
     ( listDirectory
     , doesDirectoryExist
     , renameFile
     , createDirectoryIfMissing
     , removeFile
+    , getHomeDirectory
     , removeDirectoryRecursive
-    , withCurrentDirectory
     )
 import Darcs.UI.Commands ( DarcsCommand(..), nodefaults
                          , amInHashedRepository, amInRepository, putInfo
@@ -49,9 +50,17 @@ import Darcs.Repository
     , cleanRepository
     )
 import Darcs.Repository.Job ( withOldRepoLock )
-import Darcs.Repository.Traverse ( specialPatches )
+import Darcs.Repository.Identify ( findAllReposInDir )
+import Darcs.Repository.Traverse
+    ( diffHashLists
+    , listInventoriesRepoDir
+    , listPatchesLocalBucketed
+    , specialPatches
+    )
+import Darcs.Repository.Inventory ( encodeValidHash, peekPristineHash )
 import Darcs.Repository.Paths
     ( formatPath
+    , hashedInventoryPath
     , inventoriesDir
     , inventoriesDirPath
     , oldCheckpointDirPath
@@ -66,6 +75,7 @@ import Darcs.Repository.Paths
     , tentativePristinePath
     )
 import Darcs.Repository.Packs ( createPacks )
+import Darcs.Util.Tree.Hashed ( followPristineHashes )
 import Darcs.Patch.Witnesses.Ordered
      ( mapFL
      , bunchFL
@@ -79,7 +89,7 @@ import Darcs.Patch.Set
     )
 import Darcs.Patch.Apply( ApplyState )
 import Darcs.Util.ByteString ( gzReadFilePS )
-import Darcs.Util.Printer ( Doc, formatWords, wrapText, ($+$) )
+import Darcs.Util.Printer ( Doc, formatWords, text, wrapText, ($+$) )
 import Darcs.Util.Lock
     ( maybeRelink
     , gzWriteAtomicFilePS
@@ -87,7 +97,11 @@ import Darcs.Util.Lock
     , removeFileMayNotExist
     , writeBinFile
     )
-import Darcs.Util.File ( doesDirectoryReallyExist )
+import Darcs.Util.File
+    ( withCurrentDirectory
+    , getRecursiveContents
+    , doesDirectoryReallyExist
+    )
 import Darcs.Util.Exception ( catchall )
 import Darcs.Util.Progress
     ( beginTedious
@@ -95,6 +109,7 @@ import Darcs.Util.Progress
     , tediousSize
     , debugMessage
     )
+import Darcs.Util.Global ( darcsdir )
 
 import System.FilePath.Posix
     ( takeExtension
@@ -112,7 +127,7 @@ import Darcs.Repository.Flags
     , WithWorkingDir(WithWorkingDir)
     )
 import Darcs.Patch.Progress ( progressFL )
-import Darcs.Util.Cache ( allHashedDirs, bucketFolder, cleanCaches, mkDirCache )
+import Darcs.Util.Cache ( mkRepoCache, bucketFolder )
 import Darcs.Repository.Format
     ( identifyRepoFormat
     , createRepoFormat
@@ -276,8 +291,6 @@ optimizeCompression compression opts = do
     do_compress patchesDirPath
     putInfo opts "Optimizing (un)compression of inventories..."
     do_compress inventoriesDirPath
-    putInfo opts "Optimizing (un)compression of pristine..."
-    do_compress pristineDirPath
     where
       do_compress f = do
         isd <- doesDirectoryExist f
@@ -332,29 +345,20 @@ optimizeReorder = common
     , commandHelp = formatWords
         [ "This command moves recent patches (those not included in"
         , "the latest tag) to the \"front\", reducing the amount that a typical"
-        , "remote command needs to download. It should also reduce the CPU time"
-        , "needed for some operations. This is the behavior with --shallow"
-        , "which is the default."
-        ]
-        $+$ formatWords
-        [ "With the --deep option it tries to optimize all tags in the whole"
-        , "repository. This breaks the history of patches into smaller"
-        , "bunches, which can further improve efficiency, but requires all"
-        , "patches to be present. It is therefore less suitable for lazy clones."
+        , "remote command needs to download.  It should also reduce the CPU time"
+        , "needed for some operations."
         ]
     , commandDescription = "reorder the patches in the repository"
     , commandCommand = optimizeReorderCmd
     , commandOptions =
-        withStdOpts basicOpts (commonAdvancedOpts ^ O.compress)
+        withStdOpts commonBasicOpts (commonAdvancedOpts ^ O.compress)
     }
-  where
-    basicOpts = commonBasicOpts ^ O.optimizeDeep
 
 optimizeReorderCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 optimizeReorderCmd _ opts _ =
     withRepoLock (useCache ? opts) (umask ? opts) $
     RepoJob $ \repository -> do
-      reorderInventory repository (O.compress ? opts) (O.optimizeDeep ? opts)
+      reorderInventory repository (O.compress ? opts)
       putInfo opts "Done reordering!"
 
 optimizeRelink :: DarcsCommand
@@ -547,8 +551,8 @@ optimizeBucketed opts = do
 optimizeGlobalCache :: DarcsCommand
 optimizeGlobalCache = common
     { commandName = "cache"
-    , commandExtraArgs = 0
-    , commandExtraArgHelp = []
+    , commandExtraArgs            = -1
+    , commandExtraArgHelp         = [ "<DIRECTORY> ..." ]
     , commandHelp = optimizeHelpGlobalCache
     , commandDescription = "garbage collect global cache"
     , commandCommand = optimizeGlobalCacheCmd
@@ -558,6 +562,11 @@ optimizeGlobalCache = common
 optimizeHelpGlobalCache :: Doc
 optimizeHelpGlobalCache = formatWords
   [ "This command deletes obsolete files within the global cache."
+  , "It takes one or more directories as arguments, and recursively"
+  , "searches all repositories within these directories. Then it deletes"
+  , "all files in the global cache not belonging to these repositories."
+  , "When no directory is given, it searches repositories in the user's"
+  , "home directory."
   ]
   $+$ formatWords
   [ "It also automatically migrates the global cache to the (default)"
@@ -565,9 +574,49 @@ optimizeHelpGlobalCache = formatWords
   ]
 
 optimizeGlobalCacheCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
-optimizeGlobalCacheCmd _ opts _ = do
+optimizeGlobalCacheCmd _ opts args = do
   optimizeBucketed opts
-  globalCacheDir >>= \case
-    Just dir -> mapM_ (cleanCaches (mkDirCache dir)) allHashedDirs
-    Nothing -> return ()
+  home <- getHomeDirectory
+  let args' = if null args then [home] else args
+  cleanGlobalCache args' opts
   putInfo opts "Done cleaning global cache!"
+
+cleanGlobalCache :: [String] -> [DarcsFlag] -> IO ()
+cleanGlobalCache dirs opts = do
+  putInfo opts "\nLooking for repositories in the following directories:"
+  putInfo opts $ text $ unlines dirs
+  gCacheDir' <- globalCacheDir
+  repoPaths'  <- mapM findAllReposInDir dirs
+
+  putInfo opts "Finished listing repositories."
+
+  let repoPaths         = nub $ concat repoPaths'
+      gCache            = fromJust gCacheDir'
+      gCacheInvDir      = gCache </> inventoriesDir
+      gCachePatchesDir  = gCache </> patchesDir
+      gCachePristineDir = gCache </> pristineDir
+
+  createDirectoryIfMissing True gCacheInvDir
+  createDirectoryIfMissing True gCachePatchesDir
+  createDirectoryIfMissing True gCachePristineDir
+
+  remove listInventoriesRepoDir gCacheInvDir repoPaths
+  remove (listPatchesLocalBucketed gCache . (</> darcsdir)) gCachePatchesDir repoPaths
+  remove getPristine gCachePristineDir repoPaths
+
+  where
+  remove fGetFiles cacheSubDir repoPaths = do
+    s1 <- mapM fGetFiles repoPaths
+    s2 <- getRecursiveContents cacheSubDir
+    remove' cacheSubDir s2 (concat s1)
+
+  remove' :: String -> [String] -> [String] -> IO ()
+  remove' dir s1 s2 =
+    mapM_ (removeFileMayNotExist . (\hashedFile ->
+      dir </> bucketFolder hashedFile </> hashedFile))
+      (diffHashLists s1 s2)
+
+  getPristine :: String -> IO [String]
+  getPristine repoDir = do
+    ph <- peekPristineHash <$> gzReadFilePS (repoDir </> hashedInventoryPath)
+    map encodeValidHash <$> followPristineHashes (mkRepoCache repoDir) [ph]

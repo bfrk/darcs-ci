@@ -2,8 +2,9 @@ module Darcs.Repository.Inventory
     ( module Darcs.Repository.Inventory.Format
     , readPatchesFromInventoryFile
     , readPatchesFromInventory
+    , readPatchesFromInventoryEntries
     , readSinglePatch
-    , readOneInventory
+    , readInventoryPrivate
     , writeInventory
     , writePatchIfNecessary
     , writeHashFile
@@ -175,12 +176,6 @@ readSinglePatch cache i h = do
             , renderString $ displayPatchInfo i
             , e
             ]
-
-readOneInventory :: ReadPatch p
-                 => Cache -> FilePath -> IO (Sealed (RL (PatchInfoAndG p) wX))
-readOneInventory cache path = do
-  Inventory _ invEntries <- readInventoryPrivate path
-  readPatchesFromInventoryEntries cache invEntries
 
 -- | Read an 'Inventory' from a file. Fails with an error message if
 -- file is not there or cannot be parsed.

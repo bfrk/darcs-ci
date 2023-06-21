@@ -2,15 +2,8 @@
 
 . ./env
 
-# I would use the builtin !, but that has the wrong semantics
-not () {
-  set +x
-  if "$@" || test $? = "4"; then
-    # fail the test if command succeeds or returns 4
-    exit 1
-  fi
-  set -x
-}
+## I would use the builtin !, but that has the wrong semantics.
+not () { "$@" && exit 1 || :; }
 
 # trick: OS-detection (if needed)
 os_is_windows() {
@@ -34,10 +27,10 @@ if os_is_windows; then
   git config --global core.autocrlf input
 fi
 
-# tests now work on windows with this or with the bash pwd:
-# pwd() {
-#     runghc "$TESTBIN/hspwd.hs"
-# }
+pwd() {
+    ghc --make -o hspwd "$TESTBIN/hspwd.hs" > /dev/null
+    "./hspwd"
+}
 
 which() {
     type -P "$@"
@@ -127,11 +120,5 @@ compare_bundles() {
 grep -q darcs-3 .darcs/defaults && format=darcs-3
 grep -q darcs-2 .darcs/defaults && format=darcs-2
 grep -q darcs-1 .darcs/defaults && format=darcs-1
-
-# To test if darcs works correctly in case hard-linking fails because the
-# cache is in a different file system. This assumes that /run/darcs-test is
-# writable and on a separate filesystem (e.g. tmpfs).
-#
-# export XDG_CACHE_HOME=`mktemp -d -p /run/darcs-test`
 
 set -vex -o pipefail

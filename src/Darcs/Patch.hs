@@ -40,6 +40,9 @@ module Darcs.Patch
     , changepref
     , thing
     , things
+    , primIsAddfile
+    , primIsHunk
+    , primIsSetpref
     , merge
     , commute
     , listTouchedFiles
@@ -50,14 +53,17 @@ module Darcs.Patch
     , resolveConflicts
     , Effect
     , effect
+    , primIsBinary
+    , primIsAdddir
     , invert
     , invertFL
     , invertRL
+    , dropInverses
     , commuteFL
     , commuteRL
     , readPatch
     , readPatchPartial
-    , canonizeFL
+    , canonize
     , sortCoalesceFL
     , tryToShrink
     , patchname
@@ -86,7 +92,7 @@ import Darcs.Patch.Apply ( apply, effectOnPaths, applyToTree,
 import Darcs.Patch.Commute ( commute, commuteFL, commuteRL )
 import Darcs.Patch.Conflict ( resolveConflicts )
 import Darcs.Patch.Effect ( Effect(effect) )
-import Darcs.Patch.Invert ( invert, invertRL, invertFL )
+import Darcs.Patch.Invert ( invert, invertRL, invertFL, dropInverses )
 import Darcs.Patch.Inspect ( listTouchedFiles, hunkMatches )
 import Darcs.Patch.Merge ( merge )
 import Darcs.Patch.Named ( Named,
@@ -96,10 +102,12 @@ import Darcs.Patch.Named ( Named,
                            infopatch,
                            patch2patchinfo, patchname, patchcontents )
 import Darcs.Patch.FromPrim ( PrimPatchBase(..) )
-import Darcs.Patch.Prim ( canonizeFL,
+import Darcs.Patch.Prim ( canonize,
                           sortCoalesceFL,
                           rmdir, rmfile, tokreplace, adddir, addfile,
                           binary, changepref, hunk, move,
+                          primIsAdddir, primIsAddfile,
+                          primIsHunk, primIsBinary, primIsSetpref,
                           tryToShrink,
                           PrimPatch )
 import Darcs.Patch.Read ( readPatch, readPatchPartial )

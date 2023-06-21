@@ -31,6 +31,9 @@ darcs init      --repo R        # Create our test repo.
 
 cd R
 
+unset pwd # Since this test is pretty much linux-specific, hspwd.hs is not needed
+abort_windows # and skip if we are on win32...
+
 # test for file
 touch test-file
 

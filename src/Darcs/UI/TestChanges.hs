@@ -10,7 +10,7 @@ import Darcs.UI.Commands ( putInfo )
 import Darcs.UI.Options ( Config, (?) )
 import qualified Darcs.UI.Options.All as O
 import Darcs.Repository.Prefs ( getPrefval )
-import Darcs.Repository.Working ( setAllScriptsExecutable )
+import Darcs.Repository.Working ( setScriptsExecutable )
 
 import Darcs.Util.Lock ( withTempDir, withPermDir )
 import Darcs.Util.Path ( toPath )
@@ -40,7 +40,7 @@ testTree cfg tree = do
   where
     withDir O.YesLeaveTestDir = withPermDir
     withDir O.NoLeaveTestDir = withTempDir
-    sse O.YesSetScriptsExecutable = setAllScriptsExecutable
+    sse O.YesSetScriptsExecutable = setScriptsExecutable
     sse O.NoSetScriptsExecutable = return ()
     ifRunTest (O.YesTestChanges leaveTestDir) test = test leaveTestDir
     ifRunTest O.NoTestChanges _ = return ExitSuccess
