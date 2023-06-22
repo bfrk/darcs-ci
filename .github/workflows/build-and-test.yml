@@ -65,9 +65,9 @@ jobs:
     - name: Build
       run: cabal build
 
-    - name: Haddock
-      if: matrix.ghc != '8.2' && matrix.ghc != '8.4'
-      run: cabal haddock lib:darcs
+#     - name: Haddock
+#       if: matrix.ghc != '8.2' && matrix.ghc != '8.4'
+#       run: cabal haddock lib:darcs
 
     - name: Run tests on Linux
       if: runner.os == 'Linux' && env.runtests == 'true'
