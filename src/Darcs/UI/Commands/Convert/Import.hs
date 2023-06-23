@@ -287,7 +287,7 @@ fastImport' repo compression diffalg marks = do
         --   but only for blobs and excluding anything under _darcs
         -- * it also returns the resulting tree with _darcs filtered out
         updateHashes = do
-          let nodarcs = \(AnchoredPath (x:_)) _ -> x /= darcsdirName
+          let nodarcs = \(AnchoredPath xs) _ -> head xs /= darcsdirName
               hashblobs (File blob@(T.Blob con Nothing)) =
                 do hash <- sha256 `fmap` readBlob blob
                    return $ File (T.Blob con (Just hash))

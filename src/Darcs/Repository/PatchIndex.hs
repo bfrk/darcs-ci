@@ -18,6 +18,7 @@ should attempt to automatically create the patch-index.
 
 See <http://darcs.net/Internals/PatchIndex> for more information.
 -}
+{-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 module Darcs.Repository.PatchIndex
     ( doesPatchIndexExist
     , isPatchIndexDisabled

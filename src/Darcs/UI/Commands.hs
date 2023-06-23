@@ -233,11 +233,15 @@ commandAlias alias msuper command =
     cmdName = unwords . map commandName . maybe id (:) msuper $ [command]
 
 commandStub :: String -> Doc -> String -> DarcsCommand -> DarcsCommand
-commandStub n h d c = c { commandName = n
-                        , commandHelp = h
-                        , commandDescription = d
-                        , commandCommand = \_ _ _ -> viewDoc h
-                        }
+commandStub n h d command@DarcsCommand {} =
+  command
+    { commandName = n
+    , commandHelp = h
+    , commandDescription = d
+    , commandCommand = \_ _ _ -> viewDoc h
+    }
+commandStub _ _ _ SuperCommand {} =
+  error "commandStub called with SuperCommand argument"
 
 superName :: Maybe (DarcsCommand) -> String
 superName Nothing  = ""

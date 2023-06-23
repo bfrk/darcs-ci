@@ -16,6 +16,7 @@
 --  Boston, MA 02110-1301, USA.
 
 {-# LANGUAGE OverloadedStrings #-}
+{-# OPTIONS_GHC -Wno-incomplete-record-updates #-}
 module Darcs.UI.Commands.WhatsNew
     ( whatsnew
     , status

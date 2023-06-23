@@ -16,6 +16,7 @@
 --  Boston, MA 02110-1301, USA.
 
 {-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 
 module Darcs.Patch.V1.Commute
     (

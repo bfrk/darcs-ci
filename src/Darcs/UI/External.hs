@@ -404,8 +404,9 @@ viewDocWith pr msg = do
      then do mbViewerPlusArgs <- getViewer
              case mbViewerPlusArgs of
                   Just viewerPlusArgs -> do
-                    let (viewer : args) = words viewerPlusArgs
-                    pipeDocToPager viewer args pr msg
+                    case words viewerPlusArgs of
+                      [] -> error "impossible"
+                      (viewer : args) -> pipeDocToPager viewer args pr msg
                   Nothing -> return $ ExitFailure 127 -- No such command
                -- TEMPORARY passing the -K option should be removed as soon as
                -- we can use the delegate_ctrl_c feature in process

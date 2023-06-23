@@ -285,7 +285,10 @@ defaultConfigAnn
    += program "darcs-test"
 
 defaultConfig :: Config
-Right defaultConfig = fmap cmdArgsValue $ process (cmdArgsMode_ defaultConfigAnn) []
+defaultConfig =
+  case process (cmdArgsMode_ defaultConfigAnn) [] of
+    Right r -> cmdArgsValue r
+    Left _ -> error "impossible"
 
 run :: Config -> IO ()
 run conf = do
