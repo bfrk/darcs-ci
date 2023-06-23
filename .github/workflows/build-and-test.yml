@@ -67,9 +67,9 @@ jobs:
     - name: Configure
       run: cabal configure --enable-tests -fwarn-as-error
 
-    - name: Add constraints for windows-2019
-      if: matrix.os == 'windows-2019'
-      run: cabal configure --enable-tests -fwarn-as-error --constraint "process<1.6.16"
+#     - name: Add constraints for windows-2019
+#       if: matrix.os == 'windows-2019'
+#       run: cabal configure --enable-tests -fwarn-as-error --constraint "process<1.6.16"
 
     - name: Cabal freeze
       run: cabal freeze
