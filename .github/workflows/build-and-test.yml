@@ -68,7 +68,7 @@ jobs:
       run: cabal configure --enable-tests -fwarn-as-error
 
     - name: Reconfigure for windows-2019
-      if: matrix.os == windows-2019
+      if: matrix.os == 'windows-2019'
       run: cabal configure --enable-tests -fwarn-as-error --constraint "process < 1.6.16.0"
 
     - name: Cabal freeze
