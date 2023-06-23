@@ -5,19 +5,18 @@ on: push
 jobs:
   build-with-cabal:
     name: ${{ matrix.os }} / ghc-${{ matrix.ghc }}
-
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os:
-#           - ubuntu-20.04
-#           - ubuntu-22.04
-#           - macos-11
-#           - macos-12
-#           - macos-13
+          - ubuntu-20.04
+          - ubuntu-22.04
+          - macos-11
+          - macos-12
+          - macos-13
           - windows-2019
-#           - windows-2022
+          - windows-2022
         ghc:
           - 8.2.2
           - 8.4.4
@@ -66,10 +65,6 @@ jobs:
 
     - name: Configure
       run: cabal configure --enable-tests -fwarn-as-error
-
-#     - name: Add constraints for windows-2019
-#       if: matrix.os == 'windows-2019'
-#       run: cabal configure --enable-tests -fwarn-as-error --constraint "process<1.6.16"
 
     - name: Cabal freeze
       run: cabal freeze
