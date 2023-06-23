@@ -37,10 +37,7 @@ jobs:
           - os: windows-2022
             ghc: 8.2.2
           # on windows-2019:
-          # - with ghc < 8.10: can't build process
           # - with ghc >= 8.10 && < 9.4: can't build hsc2hs
-          - os: windows-2019
-            ghc: [8.2.2, 8.4.4, 8.6.5, 8.8.2, 8.10.7, 9.0.2, 9.2.8]
     env:
       builddocs: ${{ matrix.ghc == '9.4.4' }}
       runtests: ${{ matrix.ghc == '8.4.4' || matrix.ghc == '9.4.4' }}
@@ -69,6 +66,10 @@ jobs:
 
     - name: Configure
       run: cabal configure --enable-tests -fwarn-as-error
+
+    - name: Reconfigure for windows-2019
+      if: matrix.os == windows-2019
+      run: cabal configure --enable-tests -fwarn-as-error --constraint "process < 1.6.16.0"
 
     - name: Cabal freeze
       run: cabal freeze
