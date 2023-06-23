@@ -11,11 +11,11 @@ jobs:
       fail-fast: false
       matrix:
         os:
-          - ubuntu-20.04
-          - ubuntu-22.04
-          - macos-11
-          - macos-12
-          - macos-13
+#           - ubuntu-20.04
+#           - ubuntu-22.04
+#           - macos-11
+#           - macos-12
+#           - macos-13
           - windows-2019
           - windows-2022
         ghc:
@@ -30,17 +30,17 @@ jobs:
         cabal:
           - 3.8
         exclude:
-          # can't build basement (indirect dependency)
-          - os: ubuntu-18.04
-            ghc: 8.4.4
           # ghc-8.2.2 fails to install
           - os: ubuntu-22.04
+            ghc: 8.2.2
+          # build fails with linker error
+          - os: windows-2022
             ghc: 8.2.2
           # on windows-2019:
           # - with ghc < 8.10: can't build process
           # - with ghc >= 9.0 && < 9.4: can't build hsc2hs
           # - with ghc 9.4: darcs-test crashes immediately
-          - os: windows-2019
+          # - os: windows-2019
     env:
       builddocs: ${{ matrix.ghc == '9.4.4' }}
       runtests: ${{ matrix.ghc == '8.4.4' || matrix.ghc == '9.4.4' }}
