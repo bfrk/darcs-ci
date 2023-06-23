@@ -17,7 +17,7 @@ jobs:
 #           - macos-12
 #           - macos-13
           - windows-2019
-#          - windows-2022
+#           - windows-2022
         ghc:
           - 8.2.2
           - 8.4.4
@@ -36,8 +36,8 @@ jobs:
           # build fails with linker error
           - os: windows-2022
             ghc: 8.2.2
-          # on windows-2019:
-          # - with ghc >= 8.10 && < 9.4: can't build hsc2hs
+          - os: windows-2019
+            ghc: 8.2.2
     env:
       builddocs: ${{ matrix.ghc == '9.4.4' }}
       runtests: ${{ matrix.ghc == '8.4.4' || matrix.ghc == '9.4.4' }}
