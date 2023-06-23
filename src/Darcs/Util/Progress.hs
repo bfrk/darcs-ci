@@ -31,7 +31,7 @@ import Darcs.Prelude
 
 import Control.Arrow ( second )
 import Control.Exception ( bracket )
-import Control.Monad ( when, unless, void )
+import Control.Monad ( when, void )
 import Control.Concurrent ( forkIO, threadDelay )
 
 import Data.Char ( toLower )
@@ -39,13 +39,11 @@ import Data.Map ( Map, empty, adjust, insert, delete, lookup )
 import Data.Maybe ( isJust )
 import Data.IORef ( IORef, newIORef, readIORef, writeIORef, modifyIORef )
 
-import System.Console.Terminal.Size ( hSize, width )
-import System.IO ( stdout, stderr, hFlush, hPutStr, hPutStrLn,
-                   hSetBuffering, hIsTerminalDevice,
-                   Handle, BufferMode(LineBuffering) )
+import qualified System.Console.Terminal.Size as TS ( size, width )
+import System.IO ( hFlush, stdout )
 import System.IO.Unsafe ( unsafePerformIO )
 
-import Darcs.Util.Global ( withDebugMode, debugMessage, putTiming )
+import Darcs.Util.Global ( debugMessage )
 
 
 data ProgressData = ProgressData
@@ -83,25 +81,17 @@ printProgress :: String
               -> ProgressData
               -> IO ()
 printProgress k (ProgressData {sofar=s, total=Just t, latest=Just l}) =
-    myput (k ++ " ... " ++ show s ++ " done, " ++ show (t - s) ++ " queued. " ++ l)
+    putCr (k ++ " ... " ++ show s ++ " done, " ++ show (t - s) ++ " queued. " ++ l)
 printProgress k (ProgressData {latest=Just l}) =
-    myput (k ++ " ... " ++ l)
+    putCr (k ++ " ... " ++ l)
 printProgress k (ProgressData {sofar=s, total=Just t}) | t >= s =
-    myput (k ++ " ... " ++ show s ++ " done, " ++ show (t - s) ++ " queued")
+    putCr (k ++ " ... " ++ show s ++ " done, " ++ show (t - s) ++ " queued")
 printProgress k (ProgressData {sofar=s}) =
-    myput (k ++ " ... " ++ show s)
+    putCr (k ++ " ... " ++ show s)
 
--- TODO limit to width of terminal (and only if output device is one)
-myput :: String -> IO ()
-myput l = withDebugMode $ \debugMode ->
-    if debugMode
-      then putTiming >> hPutStrLn stderr l
-      else putTiming >> simpleput l
-
-
-simpleput :: String -> IO ()
-simpleput = unsafePerformIO $ mkhPutCr stderr
-{-# NOINLINE simpleput #-}
+putCr :: String -> IO ()
+putCr = unsafePerformIO mkPutCr
+{-# NOINLINE putCr #-}
 
 withProgress :: String -> (String -> IO a) -> IO a
 withProgress k = bracket (beginTedious k >> return k) endTedious
@@ -133,7 +123,7 @@ endTedious :: String -> IO ()
 endTedious k = whenProgressMode $ do
     p <- getProgressData k
     modifyIORef _progressData (second $ delete k)
-    when (isJust p) $ simpleput $ k ++ " ... done"
+    when (isJust p) $ putCr $ k ++ " ... done"
 
 
 tediousSize :: String
@@ -185,8 +175,6 @@ progressIO "" = return ()
 progressIO k = do
     updateProgressData k $ \p ->
         p { sofar = sofar p + 1, latest = Nothing }
-    putDebug k ""
-
 
 progressKeepLatest :: String
                    -> a
@@ -198,8 +186,6 @@ progressKeepLatestIO :: String -> IO ()
 progressKeepLatestIO "" = return ()
 progressKeepLatestIO k = do
     updateProgressData k (\p -> p {sofar = sofar p + 1})
-    putDebug k ""
-
 
 finishedOne :: String -> String -> a -> a
 finishedOne k l a = unsafePerformIO $ finishedOneIO k l >> return a
@@ -210,21 +196,10 @@ finishedOneIO "" _ = return ()
 finishedOneIO k l = do
     updateProgressData k (\p -> p { sofar = sofar p + 1,
                                     latest = Just l })
-    putDebug k l
-
-
-putDebug :: String
-         -> String
-         -> IO ()
-putDebug _ _ = return ()
---putDebug k "" = when (False && debugMode) $ hPutStrLn stderr $ "P: "++k
---putDebug k l = when (False && debugMode) $ hPutStrLn stderr $ "P: "++k++" : "++l
 
 
 _progressMode :: IORef Bool
-_progressMode = unsafePerformIO $ do
-    hSetBuffering stderr LineBuffering
-    newIORef True
+_progressMode = unsafePerformIO $ newIORef True
 {-# NOINLINE _progressMode #-}
 
 _progressData :: IORef (String, Map String ProgressData)
@@ -233,27 +208,18 @@ _progressData = unsafePerformIO $ do
     newIORef ("", empty)
 {-# NOINLINE _progressData #-}
 
-mkhPutCr :: Handle
-         -> IO (String -> IO ())
-mkhPutCr fe = do
-    isTerm <- hIsTerminalDevice fe
-    limitToWidth <-
-      if isTerm then
-        hSize fe >>= \case
-          Just window -> return (take (width window - 1))
-          Nothing -> return id
-      else return id
-    stdoutIsTerm <- hIsTerminalDevice stdout
-    return $
-        if isTerm
-          then \s -> do
-              hPutStr fe $ '\r':limitToWidth s ++ "\r"
-              hFlush fe
-              let spaces = '\r':limitToWidth ((replicate (length s)) ' ') ++ "\r"
-              hPutStr fe spaces
-              when stdoutIsTerm $ putStr spaces
-          else \s -> unless (null s) $ do hPutStrLn fe s
-                                          hFlush fe
+mkPutCr :: IO (String -> IO ())
+mkPutCr =
+  TS.size >>= \case
+    Nothing ->
+      -- stdout is not a terminal
+      return $ \_ -> return ()
+    Just window -> do
+      let limitToWidth = take (TS.width window - 1)
+      return $ \s -> do
+        putStr $ '\r':limitToWidth s ++ "\r"
+        hFlush stdout
+        putStr $ '\r':limitToWidth ((replicate (length s)) ' ') ++ "\r"
 
 setProgressMode :: Bool -> IO ()
 setProgressMode = writeIORef _progressMode

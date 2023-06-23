@@ -29,14 +29,11 @@
 -- purity of darcs, in favour of programming convenience.
 
 module Darcs.Util.Global
-    (
-      timingsMode
-    , setTimingsMode
+    ( setTimingsMode
     , whenDebugMode
     , withDebugMode
     , setDebugMode
     , debugMessage
-    , putTiming
     , addCRCWarning
     , getCRCWarnings
     , resetCRCWarnings
