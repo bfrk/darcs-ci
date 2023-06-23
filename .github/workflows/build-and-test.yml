@@ -10,9 +10,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # os: [ubuntu-18.04, ubuntu-20.04, macOS-10.15, macOS-11, windows-2016, windows-2019, windows-2022]
+        os: [ubuntu-20.04, ubuntu-22.04, macos-11, macos-12, macos-13, windows-2019, windows-2022]
         # faster, less comprehensive:
-        os: [ubuntu-20.04, macOS-10.15, windows-2019]
+        # os: [ubuntu-20.04, macos-11, windows-2022]
         ghc: ['8.2', '8.4', '8.6', '8.8', '8.10', '9.0']
         cabal: ['latest']
         exclude:
@@ -21,7 +21,9 @@ jobs:
             ghc: 8.4
     env:
       runtests: ${{ matrix.ghc == '8.2' || matrix.ghc == '9.0' }}
-      tests-to-run: # e.g. -t=EXAMPLE
+      # for some reason this test randomly fails with darcs.net server
+      # timeouts or similar errors; works fine on my machine
+      tests-to-run: -t='!network/log'
       testcmd: cabal run -- darcs-test -j=6 -f=123 -i=yn -c=yn --hide
       ACTIONS_ALLOW_UNSECURE_COMMANDS: true
 
@@ -76,7 +78,7 @@ jobs:
         ${{ env.testcmd }} ${{ env.tests-to-run }}
 
     - name: Run tests on MacOS
-      if: runner.os == 'macOS' && env.runtests == 'true'
+      if: runner.os == 'macos' && env.runtests == 'true'
       run: |
         brew install lighttpd
         brew install gnu-sed
