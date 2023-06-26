@@ -38,7 +38,6 @@ import Darcs.UI.Flags
     , changesReverse, verbosity, useCache
     , reorder, umask
     , fixUrl
-    , withContext
     )
 import Darcs.UI.Options ( (^), parseFlags, (?) )
 import qualified Darcs.UI.Options.All as O
@@ -69,7 +68,7 @@ import Darcs.UI.External
     ( verifyPS
     )
 import Darcs.UI.Email ( readEmail )
-import Darcs.Patch.Depends ( findCommonAndUncommon )
+import Darcs.Patch.Depends ( findCommon )
 import Darcs.UI.ApplyPatches ( PatchApplier(..), StandardPatchApplier(..), PatchProxy )
 import Darcs.UI.SelectChanges
     ( WhichChanges(..)
@@ -162,13 +161,11 @@ apply = DarcsCommand
       ^ O.dryRunXml
       ^ O.matchSeveral
       ^ O.conflictsNo
-      ^ O.externalMerge
       ^ O.testChanges
       ^ O.repoDir
       ^ O.diffAlgorithm
     applyAdvancedOpts
-      = O.compress
-      ^ O.setScriptsExecutable
+      = O.setScriptsExecutable
       ^ O.umask
       ^ O.changesReverse
       ^ O.pauseForGui
@@ -211,7 +208,7 @@ applyCmdCommon
 applyCmdCommon patchApplier patchProxy opts bundle repository = do
   us <- readPatches repository
   Sealed them <- either fail return =<< getPatchBundle opts us bundle
-  Fork common us' them' <- return $ findCommonAndUncommon us them
+  Fork common us' them' <- return $ findCommon us them
 
   -- all patches in them' need to be available; check that
   let check :: PatchInfoAnd p wX wY -> Maybe PatchInfo
@@ -289,7 +286,6 @@ patchSelOpts flags = S.PatchSelectionOptions
     , S.interactive = maybeIsInteractive flags
     , S.selectDeps = O.PromptDeps -- option not supported, use default
     , S.withSummary = O.NoSummary -- option not supported, use default
-    , S.withContext = withContext ? flags
     }
 
 maybeIsInteractive :: [DarcsFlag] -> Bool

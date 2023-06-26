@@ -18,15 +18,28 @@
 
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
-module Darcs.Patch.Permutations ( removeFL, removeRL, removeCommon,
-                                  commuteWhatWeCanFL, commuteWhatWeCanRL,
-                                  genCommuteWhatWeCanRL, genCommuteWhatWeCanFL,
-                                  partitionFL, partitionRL, partitionFL',
-                                  simpleHeadPermutationsFL, headPermutationsRL,
-                                  headPermutationsFL, permutationsRL,
-                                  removeSubsequenceFL, removeSubsequenceRL,
-                                  partitionConflictingFL
-                                ) where
+module Darcs.Patch.Permutations
+    ( removeFL
+    , removeRL
+    , removeCommon
+    , commuteWhatWeCanFL
+    , commuteWhatWeCanRL
+    , genCommuteWhatWeCanRL
+    , genCommuteWhatWeCanFL
+    , partitionFL
+    , partitionRL
+    , partitionFL'
+    , partitionRL'
+    , simpleHeadPermutationsFL
+    , headPermutationsRL
+    , headPermutationsFL
+    , permutationsRL
+    , removeSubsequenceFL
+    , removeSubsequenceRL
+    , partitionConflictingFL
+    , (=\~/=)
+    , (=/~\=)
+    ) where
 
 import Darcs.Prelude
 
@@ -75,6 +88,33 @@ partitionFL' keepleft middle right (p :>: ps)
         (tomiddle :> p' :> right') ->
             partitionFL' keepleft (middle +<+ tomiddle :<: p') right' ps
     | otherwise = partitionFL' keepleft middle (right :<: p) ps
+
+-- | Split an 'RL' according to a predicate, using commutation as necessary,
+-- into those that satisfy the predicate and can be commuted to the right, and
+-- those that do not satisfy it and can be commuted to the left. Whatever
+-- remains stays in the middle.
+--
+-- Note that the predicate @p@ should be invariant under commutation:
+-- if @commute(x:>y)==Just(y':>x')@ then @p x == p x' && p y == p y'@.
+partitionRL' :: forall p wX wY. Commute p
+             => (forall wU wV . p wU wV -> Bool)
+             -> RL p wX wY
+             -> (FL p :> FL p :> RL p) wX wY
+partitionRL' predicate input = go input NilFL NilFL where
+  go :: RL p wA wB  -- input RL
+     -> FL p wB wC  -- the "left" patches found so far
+     -> FL p wC wD  -- the "middle" patches found so far
+     -> (FL p :> FL p :> RL p) wA wD
+  go NilRL left middle = left :> middle :> NilRL
+  go (ps :<: p) left middle
+    | predicate p = case commuteWhatWeCanFL (p :> left) of
+        (left' :> p' :> NilFL) -> case commuteFL (p' :> middle) of
+            Just (middle' :> p'') -> case go ps left' middle' of
+                (a :> b :> c) -> a :> b :> c :<: p''
+            Nothing -> go ps left' (p' :>: middle)
+        (left' :> p' :> tomiddle) ->
+            go ps left' (p' :>: tomiddle +>+ middle)
+    | otherwise = go ps (p :>: left) middle
 
 -- | Split an 'RL' according to a predicate, using commutation as necessary,
 -- into those that satisfy the predicate and can be commuted to the right, and
@@ -228,40 +268,56 @@ headPermutationsRL (ps:<:p) =
 -- | All permutations of an 'RL'.
 permutationsRL :: Commute p => RL p wX wY -> [RL p wX wY]
 permutationsRL ps =
-  [qs' :<: q | qs :<: q <- headPermutationsRL ps, qs' <- permutationsRL qs]
+  ps : [qs' :<: q | qs :<: q <- headPermutationsRL ps, qs' <- permutationsRL qs]
 
-instance (Eq2 p, Commute p) => Eq2 (FL p) where
-    a =\/= b | lengthFL a /= lengthFL b = NotEq
-             | otherwise = cmpSameLength a b
-             where cmpSameLength :: FL p wX wY -> FL p wX wZ -> EqCheck wY wZ
-                   cmpSameLength (x:>:xs) xys | Just ys <- removeFL x xys = cmpSameLength xs ys
-                   cmpSameLength NilFL NilFL = IsEq
-                   cmpSameLength _ _ = NotEq
-    xs =/\= ys = reverseFL xs =/\= reverseFL ys
+-- | This commutes patches in the RHS to bring them into the same
+-- order as the LHS.
+(=\~/=)
+  :: forall p wA wB wC
+   . (Commute p, Eq2 p)
+  => FL p wA wB
+  -> FL p wA wC
+  -> EqCheck wB wC
+a =\~/= b
+  | lengthFL a /= lengthFL b = NotEq
+  | otherwise = cmpSameLength a b
+  where
+    cmpSameLength :: FL p wX wY -> FL p wX wZ -> EqCheck wY wZ
+    cmpSameLength (x :>: xs) x_ys
+      | Just ys <- removeFL x x_ys = cmpSameLength xs ys
+    cmpSameLength NilFL NilFL = IsEq
+    cmpSameLength _ _ = NotEq
 
-instance (Eq2 p, Commute p) => Eq2 (RL p) where
-    unsafeCompare = error "Buggy use of unsafeCompare on RL"
-    a =/\= b | lengthRL a /= lengthRL b = NotEq
-             | otherwise = cmpSameLength a b
-             where cmpSameLength :: RL p wX wY -> RL p wW wY -> EqCheck wX wW
-                   cmpSameLength (xs:<:x) xys | Just ys <- removeRL x xys = cmpSameLength xs ys
-                   cmpSameLength NilRL NilRL = IsEq
-                   cmpSameLength _ _ = NotEq
-    xs =\/= ys = reverseRL xs =\/= reverseRL ys
+-- | This commutes patches in the RHS to bring them into the same
+-- order as the LHS.
+(=/~\=)
+  :: forall p wA wB wC
+   . (Commute p, Eq2 p)
+  => RL p wA wC
+  -> RL p wB wC
+  -> EqCheck wA wB
+a =/~\= b
+  | lengthRL a /= lengthRL b = NotEq
+  | otherwise = cmpSameLength a b
+  where
+    cmpSameLength :: RL p wX wZ -> RL p wY wZ -> EqCheck wX wY
+    cmpSameLength (xs :<: x) ys_x
+      | Just ys <- removeRL x ys_x = cmpSameLength xs ys
+    cmpSameLength NilRL NilRL = IsEq
+    cmpSameLength _ _ = NotEq
 
 -- | Partition a list into the patches that merge cleanly with the given
 -- patch and those that don't (including dependencies)
-partitionConflictingFL :: (Commute p, CleanMerge p)
-                       => FL p wX wY -> FL p wX wZ -> (FL p :> FL p) wX wY
-partitionConflictingFL NilFL _ = NilFL :> NilFL
-partitionConflictingFL (x :>: xs) ys =
-  case cleanMergeFL (x :\/: ys) of
-    Nothing ->
-      case commuteWhatWeCanFL (x :> xs) of
-        xs_ok :> x' :> xs_deps ->
-          case partitionConflictingFL xs_ok ys of
-            xs_clean :> xs_conflicts ->
-              xs_clean :> (xs_conflicts +>+ (x' :>: xs_deps))
-    Just (ys' :/\: _) ->
-      case partitionConflictingFL xs ys' of
-        xs_clean :> xs_conflicts -> (x :>: xs_clean) :> xs_conflicts
+partitionConflictingFL
+  :: forall p wX wY wZ
+   . (Commute p, CleanMerge p)
+  => FL p wX wY -> FL p wX wZ -> (FL p :> FL p) wX wY
+partitionConflictingFL = go NilRL NilRL
+  where
+    go :: RL p wA wB -> RL p wB wC -> FL p wC wD -> FL p wB w -> (FL p :> FL p) wA wD
+    go clean dirty NilFL _ = reverseRL clean :> reverseRL dirty
+    go clean dirty (x:>:xs) ys
+      | Just (x' :> dirty') <- commuteRL (dirty :> x)
+      , Just (ys' :/\: _) <- cleanMergeFL (x' :\/: ys) =
+        go (clean :<: x') dirty' xs ys'
+      | otherwise = go clean (dirty :<: x) xs ys

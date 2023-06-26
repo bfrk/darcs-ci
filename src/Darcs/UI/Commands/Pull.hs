@@ -45,7 +45,7 @@ import Darcs.UI.Flags
     , fixUrl, getOutput
     , changesReverse, verbosity,  dryRun, umask, useCache, selectDeps
     , remoteRepos, reorder, setDefault
-    , withContext, hasXmlOutput
+    , hasXmlOutput
     , isInteractive, quiet
     )
 import Darcs.UI.Options ( parseFlags, (?), (^) )
@@ -74,12 +74,15 @@ import Darcs.Patch.Apply( ApplyState )
 import Darcs.Patch.Set ( PatchSet, Origin, emptyPatchSet, SealedPatchSet )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(..), seal )
 import Darcs.Patch.Witnesses.Ordered
-    ( (:>)(..), (:\/:)(..), FL(..), Fork(..)
+    ( (:>)(..), FL(..), Fork(..)
     , mapFL, nullFL, mapFL_FL )
 import Darcs.Patch.Permutations ( partitionFL )
 import Darcs.Repository.Prefs ( addToPreflist, addRepoSource, getPreflist, showMotd )
-import Darcs.Patch.Depends ( findUncommon, findCommonAndUncommon,
-                             patchSetIntersection, patchSetUnion )
+import Darcs.Patch.Depends
+    ( findCommon
+    , patchSetIntersection
+    , patchSetUnion
+    )
 import Darcs.UI.ApplyPatches ( PatchApplier(..), StandardPatchApplier(..) )
 import Darcs.UI.Completion ( prefArgs )
 import Darcs.UI.Commands.Util ( checkUnrelatedRepos, getUniqueDPatchName )
@@ -205,7 +208,6 @@ pull = DarcsCommand
       ^ O.reorder
       ^ O.interactive
       ^ O.conflictsYes
-      ^ O.externalMerge
       ^ O.testChanges
       ^ O.dryRunXml
       ^ O.withSummary
@@ -217,7 +219,6 @@ pull = DarcsCommand
       ^ O.diffAlgorithm
     advancedOpts
       = O.repoCombinator
-      ^ O.compress
       ^ O.remoteRepos
       ^ O.setScriptsExecutable
       ^ O.umask
@@ -274,8 +275,8 @@ fetchPatches o opts unfixedrepourls@(_:_) jobname repository = do
   us <- readPatches repository
   checkUnrelatedRepos (parseFlags O.allowUnrelatedRepos opts) us them
 
-  Fork common us' them' <- return $ findCommonAndUncommon us them
-  _   :\/: compl' <- return $ findUncommon us compl
+  Fork common us' them' <- return $ findCommon us them
+  Fork _ _ compl' <- return $ findCommon us compl
 
   let avoided = mapFL info compl'
   ps :> _ <- return $ partitionFL (not . (`elem` avoided) . info) them'
@@ -358,5 +359,4 @@ pullPatchSelOpts flags = S.PatchSelectionOptions
     , S.interactive = isInteractive True flags
     , S.selectDeps = selectDeps ? flags
     , S.withSummary = O.withSummary ? flags
-    , S.withContext = withContext ? flags
     }

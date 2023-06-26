@@ -39,6 +39,7 @@ import Darcs.Test.Patch.Utils
     , fromNothing
     )
 
+import Darcs.Patch.Witnesses.Maybe
 import Darcs.Patch.Witnesses.Ordered
 import Darcs.Patch.Witnesses.Sealed
 import Darcs.Patch.Witnesses.Eq ( Eq2, unsafeCompare )
@@ -67,7 +68,6 @@ import Darcs.Test.Patch.Arbitrary.RepoPatchV1 ()
 import Darcs.Test.Patch.Arbitrary.RepoPatchV2 ()
 import Darcs.Test.Patch.Arbitrary.RepoPatchV3 ()
 import Darcs.Test.Patch.Arbitrary.PrimV1 ()
-import Darcs.Test.Patch.Arbitrary.Shrink ( Shrinkable )
 import Darcs.Test.Patch.Merge.Checked ( CheckedMerge )
 import Darcs.Test.Patch.RepoModel
 import Darcs.Test.Patch.WithState
@@ -144,8 +144,8 @@ unit_V1P1 =
   , testCases "commute/recommute" (PropG.recommute commute) Ex.commutePairs
   , testCases "merge properties: merge either way valid" PropG.mergeEitherWayValid Ex.mergePairs
   , testCases "merge properties: merge swap" PropG.mergeEitherWay Ex.mergePairs
-  , testCases "primitive patch IO functions" (Prop1.tShowRead eqFLUnsafe) Ex.primitiveTestPatches
-  , testCases "IO functions (test patches)" (Prop1.tShowRead eqFLUnsafe) Ex.testPatches
+  , testCases "primitive patch IO functions" (Prop1.tShowRead unsafeCompare) Ex.primitiveTestPatches
+  , testCases "IO functions (test patches)" (Prop1.tShowRead unsafeCompare) Ex.testPatches
   , testCases "IO functions (named test patches)" (Prop1.tShowRead unsafeCompare) Ex.testPatchesNamed
   , testCases "primitive commute/recommute" (PropG.recommute commute) Ex.primitiveCommutePairs
   ]
@@ -191,7 +191,6 @@ qc_prim :: forall prim.
            , MightBeEmptyHunk prim
            , MightHaveDuplicate prim
            , ArbitraryWS prim
-           , ArbitraryState prim
            ) => [Test]
 qc_prim =
   -- The following fails because of setpref patches:
@@ -199,7 +198,7 @@ qc_prim =
   (case runCoalesceTests @prim of
     Just Dict ->
       [ testProperty "prim coalesce effect preserving"
-        (unseal2 $ PropG.coalesceEffectPreserving coalesce :: Sealed2 (WithState (Pair prim)) -> TestResult)
+        (unseal2 $ PropG.coalesceEffectPreserving (fmap maybeToFL . coalesce) :: Sealed2 (WithState (Pair prim)) -> TestResult)
       ]
     Nothing -> [])
     ++ concat
@@ -227,9 +226,6 @@ qc_named_prim :: forall prim.
                  , Show2 prim
                  , Show1 (ModelOf (NamedPrim prim))
                  , MightBeEmptyHunk prim
-                 , ArbitraryState prim
-                 , RepoModel (ModelOf prim)
-                 , ArbitraryState prim
                  ) => [Test]
 qc_named_prim =
   qc_prim @(NamedPrim prim) ++
@@ -267,7 +263,6 @@ qc_V2 :: forall prim wXx wYy.
          , ShrinkModel prim
          , PropagateShrink prim prim
          , ArbitraryPrim prim
-         , Shrinkable prim
          , RepoState (ModelOf prim) ~ ApplyState prim
          )
       => prim wXx wYy -> [Test]
@@ -294,7 +289,6 @@ qc_V3 :: forall prim wXx wYy.
          , ShrinkModel prim
          , PropagateShrink prim prim
          , ArbitraryPrim prim
-         , Shrinkable prim
          , RepoState (ModelOf prim) ~ ApplyState prim
          )
       => prim wXx wYy
@@ -406,7 +400,7 @@ coalesce_properties genname gen =
       Just Dict ->
         [ ( "coalesce commutes with commute"
           , TestCondition (const True)
-          , TestCheck (PropG.coalesceCommute coalesce . getTriple))
+          , TestCheck (PropG.coalesceCommute (fmap maybeToFL . coalesce) . getTriple))
         ]
       Nothing -> [])
 

@@ -27,7 +27,7 @@ import Darcs.Prelude
 
 import Data.List ( intersect, find )
 import Data.List.Ordered ( nubSort )
-import Data.Maybe ( fromMaybe, isJust )
+import Data.Maybe ( catMaybes, fromMaybe, isJust )
 import Control.Arrow ( second )
 import Control.Exception ( catch, IOException )
 import Control.Monad.State.Strict
@@ -42,7 +42,7 @@ import Darcs.UI.Flags
     ( DarcsFlag
     , changesReverse, onlyToFiles, diffingOpts
     , useCache, maxCount, hasXmlOutput
-    , verbosity, withContext, isInteractive, verbose
+    , verbosity, isInteractive, verbose
     , getRepourl, pathSetFromArgs )
 import Darcs.UI.Options ( (^), parseFlags, (?) )
 import qualified Darcs.UI.Options.All as O
@@ -175,7 +175,7 @@ logCmd fps opts args
       (fs, es) <- remoteSubPaths args []
       if null es then
         withTempDir "darcs.log"
-          (\_ -> showLog opts $ maybeNotNull $ nubSort $ map floatSubPath fs)
+          (\_ -> showLog opts $ maybeNotNull $ nubSort $ filterErrors $ map floatSubPath fs)
       else
         fail $ "For a remote repo I can only handle relative paths.\n"
             ++ "Invalid arguments: "++unwords es
@@ -191,6 +191,9 @@ logCmd fps opts args
 maybeNotNull :: [a] -> Maybe [a]
 maybeNotNull [] = Nothing
 maybeNotNull xs = Just xs
+
+filterErrors :: [Either e a] -> [a]
+filterErrors = catMaybes . map (either (const Nothing) Just)
 
 hasRemoteRepo :: [DarcsFlag] -> Bool
 hasRemoteRepo = isJust . getRepourl
@@ -470,5 +473,4 @@ logPatchSelOpts flags = S.PatchSelectionOptions
     , S.interactive = isInteractive False flags
     , S.selectDeps = O.PromptDeps -- option not supported, use default
     , S.withSummary = O.withSummary ? flags
-    , S.withContext = withContext ? flags
     }

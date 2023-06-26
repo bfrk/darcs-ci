@@ -1,6 +1,6 @@
 module Darcs.Repository.Traverse
     ( cleanRepository
-    , diffHashLists
+    , cleanPristineDir
     , listInventories
     , listInventoriesRepoDir
     , listPatchesLocalBucketed
@@ -13,13 +13,12 @@ import Data.Maybe ( fromJust )
 import qualified Data.ByteString.Char8 as BC ( unpack, pack )
 import qualified Data.Set as Set
 
-import System.Directory ( listDirectory )
+import System.Directory ( listDirectory, withCurrentDirectory )
 import System.FilePath.Posix( (</>) )
 
-import Darcs.Util.Cache ( bucketFolder )
-import Darcs.Repository.Pristine ( cleanPristineDir )
 import Darcs.Repository.Inventory
     ( Inventory(..)
+    , PristineHash
     , emptyInventory
     , encodeValidHash
     , inventoryPatchNames
@@ -39,13 +38,21 @@ import Darcs.Repository.Paths
     , inventoriesDir
     , inventoriesDirPath
     , patchesDirPath
+    , pristineDirPath
     )
 import Darcs.Repository.Prefs ( globalCacheDir )
 
 import Darcs.Util.ByteString ( gzReadFilePS )
+import Darcs.Util.Cache
+    ( Cache
+    , HashedDir(HashedPristineDir)
+    , bucketFolder
+    , cleanCachesWithHint
+    )
 import Darcs.Util.Exception ( ifDoesNotExistError )
 import Darcs.Util.Global ( darcsdir, debugMessage )
 import Darcs.Util.Lock ( removeFileMayNotExist )
+import Darcs.Util.Tree.Hashed ( followPristineHashes )
 
 
 cleanRepository :: Repository 'RW p wU wR -> IO ()
@@ -65,6 +72,20 @@ cleanPristine r = withRepoDir r $ do
     debugMessage "Cleaning out the pristine cache..."
     i <- gzReadFilePS tentativePristinePath
     cleanPristineDir (repoCache r) [peekPristineHash i]
+
+cleanPristineDir :: Cache -> [PristineHash] -> IO ()
+cleanPristineDir cache roots = do
+    reachable <- set . map encodeValidHash <$> followPristineHashes cache roots
+    files <- set <$> listDirectory pristineDirPath
+    let to_remove = unset $ files `Set.difference` reachable
+    withCurrentDirectory pristineDirPath $
+      mapM_ removeFileMayNotExist to_remove
+    -- and also clean out any global caches
+    debugMessage "Cleaning out any global caches..."
+    cleanCachesWithHint cache HashedPristineDir to_remove
+  where
+    set = Set.fromList . map BC.pack
+    unset = map BC.unpack . Set.toList
 
 -- | Set difference between two lists of hashes.
 diffHashLists :: [String] -> [String] -> [String]

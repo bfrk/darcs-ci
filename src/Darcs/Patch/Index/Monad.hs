@@ -21,13 +21,11 @@
 module Darcs.Patch.Index.Monad
     ( withPatchMods
     , applyToFileMods
-    , makePatchID
+    , FileMod(..)
     ) where
 
 import Darcs.Prelude
 
-import Darcs.Patch.Index.Types ( PatchMod(..), PatchId(..) )
-import Darcs.Patch.Info ( makePatchname, PatchInfo )
 import Darcs.Patch.Apply ( Apply(..) )
 import Darcs.Patch.ApplyMonad ( ApplyMonad(..), ApplyMonadTree(..) )
 import Control.Monad.Catch ( MonadThrow(..), SomeException )
@@ -38,18 +36,33 @@ import qualified Data.Set as S
 import Data.Set ( Set )
 import Darcs.Util.Tree (Tree)
 
+-- | This is used to track changes to files
+data FileMod a
+  = PTouch a
+  | PCreateFile a
+  | PCreateDir a
+  | PRename a a
+  | PRemove a
+  | PDuplicateTouch a
+    -- ^ this is used for duplicate patches that don't
+    --   have any effect, but we still want to keep
+    --   track of them
+  deriving (Show, Eq, Functor)
+
+type FileModState = (Set AnchoredPath, [FileMod AnchoredPath])
+
 newtype FileModMonad a =
-  FMM (StateT (Set AnchoredPath, [PatchMod AnchoredPath]) (Either SomeException) a)
+  FMM (StateT FileModState (Either SomeException) a)
   deriving ( Functor
            , Applicative
            , Monad
            , MonadThrow
-           , MonadState (Set AnchoredPath, [PatchMod AnchoredPath])
+           , MonadState FileModState
            )
 
 withPatchMods :: FileModMonad a
               -> Set AnchoredPath
-              -> (Set AnchoredPath, [PatchMod AnchoredPath])
+              -> FileModState
 withPatchMods (FMM m) fps =
   second reverse $
     case execStateT m (fps,[]) of
@@ -60,9 +73,7 @@ withPatchMods (FMM m) fps =
 -- apply.
 instance ApplyMonad Tree FileModMonad where
     type ApplyMonadBase FileModMonad = FileModMonad
-    nestedApply _ _ = error "nestedApply FileModMonad"
-    liftApply _ _ = error "liftApply FileModMonad"
-    getApplyState = error "getApplyState FileModMonad"
+    readFilePS = error "readFilePS FileModMonad"
 
 instance ApplyMonadTree FileModMonad where
     mDoesDirectoryExist d = do
@@ -93,7 +104,7 @@ instance ApplyMonadTree FileModMonad where
 -- ---------------------------------------------------------------------
 -- State Handling Functions
 
-addMod :: PatchMod AnchoredPath -> FileModMonad ()
+addMod :: FileMod AnchoredPath -> FileModMonad ()
 addMod pm = modify $ second (pm :)
 
 addFile :: AnchoredPath -> FileModMonad ()
@@ -127,14 +138,11 @@ remove f = addMod (PRemove f) >> modifyFps (S.delete f)
 modifyFps :: (Set AnchoredPath -> Set AnchoredPath) -> FileModMonad ()
 modifyFps f = modify $ first f
 
-makePatchID :: PatchInfo -> PatchId
-makePatchID = PID . makePatchname
-
 --------------------------------------------------------------------------------
 -- | Apply a patch to set of 'AnchoredPath's, yielding the new set of
--- 'AnchoredPath's and 'PatchMod's
+-- 'AnchoredPath's and 'FileMod's
 applyToFileMods :: (Apply p, ApplyState p ~ Tree)
                 => p wX wY
                 -> Set AnchoredPath
-                -> (Set AnchoredPath, [PatchMod AnchoredPath])
+                -> FileModState
 applyToFileMods patch = withPatchMods (apply patch)

@@ -21,44 +21,41 @@ module Darcs.UI.Commands.Repair ( repair, check ) where
 import Darcs.Prelude
 
 import Control.Monad ( when, unless, void )
+import Data.Maybe ( isJust )
 import System.IO.Error ( catchIOError )
-import System.Exit ( ExitCode(..), exitWith, exitSuccess )
+import System.Exit ( exitFailure )
 import System.Directory( renameFile )
 import System.FilePath ( (<.>) )
 
 import Darcs.UI.Commands
     ( DarcsCommand(..), withStdOpts, nodefaults
-    , putInfo, putWarning, amInHashedRepository
+    , putInfo, putVerbose, putWarning, amInHashedRepository
     )
 import Darcs.UI.Completion ( noArgs )
 import Darcs.UI.Flags
     ( DarcsFlag, verbosity, umask, useIndex
-    , useCache, compress, diffAlgorithm, quiet
+    , useCache, diffAlgorithm, quiet
     )
 import Darcs.UI.Options ( DarcsOption, oid, (?), (^) )
 import qualified Darcs.UI.Options.All as O
 
-import Darcs.Repository.Flags ( UpdatePending(..) )
 import Darcs.Repository.Paths ( indexPath )
 import Darcs.Repository.Repair
     ( replayRepository, checkIndex, replayRepositoryInTemp
     , RepositoryConsistency(..)
     )
 import Darcs.Repository
-    ( Repository, withRepository, readPristine, RepoJob(..)
+    ( withRepository, RepoJob(..)
     , withRepoLock, writePristine
+    , finalizeRepositoryChanges
     )
-import Darcs.Repository.Hashed ( finalizeRepositoryChanges, writeTentativeInventory )
-import Darcs.Repository.Prefs ( filetypeFunction )
-import Darcs.Repository.Diff( treeDiff )
+import Darcs.Repository.Hashed ( writeTentativeInventory )
+import Darcs.Repository.Pending ( setTentativePending )
 
-import Darcs.Patch ( RepoPatch, PrimOf, displayPatch )
-import Darcs.Patch.Witnesses.Ordered ( FL(..) )
-import Darcs.Patch.Witnesses.Sealed ( Sealed(..), unFreeLeft )
+import Darcs.Patch ( displayPatch )
+import Darcs.Patch.Witnesses.Sealed ( Sealed(..) )
 
 import Darcs.Util.Printer ( Doc, text, ($$) )
-import Darcs.Util.Tree ( Tree, expand )
-import Darcs.Util.Tree.Hashed ( darcsUpdateHashes )
 
 
 repairDescription :: String
@@ -105,37 +102,38 @@ repair = DarcsCommand
 withFpsAndArgs :: (b -> d) -> a -> b -> c -> d
 withFpsAndArgs cmd _ opts _ = cmd opts
 
+maybeDo :: Monad m => Maybe t -> (t -> m ()) -> m ()
+maybeDo (Just x) f = f x
+maybeDo Nothing _ = return ()
+
 repairCmd :: [DarcsFlag] -> IO ()
 repairCmd opts
   | O.yes (O.dryRun ? opts) = checkCmd opts
   | otherwise =
     withRepoLock (useCache ? opts) (umask ? opts) $
     RepoJob $ \repo -> do
-      _ <- replayRepository
+      bad_replay <- replayRepository
         (diffAlgorithm ? opts)
         repo
-        (compress ? opts)
-        (verbosity ? opts) $ \state ->
-        case state of
-          RepositoryConsistent -> do
-            putInfo opts "The repository is already consistent, no changes made."
-            exitSuccess
-          BrokenPristine tree -> do
-            putInfo opts "Fixing pristine tree..."
-            writePristine repo tree
-          BrokenPatches tree newps -> do
+        (verbosity ? opts) $ \RepositoryConsistency {..} -> do
+          maybeDo fixedPatches $ \ps -> do
             putInfo opts "Writing out repaired patches..."
-            writeTentativeInventory repo (compress ? opts) newps
-            -- HashedRepo.finalizeTentativeChanges repo (compress ? opts)
+            writeTentativeInventory repo ps
+          maybeDo fixedPristine $ \(tree, Sealed diff) -> do
+            putVerbose opts $ "Pristine differences:" $$ displayPatch diff
             putInfo opts "Fixing pristine tree..."
-            writePristine repo tree
+            void $ writePristine repo tree
+          maybeDo fixedPending $ \(Sealed pend) -> do
+            putInfo opts "Writing out repaired pending..."
+            setTentativePending repo pend
+          return $ isJust fixedPatches || isJust fixedPristine || isJust fixedPending
       index_ok <- checkIndex repo (quiet opts)
       unless index_ok $ do
         renameFile indexPath (indexPath <.> "bad")
         putInfo opts "Bad index discarded."
-      void $
-        finalizeRepositoryChanges repo NoUpdatePending
-          (compress ? opts) (O.dryRun ? opts)
+      if bad_replay || not index_ok
+        then void $ finalizeRepositoryChanges repo (O.dryRun ? opts)
+        else putInfo opts "The repository is already consistent, no changes made."
 
 -- |check is an alias for repair, with implicit DryRun flag.
 check :: DarcsCommand
@@ -160,19 +158,15 @@ check = DarcsCommand
 
 checkCmd :: [DarcsFlag] -> IO ()
 checkCmd opts = withRepository (useCache ? opts) $ RepoJob $ \repository -> do
-  state <- replayRepositoryInTemp (diffAlgorithm ? opts) repository (compress ? opts) (verbosity ? opts)
-  failed <-
-    case state of
-      RepositoryConsistent -> do
-        putInfo opts "The repository is consistent!"
-        return False
-      BrokenPristine newpris -> do
-        brokenPristine opts repository newpris
-        return True
-      BrokenPatches newpris _ -> do
-        brokenPristine opts repository newpris
-        putInfo opts "Found broken patches."
-        return True
+  RepositoryConsistency {..} <-
+    replayRepositoryInTemp (diffAlgorithm ? opts) repository (verbosity ? opts)
+  maybeDo fixedPatches $ \_ ->
+    putInfo opts "Found broken patches."
+  maybeDo fixedPristine $ \(_, Sealed diff) -> do
+    putInfo opts "Found broken pristine tree."
+    putVerbose opts $ "Differences:" $$ displayPatch diff
+  maybeDo fixedPending $ \_ ->
+    putInfo opts "Found broken pending."
   bad_index <-
     if useIndex ? opts == O.IgnoreIndex
       then return False
@@ -182,23 +176,6 @@ checkCmd opts = withRepository (useCache ? opts) $ RepoJob $ \repository -> do
             putWarning opts ("Warning, cannot access the index:" $$ text (show e))
             return True
   when bad_index $ putInfo opts "Bad index."
-  exitWith $ if failed || bad_index then ExitFailure 1 else ExitSuccess
-
-brokenPristine
-  :: forall rt p wU wR . (RepoPatch p)
-  => [DarcsFlag] -> Repository rt p wU wR -> Tree IO -> IO ()
-brokenPristine opts repository newpris = do
-  putInfo opts "Looks like we have a difference..."
-  mc' <-
-    (Just `fmap` (readPristine repository >>= expand >>= darcsUpdateHashes))
-      `catchIOError` (\_ -> return Nothing)
-  case mc' of
-    Nothing -> do
-      putWarning opts $ "Unable to read the recorded state, try repair."
-    Just mc -> do
-      ftf <- filetypeFunction
-      Sealed (diff :: FL (PrimOf p) wR wR2)
-        <- unFreeLeft `fmap` treeDiff (diffAlgorithm ? opts) ftf newpris mc :: IO (Sealed (FL (PrimOf p) wR))
-      putInfo opts $ case diff of
-        NilFL -> "Nothing"
-        patch -> displayPatch patch
+  if isJust fixedPatches || isJust fixedPristine || isJust fixedPending || bad_index
+    then exitFailure
+    else putInfo opts "The repository is consistent!"

@@ -38,7 +38,7 @@ import Darcs.Repository
     ( RepoJob(..)
     , createPristineDirectoryTree
     , readPatches
-    , setScriptsExecutable
+    , setAllScriptsExecutable
     , withRepository
     )
 import Darcs.Repository.Prefs ( getPrefval )
@@ -51,7 +51,7 @@ import Darcs.UI.Commands
     )
 import Darcs.UI.Commands.Test.Impl
     ( StrategyResultRaw(..)
-    , PatchTree(..)
+    , PatchSeq(..)
     , exitCodeToTestResult
     , explanatoryTextFor
     , mkTestCmd
@@ -161,7 +161,7 @@ testCommand _ opts args =
             O.NoLeaveTestDir -> withTempDir
   wd "testing" $ \d -> do
     createPristineDirectoryTree repository (toFilePath d) O.WithWorkingDir
-    when (O.yes (O.setScriptsExecutable ? opts)) setScriptsExecutable
+    when (O.yes (O.setScriptsExecutable ? opts)) setAllScriptsExecutable
     _ <- init
     putInfo opts "Running test...\n"
     result <-

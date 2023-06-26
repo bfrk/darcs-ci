@@ -8,6 +8,15 @@ Similar to the camp paper, but with a few differences:
 
 * minor details of merge and commute due to bug fixes
 
+The proofs in this module assume that whenever we create a conflictor we
+maintain the following invariants:
+
+(1) A conflictor reverts a patch in its context iff it is the first patch
+    that conflicts with it. This implies that any patch a conflictor reverts
+    exists in its context as an unconflicted Prim.
+
+(2) If v depends on u and p conflicts with u then it also conflicts with v.
+
 -}
 
 {-# LANGUAGE ViewPatterns, PatternSynonyms #-}
@@ -36,13 +45,13 @@ import Darcs.Patch.Format ( ListFormat(ListFormatV3) )
 import Darcs.Patch.FromPrim ( ToPrim(..) )
 import Darcs.Patch.Ident
     ( Ident(..)
-    , IdEq2(..)
     , PatchId
     , SignedId(..)
     , StorableId(..)
     , commuteToPrefix
     , fastRemoveFL
     , findCommonFL
+    , (=\^/=)
     )
 import Darcs.Patch.Invert ( Invert, invert, invertFL )
 import Darcs.Patch.Merge
@@ -52,7 +61,7 @@ import Darcs.Patch.Merge
     , swapCleanMerge
     , swapMerge
     )
-import Darcs.Patch.Prim ( PrimPatch, applyPrimFL )
+import Darcs.Patch.Prim ( PrimPatch, applyPrimFL, sortCoalesceFL )
 import Darcs.Patch.Prim.WithName ( PrimWithName, wnPatch )
 import Darcs.Patch.Read ( bracketedFL )
 import Darcs.Patch.Repair (RepairToFL(..), Check(..) )
@@ -86,6 +95,7 @@ import Darcs.Patch.V3.Contexted
     , ctxAddFL
     , commutePast
     , commutePastRL
+    , ctxToFL
     , ctxTouches
     , ctxHunkMatches
     , showCtx
@@ -104,7 +114,7 @@ import Darcs.Patch.Witnesses.Ordered
     , reverseFL
     , reverseRL
     )
-import Darcs.Patch.Witnesses.Sealed ( Sealed(..), mapSeal )
+import Darcs.Patch.Witnesses.Sealed ( Sealed(..), mapSeal, unseal )
 import Darcs.Patch.Witnesses.Show ( Show1, Show2, appPrec, showsPrec2 )
 import Darcs.Patch.Witnesses.Unsafe ( unsafeCoerceP1 )
 
@@ -218,7 +228,7 @@ instance (SignedId name, StorableId name, PrimPatch prim) =>
     :/\:
     Conflictor (invert q :>: NilFL) (S.singleton (ctx q)) (ctx p)
   -- * prim patch p conflicting with conflictor on the rhs:
-  -- The rhs is the first to conflict with p, so must we add invert p
+  -- The rhs is the first to conflict with p, so we must add invert p
   -- to its effect, and to its conflicts (adding invert r as context for p).
   -- For the other branch, we add a new conflictor representing p. It
   -- conflicts with q and has no effect, since q is already conflicted.
@@ -233,10 +243,6 @@ instance (SignedId name, StorableId name, PrimPatch prim) =>
   -- from the effect of c2 (but still remember that we conflict with them).
   -- We also record that we now conflict with c1, too, and as before keep
   -- our identity unchanged. The rest consists of adapting contexts.
-  --
-  -- Note: we assume that the uncommon parts of the effects of both
-  -- conflictors do not themselves conflict with each other, so we can
-  -- use cleanMerge for them.
   merge (lhs@(Conflictor com_r x cp) :\/: rhs@(Conflictor com_s y cq)) =
     case findCommonFL com_r com_s of
       Fork _ r s ->
@@ -248,6 +254,13 @@ instance (SignedId name, StorableId name, PrimPatch prim) =>
                 y' = cp' +| S.map (ctxAddInvFL r') y
             in Conflictor s' y' cq' :/\: Conflictor r' x' cp'
           Nothing ->
+            -- Proof that this is impossible:
+            --
+            -- A conflictor reverts another patch only if it is the first that
+            -- conflicts with it. Thus every patch it reverts is contained in
+            -- its context as an unconflicted Prim patch. This holds for both
+            -- lhs and rhs, which share the same context. Thus there can be no
+            -- conflict between the effects of lhs and rhs. QED
             error $ renderString $ redText "uncommon effects can't be merged cleanly:"
               $$ redText "lhs:" $$ displayPatch lhs
               $$ redText "rhs:" $$ displayPatch rhs
@@ -296,7 +309,7 @@ instance (SignedId name, StorableId name, PrimPatch prim)
 
 -- * Commute
 
--- commuting a conflicted merge; these cases follow directly from merge
+-- | Commute conflicting patches. These cases follow directly from merge.
 commuteConflicting
   :: (SignedId name, StorableId name, PrimPatch prim)
   => CommuteFn (RepoPatchV3 name prim) (RepoPatchV3 name prim)
@@ -315,7 +328,16 @@ commuteConflicting (Prim p :> Conflictor s y cq)
   | ident p `S.member` S.map ctxId y =
       case fastRemoveFL (invert p) s of
         Nothing ->
-          error $ renderString $ redText "commuteConflicting: cannot remove (invert lhs):"
+          -- Proof that this is impossible:
+          --
+          -- The case assumption (that p is in conflict with q) together
+          -- with the fact that the rhs is obviously the first patch that
+          -- conflicts with the lhs, imply that p^ is contained in s. It
+          -- remains to be shown that p^ does not depend on any prim contained
+          -- in s. Suppose there were such a prim, then p would be in conflict
+          -- with it, which means p would have to be a conflictor. QED
+          error $ renderString
+            $ redText "commuteConflicting: cannot remove (invert lhs):"
             $$ displayPatch (invert p)
             $$ redText "from effect of rhs:"
             $$ displayPatch s
@@ -328,12 +350,24 @@ commuteConflicting (Prim p :> Conflictor s y cq)
 commuteConflicting (lhs@(Conflictor r x cp) :> rhs@(Conflictor NilFL y cq))
   | y == S.singleton cp =
       case ctxView (ctxAddFL r cq) of
-        Sealed (NilFL :> cq') ->
-          Just $
-            Prim cq'
-            :>
-            Conflictor (invert cq' :>: r) (cq +| x) cp
+        Sealed (NilFL :> q') ->
+          Just $ Prim q' :> Conflictor (invert q' :>: r) (cq +| x) cp
         Sealed (c' :> _) ->
+          -- Proof that this is impossible:
+          --
+          -- First, it must be true that commutePastFL r cq = Just cq'. For if
+          -- not, then there would be a conflict between the rhs and one of the
+          -- prims that the lhs reverts, in contradiction to our case
+          -- assumption that the rhs conflicts only with the lhs.
+          --
+          -- Second, suppose that cq' has residual nonempty context. That means
+          -- there is a patch x in the history that the rhs depends on, and
+          -- which is in conflict with at least one other patch y in our
+          -- history (the history being the patches that precede the lhs);
+          -- because otherwise cq' appended to the history would be a sequence
+          -- that contains x twice without an intermediate revert. But then the
+          -- rhs would also have to conflict with the patch x, again in
+          -- contradiction to our case assumption. QED
           error $ renderString $ redText "remaining context in commute:"
             $$ displayPatch c'
             $$ redText "lhs:" $$ displayPatch lhs
@@ -346,19 +380,31 @@ commuteConflicting (Conflictor com_r x cp :> Conflictor s y cq)
   , is_cp `S.member` y
   , let y' = is_cp -| y =
       case commuteToPrefix (S.map (invertId . ctxId) y') com_r of
-        Nothing -> error "commuteConflicting: cannot commute common effects"
+        Nothing ->
+          -- Proof that the above commute must suceed:
+          --
+          -- Let u and v be prims that the lhs reverts, and suppose v also
+          -- conflicts with the rhs. If v^ depends on u^, then u depends on v
+          -- and thus u also conflicts with the rhs. Thus any v^ in com_r such
+          -- that v conflicts with the rhs can depend only on other elements of
+          -- com_r that also conflict with the rhs. QED
+          error "commuteConflicting: cannot commute common effects"
         Just (com :> rr) ->
           case commuteRLFL (rr :> s) of
-            Nothing -> error "commuteConflicting: cannot commute uncommon effects"
+            Nothing ->
+              -- Proof that the above commute must succeed:
+              --
+              -- This is equivalent to the statement: a prim v that conflicts
+              -- only with the lhs cannot depend on another prim u that
+              -- conflicts only with the rhs. Again, this is a consequence of
+              -- the fact that if v depends on u and u conflicts with q, then v
+              -- must also conflict with q.
+              error "commuteConflicting: cannot commute uncommon effects"
             Just (s' :> rr') ->
               Just $
-                Conflictor (com +>+ s')
-                  (S.map (ctxAddRL rr') y')
-                  (ctxAddRL rr' cq)
+                Conflictor (com +>+ s') (S.map (ctxAddRL rr') y') (ctxAddRL rr' cq)
                 :>
-                Conflictor (reverseRL rr')
-                  (cq +| S.map (ctxAddInvFL s) x)
-                  is_cp
+                Conflictor (reverseRL rr') (cq +| S.map (ctxAddInvFL s) x) is_cp
 commuteConflicting _ = Nothing
 
 instance (SignedId name, StorableId name, PrimPatch prim) =>
@@ -458,11 +504,11 @@ instance (SignedId name, StorableId name, PrimPatch prim)
   summaryFL = plainSummaryFL
   thing _ = "change"
 
-instance (StorableId name, PrimPatch prim)
+instance (SignedId name, StorableId name, PrimPatch prim)
   => ShowContextPatch (RepoPatchV3 name prim) where
 
   showContextPatch f (Prim p) = showContextPatch f p
-  showContextPatch f p = return $ showPatch f p
+  showContextPatch f p = apply p >> return (showPatch f p)
 
 -- * Read and Write
 
@@ -487,13 +533,24 @@ instance (SignedId name, StorableId name, PrimPatch prim)
         where
           go = (lexString (BC.pack "}}") >> pure S.empty) <|> S.insert <$> readCtx <*> go
 
-instance (StorableId name, PrimPatch prim)
+instance (SignedId name, StorableId name, PrimPatch prim)
   => ShowPatchBasic (RepoPatchV3 name prim) where
 
   showPatch fmt rp =
     case rp of
       Prim p -> showPatch fmt p
-      Conflictor r x cp -> blueText "conflictor" <+> showContent r x cp
+      Conflictor r x cp ->
+        case fmt of
+          ForStorage -> blueText "conflictor" <+> showContent r x cp
+          ForDisplay ->
+            vcat
+            [ blueText "conflictor"
+            , vcat (mapFL displayPatch r)
+            , redText "v v v v v v v"
+            , vcat [ displayCtx p $$ redText "*************" | p <- S.toList x ]
+            , displayCtx cp
+            , redText "^ ^ ^ ^ ^ ^ ^"
+            ]
     where
       showContent r x cp = showEffect r <+> showCtxSet x $$ showCtx fmt cp
       showEffect NilFL = blueText "[]"
@@ -505,6 +562,10 @@ instance (StorableId name, PrimPatch prim)
             blueText "{{"
               $$ vcat (map (showCtx fmt) (S.toAscList xs))
               $$ blueText "}}"
+      displayCtx c =
+        -- need to use ForStorage to see the prim patch IDs
+        showId ForStorage (ctxId c) $$
+        unseal (showPatch ForDisplay . sortCoalesceFL . mapFL_FL wnPatch) (ctxToFL c)
 
 -- * Local helper functions
 

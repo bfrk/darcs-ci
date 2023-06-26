@@ -48,4 +48,5 @@ find . -name moo
 # ideally we would preserve the pending 'addfile ./d/moo',
 # but we currently do not
 #darcs whatsnew | grep 'addfile ./d/moo'
+darcs whatsnew | grep 'adddir ./d'
 cd ..

@@ -2,23 +2,30 @@ module Darcs.Repository.Unrevert
     ( finalizeTentativeUnrevert
     , revertTentativeUnrevert
     , writeUnrevert
-    , unrevertPatchBundle
+    , readUnrevert
     , removeFromUnrevertContext
     ) where
 
 import Darcs.Prelude
+
 import Darcs.Patch ( PrimOf, RepoPatch, commuteRL )
 import Darcs.Patch.Apply ( ApplyState )
 import Darcs.Patch.Bundle ( interpretBundle, makeBundle, parseBundle )
-import Darcs.Patch.Depends ( mergeThem, removeFromPatchSet )
+import Darcs.Patch.Depends ( patchSetMerge, removeFromPatchSet )
 import Darcs.Patch.Info ( patchinfo )
 import Darcs.Patch.Named ( infopatch )
 import Darcs.Patch.PatchInfoAnd ( PatchInfoAnd, hopefully )
 import Darcs.Patch.Set ( Origin, PatchSet, SealedPatchSet )
-import Darcs.Patch.Witnesses.Ordered ( (:>)(..), FL(..), lengthFL, reverseFL )
+import Darcs.Patch.Witnesses.Ordered
+    ( (:/\:)(..)
+    , (:>)(..)
+    , FL(..)
+    , lengthFL
+    , reverseFL
+    )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(Sealed) )
 import Darcs.Repository.Paths ( tentativeUnrevertPath, unrevertPath )
-import Darcs.Util.Exception ( catchDoesNotExistError )
+import Darcs.Util.Exception ( catchDoesNotExistError, ifDoesNotExistError )
 import Darcs.Util.Global ( debugMessage )
 import Darcs.Util.IsoDate ( getIsoDateTime )
 import Darcs.Util.Lock ( readBinFile, removeFileMayNotExist, writeDocBinFile )
@@ -40,21 +47,20 @@ revertTentativeUnrevert =
 
 writeUnrevert :: (RepoPatch p, ApplyState p ~ Tree)
               => PatchSet p Origin wR
-              -> Tree IO
               -> FL (PrimOf p) wR wX
               -> IO ()
-writeUnrevert _ _ NilFL = removeFileMayNotExist tentativeUnrevertPath
-writeUnrevert recorded pristine ps = do
+writeUnrevert _ NilFL = removeFileMayNotExist tentativeUnrevertPath
+writeUnrevert recorded ps = do
   date <- getIsoDateTime
   info <- patchinfo date "unrevert" "anon" []
   let np = infopatch info ps
-  bundle <- makeBundle (Just pristine) recorded (np :>: NilFL)
+  bundle <- makeBundle Nothing recorded (np :>: NilFL)
   writeDocBinFile tentativeUnrevertPath bundle
 
-unrevertPatchBundle :: RepoPatch p
-                    => PatchSet p Origin wR
-                    -> IO (SealedPatchSet p Origin)
-unrevertPatchBundle us = do
+readUnrevert :: RepoPatch p
+             => PatchSet p Origin wR
+             -> IO (SealedPatchSet p Origin)
+readUnrevert us = do
   pf <- readBinFile tentativeUnrevertPath
         `catchDoesNotExistError` fail "There's nothing to unrevert!"
   case parseBundle pf of
@@ -69,27 +75,27 @@ removeFromUnrevertContext :: forall p wR wX. (RepoPatch p, ApplyState p ~ Tree)
                           -> FL (PatchInfoAnd p) wX wR
                           -> IO ()
 removeFromUnrevertContext _ NilFL = return () -- nothing to do
-removeFromUnrevertContext ref ps = (do
-  debugMessage "Reading the unrevert bundle..."
-  Sealed bundle <- unrevert_patch_bundle
-  debugMessage "Adjusting the context of the unrevert changes..."
-  debugMessage $
-    "Removing " ++ show (lengthFL ps) ++ " patches in removeFromUnrevertContext"
-  Sealed bundle_ps <- bundle_to_patchset bundle
-  case mergeThem ref bundle_ps of
-    Sealed (h_us :>: NilFL) -> do
-      case commuteRL (reverseFL ps :> h_us) of
-        Nothing -> unrevert_impossible
-        Just (us' :> _) ->
-          case removeFromPatchSet ps ref of
-            Nothing -> unrevert_impossible
-            Just common -> do
-              debugMessage "Have now found the new context..."
-              bundle' <- makeBundle Nothing common (hopefully us' :>: NilFL)
-              writeDocBinFile tentativeUnrevertPath bundle'
-    Sealed _ -> return () -- TODO I guess this should be an error call
-  debugMessage "Done adjusting the context of the unrevert changes")
-  `catchDoesNotExistError` return ()
+removeFromUnrevertContext ref ps =
+  ifDoesNotExistError () $ do
+    debugMessage "Reading the unrevert bundle..."
+    Sealed bundle <- unrevert_patch_bundle
+    debugMessage "Adjusting the context of the unrevert changes..."
+    debugMessage $
+      "Removing " ++ show (lengthFL ps) ++ " patches in removeFromUnrevertContext"
+    Sealed bundle_ps <- bundle_to_patchset bundle
+    case patchSetMerge ref bundle_ps of
+      (unrevert :>: NilFL) :/\: _ -> do
+        case commuteRL (reverseFL ps :> unrevert) of
+          Nothing -> unrevert_impossible
+          Just (unrevert' :> _) ->
+            case removeFromPatchSet ps ref of
+              Nothing -> unrevert_impossible
+              Just common -> do
+                debugMessage "Have now found the new context..."
+                bundle' <- makeBundle Nothing common (hopefully unrevert' :>: NilFL)
+                writeDocBinFile tentativeUnrevertPath bundle'
+      _ -> return () -- TODO I guess this should be an error call
+    debugMessage "Done adjusting the context of the unrevert changes"
   where
     unrevert_impossible = do
       confirmed <-

@@ -1,7 +1,6 @@
 module Darcs.Util.File
     ( -- * Files and directories
       getFileStatus
-    , withCurrentDirectory
     , doesDirectoryReallyExist
     , removeFileMayNotExist
     , getRecursiveContents
@@ -28,12 +27,7 @@ import Darcs.Util.Exception ( catchall, ifDoesNotExistError )
 import Darcs.Util.Global ( defaultRemoteDarcsCmd )
 import Darcs.Util.HTTP ( Cachable(..) )
 import qualified Darcs.Util.HTTP as HTTP
-import Darcs.Util.Path
-    ( FilePathLike
-    , getCurrentDirectory
-    , setCurrentDirectory
-    , toFilePath
-    )
+import Darcs.Util.Path ( FilePathLike, toFilePath )
 import Darcs.Util.Ssh ( copySSH )
 import Darcs.Util.URL ( isHttpUrl, isSshUrl, isValidLocalPath, splitSshUrl )
 
@@ -41,7 +35,6 @@ import Control.Exception ( IOException, bracket, catch )
 import Control.Monad ( forM, unless, when, zipWithM_ )
 import qualified Data.ByteString as B ( ByteString, readFile )
 import qualified Data.ByteString.Lazy as BL
-import GHC.Stack ( HasCallStack )
 import Network.URI ( parseURI, uriScheme )
 import System.Directory
     ( copyFile
@@ -63,15 +56,6 @@ import System.Posix.Files
     , isDirectory
     , isRegularFile
     )
-
-withCurrentDirectory :: (HasCallStack, FilePathLike p) => p -> IO a -> IO a
-withCurrentDirectory name m =
-    bracket
-        (do cwd <- getCurrentDirectory
-            when (toFilePath name /= "") (setCurrentDirectory name)
-            return cwd)
-        (\oldwd -> setCurrentDirectory oldwd `catchall` return ())
-        (const m)
 
 -- | Badly named, since it is actually 'getSymbolicLinkStatus', with all
 -- 'IOError's turned into 'Nothing'.

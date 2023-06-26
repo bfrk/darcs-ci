@@ -24,23 +24,22 @@ import System.Exit ( exitSuccess )
 
 import Darcs.Patch.Match ( firstMatch )
 import Darcs.Patch.PatchInfoAnd ( n2pia )
-import Darcs.Patch ( canonize, effect, invert, sortCoalesceFL )
+import Darcs.Patch ( canonizeFL, effect, invert )
 import Darcs.Patch.Named ( anonymous )
 import Darcs.Patch.Set ( emptyPatchSet, patchSet2FL )
 import Darcs.Patch.Split ( reversePrimSplitter )
-import Darcs.Patch.Witnesses.Ordered ( Fork(..), FL(..), (:>)(..), concatFL, nullFL, mapFL_FL )
+import Darcs.Patch.Witnesses.Ordered ( Fork(..), FL(..), (:>)(..), nullFL )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(..) )
-import Darcs.Repository.Flags ( AllowConflicts(..), Reorder(..), UpdatePending(..) )
 import Darcs.Repository ( withRepoLock, RepoJob(..),
                           applyToWorking, readPatches,
-                          finalizeRepositoryChanges, tentativelyAddToPending,
+                          finalizeRepositoryChanges, addToPending,
                           considerMergeToWorking )
 import Darcs.UI.Commands ( DarcsCommand(..), withStdOpts, nodefaults, setEnvDarcsPatches,
                            amInHashedRepository, putInfo )
 import Darcs.UI.Commands.Util ( announceFiles, getLastPatches )
 import Darcs.UI.Completion ( knownFileArgs )
 import Darcs.UI.Flags ( DarcsFlag, verbosity, umask, useCache,
-                        compress, externalMerge, wantGuiPause, diffingOpts,
+                        wantGuiPause, diffingOpts,
                         diffAlgorithm, isInteractive, pathSetFromArgs )
 import Darcs.UI.Options ( parseFlags, (?), (^) )
 import qualified Darcs.UI.Options.All as O
@@ -79,7 +78,6 @@ patchSelOpts flags = S.PatchSelectionOptions
     , S.interactive = isInteractive True flags
     , S.selectDeps = O.PromptDeps
     , S.withSummary = O.NoSummary
-    , S.withContext = O.NoContext
     }
 
 rollback :: DarcsCommand
@@ -130,24 +128,22 @@ rollbackCmd fps opts args = withRepoLock (useCache ? opts)
               selectionConfigPrim
                   Last "rollback" (patchSelOpts opts)
                   (Just (reversePrimSplitter (diffAlgorithm ? opts)))
-                  files Nothing
-            hunks = concatFL . mapFL_FL (canonize $ diffAlgorithm ? opts) . sortCoalesceFL . effect
+                  files
+            hunks = canonizeFL (diffAlgorithm ? opts) . effect
         _ :> to_undo <- runInvertibleSelection (hunks ps) prim_selection_context
         exitIfNothingSelected to_undo "changes"
         -- Note: use of anonymous is unproblematic here because we
         -- only store effects by adding them to pending and working)
         rbp <- n2pia `fmap` anonymous (invert to_undo)
         Sealed pw <- considerMergeToWorking _repo "rollback"
-                         YesAllowConflictsAndMark
-                         (externalMerge ? opts) (wantGuiPause opts)
-                         (compress ? opts) (verbosity ? opts) NoReorder
+                         (O.YesAllowConflicts O.MarkConflicts)
+                         (wantGuiPause opts)
+                         O.NoReorder
                          (diffingOpts opts)
                          (Fork allpatches NilFL (rbp :>: NilFL))
-        tentativelyAddToPending _repo pw
+        addToPending _repo (diffingOpts opts) pw
         withSignalsBlocked $ do
-            _repo <-
-              finalizeRepositoryChanges _repo YesUpdatePending
-                (compress ? opts) (O.dryRun ? opts)
+            _repo <- finalizeRepositoryChanges _repo (O.dryRun ? opts)
             unless (O.yes (O.dryRun ? opts)) $
               void $ applyToWorking _repo (verbosity ? opts) pw
         debugMessage "Finished applying unrecorded rollback patch"

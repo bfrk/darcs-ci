@@ -2,15 +2,12 @@
 
 module Darcs.Util.Compat
     ( stdoutIsAPipe
-    , canonFilename
     , maybeRelink
     , atomicCreate
     , sloppyAtomicCreate
     ) where
 
 import Darcs.Prelude
-
-import Darcs.Util.File ( withCurrentDirectory )
 
 import Control.Monad ( unless )
 import Foreign.C.Types ( CInt(..) )
@@ -24,20 +21,6 @@ import System.Posix.IO ( openFd, closeFd,
                          OpenMode(WriteOnly) )
 
 import Darcs.Util.SignalHandler ( stdoutIsAPipe )
-
-canonFilename :: FilePath -> IO FilePath
-canonFilename f@(_:':':_) = return f -- absolute windows paths
-canonFilename f@('/':_) = return f
-canonFilename ('.':'/':f) = do cd <- getCurrentDirectory
-                               return $ cd ++ "/" ++ f
-canonFilename f = case reverse $ dropWhile (/='/') $ reverse f of
-                  "" -> fmap (++('/':f)) getCurrentDirectory
-                  rd -> withCurrentDirectory rd $
-                          do fd <- getCurrentDirectory
-                             return $ fd ++ "/" ++ simplefilename
-    where
-    simplefilename = reverse $ takeWhile (/='/') $ reverse f
-
 
 foreign import ccall unsafe "maybe_relink.h maybe_relink" maybe_relink
     :: CString -> CString -> CInt -> IO CInt

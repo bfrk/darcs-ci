@@ -35,7 +35,7 @@ cd temp1
 darcs init
 touch foo
 darcs add foo
-darcs rec -m t1 -a -A tester
+darcs rec -m t1 -a
 echo 1 >> foo
 darcs what -s | grep -v No\ changes
 darcs what -l | grep -v No\ changes
@@ -65,7 +65,7 @@ diff -rc temp1/pristine temp3/pristine
 diff -rc temp2/pristine temp3/pristine
 
 cd temp1
-darcs record -a -A tester -m t2
+darcs record -a -m t2
 darcs push ../temp2 -a
 darcs push ../temp3 -a
 makepristine
@@ -84,7 +84,7 @@ diff -rc temp2/pristine temp3/pristine
 
 cd temp1
 date > foo
-darcs record -a -A tester -m t3
+darcs record -a -m t3
 makepristine
 cd ../temp2
 darcs pull -a

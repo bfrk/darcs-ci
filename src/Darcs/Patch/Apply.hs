@@ -26,6 +26,7 @@
 module Darcs.Patch.Apply
     (
       Apply(..)
+    , ObjectIdOfPatch
     , applyToPaths
     , applyToTree
     , applyToState
@@ -43,6 +44,7 @@ import Darcs.Util.Tree ( Tree )
 
 import Darcs.Patch.ApplyMonad ( ApplyMonad(..), withFileNames, ApplyMonadTrans(..) )
 import Darcs.Patch.Invert ( Invert(..) )
+import Darcs.Patch.Object ( ObjectIdOf )
 import Darcs.Patch.Witnesses.Ordered ( FL(..), RL(..) )
 
 class Apply p where
@@ -66,6 +68,7 @@ instance Apply p => Apply (RL p) where
     unapply NilRL = return ()
     unapply (ps:<:p) = unapply p >> unapply ps
 
+type ObjectIdOfPatch p = ObjectIdOf (ApplyState p)
 
 effectOnPaths :: (Apply p, ApplyState p ~ Tree)
               => p wX wY

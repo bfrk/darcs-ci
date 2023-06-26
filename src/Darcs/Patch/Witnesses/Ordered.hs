@@ -70,11 +70,11 @@ module Darcs.Patch.Witnesses.Ordered
     , spanFL
     , spanFL_M
     , zipWithFL
-    , freeLeftToFL
+    , consGapFL
+    , concatGapsFL
+    , joinGapsFL
     , mapFL_FL_M
     , sequenceFL_
-    , eqFL
-    , eqFLUnsafe
     , initsFL
     -- * 'RL' only
     , isShorterThanRL
@@ -82,6 +82,10 @@ module Darcs.Patch.Witnesses.Ordered
     , breakRL
     , takeWhileRL
     , concatRLFL
+    -- * Functions on 'Fork's
+    , dropRight
+    , dropLeft
+    , dropCommon
     ) where
 
 import Darcs.Prelude
@@ -91,10 +95,11 @@ import Darcs.Patch.Witnesses.Sealed
     ( FlippedSeal(..)
     , flipSeal
     , Sealed(..)
-    , FreeLeft
-    , unFreeLeft
     , Sealed2(..)
     , seal
+    , Gap(..)
+    , emptyGap
+    , joinGap
     )
 import Darcs.Patch.Witnesses.Eq ( Eq2(..), EqCheck(..) )
 
@@ -233,6 +238,21 @@ instance (Eq2 a, Eq2 b) => Eq2 (a :> b) where
 
 instance (Eq2 a, Eq2 b) => Eq ((a :> b) wX wY) where
     (==) = unsafeCompare
+
+instance Eq2 p => Eq2 (FL p) where
+  NilFL =\/= NilFL = IsEq
+  a:>:as =\/= b:>:bs
+    | IsEq <- a =\/= b = as =\/= bs
+    | otherwise = NotEq
+  _ =\/= _ = NotEq
+  xs =/\= ys = reverseFL xs =/\= reverseFL ys
+
+instance Eq2 p => Eq2 (RL p) where
+  NilRL =/\= NilRL = IsEq
+  as:<:a =/\= bs:<:b
+    | IsEq <- a =/\= b = as =/\= bs
+    | otherwise = NotEq
+  _ =/\= _ = NotEq
 
 instance (Show2 a, Show2 b) => Show2 (a :> b)
 
@@ -475,13 +495,14 @@ isShorterThanRL _ n | n <= 0 = False
 isShorterThanRL NilRL _ = True
 isShorterThanRL (xs:<:_) n = isShorterThanRL xs (n-1)
 
-freeLeftToFL :: [FreeLeft a] -> Sealed (FL a wX)
-freeLeftToFL [] = Sealed NilFL
-freeLeftToFL (x:xs) =
-  case unFreeLeft x of
-    Sealed y ->
-      case freeLeftToFL xs of
-        Sealed ys -> Sealed (y :>: ys)
+consGapFL :: Gap w => (forall wX wY. p wX wY) -> w (FL p) -> w (FL p)
+consGapFL p = joinGap (:>:) (freeGap p)
+
+joinGapsFL :: Gap w => [w p] -> w (FL p)
+joinGapsFL = foldr (joinGap (:>:)) (emptyGap NilFL)
+
+concatGapsFL :: Gap w => [w (FL p)] -> w (FL p)
+concatGapsFL = foldr (joinGap (+>+)) (emptyGap NilFL)
 
 dropWhileFL :: (forall wX wY . a wX wY -> Bool) -> FL a wR wV -> FlippedSeal (FL a) wV
 dropWhileFL _ NilFL       = flipSeal NilFL
@@ -513,19 +534,6 @@ spanRL f left@(ps :<: p)
 breakRL :: (forall wA wB . p wA wB -> Bool) -> RL p wX wY -> (RL p :> RL p) wX wY
 breakRL f = spanRL (not . f)
 
--- |Check that two 'FL's are equal element by element.
--- This differs from the 'Eq2' instance for 'FL' which
--- uses commutation.
-eqFL :: Eq2 a => FL a wX wY -> FL a wX wZ -> EqCheck wY wZ
-eqFL NilFL NilFL = IsEq
-eqFL (x:>:xs) (y:>:ys) | IsEq <- x =\/= y, IsEq <- eqFL xs ys = IsEq
-eqFL _ _ = NotEq
-
-eqFLUnsafe :: Eq2 a => FL a wX wY -> FL a wZ wW -> Bool
-eqFLUnsafe NilFL NilFL = True
-eqFLUnsafe (x:>:xs) (y:>:ys) = unsafeCompare x y && eqFLUnsafe xs ys
-eqFLUnsafe _ _ = False
-
 infixr 5 +>>+
 infixl 5 +<<+
 
@@ -548,3 +556,14 @@ initsFL (x :>: xs) =
 concatRLFL :: RL (FL p) wX wY -> RL p wX wY
 concatRLFL NilRL = NilRL
 concatRLFL (ps :<: p) = concatRLFL ps +<<+ p
+
+-- * Functions on 'Fork's
+
+dropRight :: Fork p q r wX wY wZ -> (p :> q) wX wY
+dropRight (Fork x y _) = x :> y
+
+dropLeft :: Fork p q r wX wY wZ -> (p :> r) wX wZ
+dropLeft (Fork x _ z) = x :> z
+
+dropCommon :: Fork p q r wX wY wZ -> (q :\/: r) wY wZ
+dropCommon (Fork _ y z) = y :\/: z

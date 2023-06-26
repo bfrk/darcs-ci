@@ -35,7 +35,9 @@ module Darcs.Patch.Set
 
 import Darcs.Prelude
 import Data.Maybe ( catMaybes )
+import qualified Data.Set as S
 
+import Darcs.Patch.Ident ( Ident(..), PatchId )
 import Darcs.Patch.Info ( PatchInfo, piTag )
 import Darcs.Patch.PatchInfoAnd ( PatchInfoAnd, info )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(..) )
@@ -77,6 +79,10 @@ instance Show2 p => Show1 (PatchSet p wStart)
 
 instance Show2 p => Show2 (PatchSet p)
 
+type instance PatchId (PatchSet p) = S.Set PatchInfo
+
+instance Ident (PatchSet p) where
+  ident = S.fromList . mapRL ident . patchSet2RL
 
 emptyPatchSet :: PatchSet p Origin Origin
 emptyPatchSet = PatchSet NilRL NilRL

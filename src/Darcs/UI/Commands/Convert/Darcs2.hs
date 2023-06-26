@@ -63,8 +63,7 @@ import Darcs.Repository
     , withRepositoryLocation
     , withUMaskFlag
     )
-import qualified Darcs.Repository as R ( setScriptsExecutable )
-import Darcs.Repository.Flags ( UpdatePending(..) )
+import qualified Darcs.Repository as R ( setAllScriptsExecutable )
 import Darcs.Repository.Format
     ( RepoProperty(Darcs2)
     , formatHas
@@ -75,6 +74,7 @@ import Darcs.Repository.Prefs ( showMotd, prefsFilePath )
 
 import Darcs.UI.Commands ( DarcsCommand(..), nodefaults, putFinished, withStdOpts )
 import Darcs.UI.Commands.Convert.Util ( updatePending )
+import Darcs.UI.Commands.Util ( commonHelpWithPrefsTemplates )
 import Darcs.UI.Completion ( noArgs )
 import Darcs.UI.Flags
     ( verbosity, useCache, umask, withWorkingDir, patchIndexNo
@@ -88,7 +88,7 @@ import Darcs.Util.File ( fetchFilePS, Cachable(Uncachable) )
 import Darcs.Util.Exception ( catchall )
 import Darcs.Util.Lock ( withNewDirectory )
 import Darcs.Util.Path( ioAbsoluteOrRemote, toPath, AbsolutePath )
-import Darcs.Util.Printer ( Doc, text, ($$) )
+import Darcs.Util.Printer ( Doc, text, ($$), ($+$) )
 import Darcs.Util.Printer.Color ( traceDoc )
 import Darcs.Util.Prompt ( askUser )
 import Darcs.Util.Tree( Tree )
@@ -98,12 +98,13 @@ type RepoPatchV1 = V1.RepoPatchV1 V1.Prim
 type RepoPatchV2 = V2.RepoPatchV2 V2.Prim
 
 convertDarcs2Help :: Doc
-convertDarcs2Help = text $ unlines
+convertDarcs2Help = text (unlines
  [ "This command converts a repository that uses the old patch semantics"
  , "`darcs-1` to a new repository with current `darcs-2` semantics."
  , ""
  , convertDarcs2Help'
- ]
+ ])
+ $+$ commonHelpWithPrefsTemplates
 
 -- | This part of the help is split out because it is used twice: in
 -- the help string, and in the prompt for confirmation.
@@ -137,7 +138,7 @@ convertDarcs2 = DarcsCommand
     }
   where
     basicOpts = O.newRepo ^ O.setScriptsExecutable ^ O.withWorkingDir
-    advancedOpts = O.remoteDarcs ^ O.patchIndexNo ^ O.compress ^ O.umask ^ O.patchFormat
+    advancedOpts = O.remoteDarcs ^ O.patchIndexNo ^ O.umask ^ O.patchFormat
     opts = basicOpts `withStdOpts` advancedOpts
 
 toDarcs2 :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
@@ -161,9 +162,10 @@ toDarcs2 _ opts' args = do
 
   mysimplename <- makeRepoName opts repodir
   withUMaskFlag (umask ? opts) $ withNewDirectory mysimplename $ do
-    _repo <- createRepositoryV2
-      (withWorkingDir ? opts) (patchIndexNo ? opts) (O.useCache ? opts)
-    _repo <- revertRepositoryChanges _repo NoUpdatePending
+    _repo <-
+      createRepositoryV2 (withWorkingDir ? opts) (patchIndexNo ? opts)
+        (O.useCache ? opts) (O.withPrefsTemplates ? opts)
+    _repo <- revertRepositoryChanges _repo
 
     withRepositoryLocation (useCache ? opts) repodir $ V1Job $ \other -> do
       theirstuff <- readPatches other
@@ -206,11 +208,9 @@ toDarcs2 _ opts' args = do
                         | otherwise = maybe n (\t -> piRename n ("old tag: "++t)) $ piTag n
 
       _ <- applyAll opts _repo $ progressFL "Converting patch" patches
-      void $
-        finalizeRepositoryChanges _repo (updatePending opts) (O.compress ? opts)
-          (O.dryRun ? opts)
+      void $ finalizeRepositoryChanges _repo (O.dryRun ? opts)
       when (parseFlags O.setScriptsExecutable opts == O.YesSetScriptsExecutable)
-        R.setScriptsExecutable
+        R.setAllScriptsExecutable
 
       -- Copy over the prefs file
       (fetchFilePS (repodir </> prefsFilePath) Uncachable >>= B.writeFile prefsFilePath)
@@ -224,8 +224,8 @@ toDarcs2 _ opts' args = do
              -> PatchInfoAnd p wX wY
              -> IO (W2 (Repository 'RW p) wY)
     applyOne opts (W2 _repo) x = do
-      _repo <- tentativelyAddPatch_ (updatePristine opts) _repo
-        (O.compress ? opts) (verbosity ? opts) (updatePending opts) x
+      _repo <-
+        tentativelyAddPatch_ (updatePristine opts) _repo (updatePending opts) x
       _repo <- applyToWorking _repo (verbosity ? opts) (effect x)
       return (W2 _repo)
 

@@ -49,9 +49,8 @@ import Darcs.Repository
     , AccessType(..)
     , withRepoLock
     , RepoJob(..)
-    , addPendingDiffToPending
+    , unsafeAddToPending
     , finalizeRepositoryChanges
-    , UpdatePending(..)
     )
 import Darcs.Patch.Witnesses.Ordered ( FL(..), (+>+) )
 import Darcs.Patch.Witnesses.Sealed ( FreeLeft, emptyGap, freeGap, joinGap )
@@ -279,9 +278,8 @@ doMoves repository opts cur work moves = do
             (fromMaybe (emptyGap NilFL) prePatch)
             (freeGap $ Darcs.Patch.move old new :>: NilFL)
       moveFileOrDir work old new
-      addPendingDiffToPending repository pendingDiff
-    void $ finalizeRepositoryChanges repository YesUpdatePending
-      (O.compress ? opts) (O.dryRun ? opts)
+      unsafeAddToPending repository pendingDiff
+    void $ finalizeRepositoryChanges repository (O.dryRun ? opts)
 
 -- Take the recorded/ working trees and the old and intended new filenames;
 -- check if the new path is safe on windows. We potentially need to create

@@ -53,7 +53,14 @@ import Control.Exception ( catch )
 import Control.Monad ( unless, when, liftM )
 import Data.Char ( toUpper )
 import Data.List ( isPrefixOf, union, lookup )
-import Data.Maybe ( isJust, fromMaybe, mapMaybe, catMaybes, maybeToList )
+import Data.Maybe
+    ( catMaybes
+    , fromMaybe
+    , isJust
+    , listToMaybe
+    , mapMaybe
+    , maybeToList
+    )
 import qualified Control.Exception as C
 import qualified Data.ByteString       as B  ( empty, null, hPut, ByteString )
 import qualified Data.ByteString.Char8 as BC ( unpack )
@@ -85,6 +92,7 @@ import Darcs.Repository.Flags
     , SetDefault (..)
     , InheritDefault (..)
     , RemoteRepos (..)
+    , WithPrefsTemplates(..)
     )
 import Darcs.Util.Lock( readTextFile, writeTextFile )
 import Darcs.Util.Exception ( catchall )
@@ -106,14 +114,21 @@ windows,osx :: Bool
 windows = "mingw" `isPrefixOf` os -- GHC under Windows is compiled with mingw
 osx     = os == "darwin"
 
-writeDefaultPrefs :: IO ()
-writeDefaultPrefs = do
-    setPreflist "boring" defaultBoring
-    setPreflist "binaries" defaultBinaries
+writeDefaultPrefs :: WithPrefsTemplates -> IO ()
+writeDefaultPrefs withPrefsTemplates = do
+    setPreflist "boring" $ defaultBoring withPrefsTemplates
+    setPreflist "binaries" $ defaultBinaries withPrefsTemplates
     setPreflist "motd" []
 
-defaultBoring :: [String]
-defaultBoring = map ("# " ++) boringFileInternalHelp ++
+defaultBoring :: WithPrefsTemplates -> [String]
+defaultBoring withPrefsTemplates =
+  map ("# " ++) boringFileInternalHelp ++
+    case withPrefsTemplates of
+      NoPrefsTemplates -> []
+      WithPrefsTemplates -> defaultBoringTemplate
+
+defaultBoringTemplate :: [String]
+defaultBoringTemplate =
     [ ""
     , "### compiler and interpreter intermediate files"
     , "# haskell (ghc) interfaces"
@@ -353,8 +368,15 @@ data FileType = BinaryFile
 --
 -- Note that while this matches .gz and .GZ, it will not match .gZ,
 -- i.e. it is not truly case insensitive.
-defaultBinaries :: [String]
-defaultBinaries = map ("# "++) binariesFileInternalHelp ++
+defaultBinaries :: WithPrefsTemplates -> [String]
+defaultBinaries withPrefsTemplates =
+  map ("# "++) binariesFileInternalHelp ++
+    case withPrefsTemplates of
+      NoPrefsTemplates -> []
+      WithPrefsTemplates -> defaultBinariesTemplate
+
+defaultBinariesTemplate :: [String]
+defaultBinariesTemplate =
     [ "\\." ++ regexToMatchOrigOrUpper e ++ "$" | e <- extensions ]
   where
     regexToMatchOrigOrUpper e = "(" ++ e ++ "|" ++ map toUpper e ++ ")"
@@ -484,11 +506,7 @@ defaultrepo (RemoteRepos rrepos) _ [] =
 defaultrepo _ _ r = return r
 
 getDefaultRepo :: IO (Maybe String)
-getDefaultRepo = do
-    defaults <- getPreflist defaultRepoPref
-    case defaults of
-         [] -> return Nothing
-         (d : _) -> Just `fmap` fixRepoPath d
+getDefaultRepo = listToMaybe <$> getPreflist defaultRepoPref
 
 defaultRepoPref :: String
 defaultRepoPref = "defaultrepo"
@@ -504,10 +522,10 @@ addRepoSource :: String
               -> Bool
               -> IO ()
 addRepoSource r isDryRun (RemoteRepos rrepos) setDefault inheritDefault isInteractive = (do
-    olddef <- getPreflist defaultRepoPref
+    olddef <- getDefaultRepo
     newdef <- newDefaultRepo
     let shouldDoIt = null noSetDefault && greenLight
-        greenLight = shouldAct && not rIsTmp && (olddef /= [newdef] || olddef == [])
+        greenLight = shouldAct && not rIsTmp && olddef /= Just newdef
     -- the nuance here is that we should only notify when the reason we're not
     -- setting default is the --no-set-default flag, not the various automatic
     -- show stoppers
@@ -554,6 +572,8 @@ addRepoSource r isDryRun (RemoteRepos rrepos) setDefault inheritDefault isIntera
                 [] -> return r
             False -> return r
       | otherwise = return r
+    -- In case r is a symbolic link we do want the target directory's
+    -- status, not that of the symlink.
     sameOwner p q =
       (==) <$> (fileOwner <$> getFileStatus p) <*> (fileOwner <$> getFileStatus q)
 

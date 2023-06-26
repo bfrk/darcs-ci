@@ -35,8 +35,14 @@ cd repo
 darcs log --last=1
 # amend
 echo 'baz' > bar
+# note: the last 'y' here is for the hijack prompt
 echo yyyy | darcs amend
 darcs log --last=1
+# amend --ask-deps, deselect the only offered patch (i.e. the tag)
+echo yny | darcs amend --ask-deps
+# amend --ask-deps, select the tag
+# note: the last 'y' here is for the hijack prompt
+echo yyyy | darcs amend --ask-deps
 # unrecord
 echo yd | darcs unrecord -o
 # log --context
@@ -53,5 +59,11 @@ diff yyy.dpatch zzz.dpatch
 # apply
 darcs apply xxx.dpatch --debug
 darcs log --last=1
+# clean up xxx
+echo yd | darcs obliterate
+# record --ask-deps, deselect the only offered patch (i.e. the tag)
+echo n | darcs record -m emptynodeps --ask-deps # does not record anything
+# record --ask-deps, select the tag
+echo yy | darcs record -m emptywithdeps --ask-deps
 
 cd ..

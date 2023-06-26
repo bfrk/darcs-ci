@@ -90,7 +90,6 @@ import Darcs.Patch.Choices
     , labelPatches
     )
 import Darcs.Patch.Commute ( Commute )
-import Darcs.Patch.Depends ( contextPatches )
 import Darcs.Patch.Ident ( Ident(..), PatchId )
 import Darcs.Patch.Info ( PatchInfo )
 import Darcs.Patch.Inspect ( PatchInspect )
@@ -103,7 +102,7 @@ import Darcs.Patch.Match
     , matchAPatch
     )
 import Darcs.Patch.Named ( adddeps, anonymous )
-import Darcs.Patch.PatchInfoAnd ( n2pia )
+import Darcs.Patch.PatchInfoAnd ( PatchInfoAnd, n2pia )
 import Darcs.Patch.Permutations ( commuteWhatWeCanRL )
 import Darcs.Patch.Show ( ShowPatch, ShowContextPatch )
 import Darcs.Patch.Split ( Splitter(..) )
@@ -117,17 +116,16 @@ import Darcs.Patch.Witnesses.Ordered
     )
 import Darcs.Patch.Witnesses.Sealed
     ( FlippedSeal (..), Sealed2 (..)
-    , flipSeal, seal2, unseal2
+    , seal2, unseal2
     )
 import Darcs.Patch.Witnesses.WZipper
     ( FZipper (..), focus, jokers, left, right
     , rightmost, toEnd, toStart
     )
-import Darcs.Repository ( AccessType(RW), Repository, readPatches )
 import Darcs.UI.External ( editText )
 import Darcs.UI.Options.All
     ( Verbosity(..), WithSummary(..)
-    , WithContext(..), SelectDeps(..), MatchFlag )
+    , SelectDeps(..), MatchFlag )
 import Darcs.UI.PrintPatch
     ( printContent
     , printContentWithPager
@@ -192,7 +190,6 @@ data PatchSelectionOptions = PatchSelectionOptions
   , interactive :: Bool
   , selectDeps :: SelectDeps
   , withSummary :: WithSummary
-  , withContext :: WithContext
   }
 
 -- | All the static settings for selecting patches.
@@ -203,7 +200,6 @@ data SelectionConfig p =
       , matchCriterion :: MatchCriterion p
       , jobname :: String
       , allowSkipAll :: Bool
-      , pristine :: Maybe (Tree IO)
       , whichChanges :: WhichChanges
       }
 
@@ -213,16 +209,14 @@ selectionConfigPrim :: WhichChanges
                     -> PatchSelectionOptions
                     -> Maybe (Splitter prim)
                     -> Maybe [AnchoredPath]
-                    -> Maybe (Tree IO)
                     -> SelectionConfig prim
-selectionConfigPrim whch jn o spl fs p =
+selectionConfigPrim whch jn o spl fs =
  PSC { opts = o
      , splitter = spl
      , files = fs
      , matchCriterion = triv
      , jobname = jn
      , allowSkipAll = True
-     , pristine = p
      , whichChanges = whch
      }
 
@@ -241,7 +235,6 @@ selectionConfig whch jn o spl fs =
      , matchCriterion = iswanted seal2 (matchFlags o)
      , jobname = jn
      , allowSkipAll = True
-     , pristine = Nothing
      , whichChanges = whch
      }
 
@@ -260,7 +253,6 @@ selectionConfigGeneric extract whch jn o fs =
      , matchCriterion = iswanted extract (matchFlags o)
      , jobname = jn
      , allowSkipAll = True
-     , pristine = Nothing
      , whichChanges = whch
      }
 
@@ -432,14 +424,14 @@ keysFor = concatMap (map kp)
 withSelectedPatchFromList
     :: (Commute p, Matchable p, ShowPatch p, ShowContextPatch p, ApplyState p ~ Tree)
     => String   -- name of calling command (always "amend" as of now)
-    -> RL p wO wR
+    -> RL p wX wY
     -> PatchSelectionOptions
-    -> (forall wA . (FL p :> p) wA wR -> IO ())
+    -> ((RL p :> p) wX wY -> IO ())
     -> IO ()
 withSelectedPatchFromList jn patches o job = do
     sp <- wspfr jn (matchAPatch $ matchFlags o) patches NilFL
     case sp of
-        Just (FlippedSeal (skipped :> selected')) -> job (skipped :> selected')
+        Just (skipped :> selected') -> job (skipped :> selected')
         Nothing ->
             putStrLn $ "Cancelling " ++ jn ++ " since no patch was selected."
 
@@ -453,13 +445,13 @@ data WithSkipped p wX wY = WithSkipped
 -- | This ensures that the selected patch commutes freely with the skipped
 -- patches, including pending and also that the skipped sequences has an
 -- ending context that matches the recorded state, z, of the repository.
-wspfr :: forall p wX wY wU.
+wspfr :: forall p wX wY wZ.
          (Commute p, Matchable p, ShowPatch p, ShowContextPatch p, ApplyState p ~ Tree)
       => String
       -> (forall wA wB . p wA wB -> Bool)
       -> RL p wX wY
-      -> FL (WithSkipped p) wY wU
-      -> IO (Maybe (FlippedSeal (FL p :> p) wU))
+      -> FL (WithSkipped p) wY wZ
+      -> IO (Maybe ((RL p :> p) wX wZ))
 wspfr _ _ NilRL _ = return Nothing
 wspfr jn matches remaining@(pps:<:p) skipped
     | not $ matches p = wspfr jn matches pps
@@ -480,7 +472,7 @@ wspfr jn matches remaining@(pps:<:p) skipped
                                  , pDefault = Just 'n'
                                  , pHelp = "?h" }
               case yorn of
-                'y' -> return $ Just $ flipSeal $ skipped' :> p'
+                'y' -> return $ Just $ (pps +<<+ skipped') :> p'
                 'n' -> nextPatch
                 'j' -> nextPatch
                 'k' -> previousPatch remaining skipped
@@ -496,10 +488,9 @@ wspfr jn matches remaining@(pps:<:p) skipped
         repeatThis
   where prompt' = "Shall I " ++ jn ++ " this patch?"
         nextPatch = wspfr jn matches pps (WithSkipped SkippedManually p:>:skipped)
-        previousPatch :: RL p wX wQ
-                      -> FL (WithSkipped p) wQ wU
-                      -> IO (Maybe (FlippedSeal
-                              (FL p :> p) wU))
+        previousPatch :: RL p wA wB
+                      -> FL (WithSkipped p) wB wC
+                      -> IO (Maybe ((RL p :> p) wA wC))
         previousPatch remaining' NilFL = wspfr jn matches remaining' NilFL
         previousPatch remaining' (WithSkipped sk prev :>: skipped'') =
             case sk of
@@ -519,7 +510,7 @@ wspfr jn matches remaining@(pps:<:p) skipped
                      , KeyPress 'q' ("cancel " ++ jn)
                     ]]
         defaultPrintFriendly =
-          printFriendly Nothing NormalVerbosity NoSummary NoContext
+          printFriendly NormalVerbosity NoSummary
 
 -- | Runs a function on the underlying @PatchChoices@ object
 liftChoices :: StateT (PatchChoices p wX wY) Identity a
@@ -806,8 +797,7 @@ promptUser single def = do
                                    }
 
 -- | Ask the user what to do with the next patch.
-textSelectOne :: ( Commute p, ShowPatch p, ShowContextPatch p, PatchInspect p
-                 , ApplyState p ~ Tree )
+textSelectOne :: ( Commute p, ShowPatch p, PatchInspect p )
               => InteractiveSelectionM p wX wY Bool
 textSelectOne = do
  c <- currentPatch
@@ -864,21 +854,27 @@ textSelectOne = do
                  liftIO . putStrLn $ helpFor jn basicOptions advancedOptions
                  return False
 
-lastQuestion :: (Commute p, ShowPatch p, ShowContextPatch p, ApplyState p ~ Tree)
+lastQuestion :: (Commute p, ShowPatch p)
              => InteractiveSelectionM p wX wY Bool
 lastQuestion = do
   jn <- asks jobname
-  theThings <-things
+  theThings <- things
   aThing <- thing
   let (basicOptions, advancedOptions) = optionsLast jn aThing
-  yorn <- liftIO . promptChar $
+  num <- numSelected
+  if num == 0 then do
+    liftIO $ putStrLn "Nothing selected."
+    return True
+  else do
+    yorn <- liftIO . promptChar $
             PromptConfig { pPrompt = "Do you want to "++capitalize jn++
                                       " these "++theThings++"?"
                          , pBasicCharacters = "yglqk"
                          , pAdvancedCharacters = "dan"
                          , pDefault = Just 'y'
                          , pHelp = "?h"}
-  case yorn of c | c `elem` "yda" -> return True
+    case yorn of
+               c | c `elem` "yda" -> return True
                  | c `elem` "qn" -> liftIO $
                                     do putStrLn $ jn ++" cancelled."
                                        exitSuccess
@@ -890,17 +886,22 @@ lastQuestion = do
                     basicOptions advancedOptions
                  return False
 
+numSelected :: Commute p => InteractiveSelectionM p wX wY Int
+numSelected = do
+  w <- asks whichChanges
+  (first_chs :> _ :> last_chs) <- getChoices <$> gets choices
+  return $
+    if backward w then lengthFL last_chs else lengthFL first_chs
+
 -- | Shows the current patch as it should be seen by the user.
-printCurrent :: (ShowPatch p, ShowContextPatch p, ApplyState p ~ Tree)
-             => InteractiveSelectionM p wX wY ()
+printCurrent :: ShowPatch p => InteractiveSelectionM p wX wY ()
 printCurrent = do
   o <- asks opts
-  pr <- asks pristine
   c <- currentPatch
   case c of
     Nothing -> return ()
     Just (Sealed2 lp) ->
-      liftIO $ printFriendly pr (verbosity o) (withSummary o) (withContext o) $ unLabel lp
+      liftIO $ printFriendly (verbosity o) (withSummary o) $ unLabel lp
 
 -- | The interactive part of @darcs changes@
 textView :: (ShowPatch p, ShowContextPatch p, ApplyState p ~ Tree)
@@ -914,7 +915,7 @@ textView o n_max n
       repeatThis -- prompt the user
     where
         defaultPrintFriendly =
-          unseal2 (printFriendly Nothing (verbosity o) (withSummary o) (withContext o))
+          unseal2 (printFriendly (verbosity o) (withSummary o))
         prev_patch :: IO ()
         prev_patch = case ps_done of
                        [] -> repeatThis
@@ -1022,26 +1023,30 @@ getDefault True InLast   = 'y'
 getDefault False InFirst = 'y'
 getDefault False InLast  = 'n'
 
-askAboutDepends :: (RepoPatch p, ApplyState p ~ Tree)
-                => Repository 'RW p wU wR -> FL (PrimOf p) wR wY
-                -> PatchSelectionOptions
-                -> [PatchInfo] -> IO [PatchInfo]
-askAboutDepends repository pa' ps_opts olddeps = do
+-- | For a given sequence of preceding patches to choose from, and a sequence
+-- of prims which will become a new named patch, let the user select a subset
+-- such that the new patch will explicitly depend on them. The patches offered
+-- include only those that the new patch does not already depend on. To support
+-- amend, we pass in the old dependencies, too.
+--
+-- TODO This currently does not allow the user to remove explicit dependencies
+-- from a patch using amend --ask-deps.
+askAboutDepends
+  :: (RepoPatch p, ApplyState p ~ Tree)
+  => RL (PatchInfoAnd p) wX wR  -- ^ patches to choose from
+  -> FL (PrimOf p) wR wT        -- ^ tentative content of new patch
+  -> PatchSelectionOptions
+  -> [PatchInfo]                -- ^ old explicit dependencies
+  -> IO [PatchInfo]
+askAboutDepends context pa' ps_opts olddeps = do
   -- Ideally we'd just default the olddeps to yes but still ask about them.
   -- SelectChanges doesn't currently (17/12/09) offer a way to do this so would
   -- have to have this support added first.
-  pset <- readPatches repository
-  -- Let the user select only from patches after the last clean tag.
-  -- We do this for efficiency, otherwise independentPatchIds can
-  -- take a /very/ long time to finish. The limitation this imposes
-  -- is a bit arbitrary from a user perspective. Note however that
-  -- contextPatches at least gives us this latest clean tag to select.
-  _ :> untagged <- return $ contextPatches pset
-  -- Note: using anonymous here seems to be safe since we don't store any patches
+  -- Note: using anonymous here is safe since we don't store any patches
   -- and only return a list of PatchInfo
   pa <- n2pia . flip adddeps olddeps <$> anonymous pa'
   -- get rid of all (implicit and explicit) dependencies of pa
-  _ :> _ :> non_deps <- return $ commuteWhatWeCanRL (untagged :> pa)
+  _ :> _ :> non_deps <- return $ commuteWhatWeCanRL (context :> pa)
   candidates :> _ <-
     runSelection (reverseRL non_deps) $
       selectionConfig FirstReversed "depend on" ps_opts

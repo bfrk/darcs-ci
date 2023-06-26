@@ -18,13 +18,10 @@
 module Darcs.UI.Commands.ShowFiles ( showFiles ) where
 
 import Darcs.Prelude
-import Data.Maybe ( fromJust, isJust )
 
-import Darcs.Patch ( RepoPatch )
-import Darcs.Patch.Apply ( ApplyState )
-import Darcs.Patch.Match ( PatchSetMatch, patchSetMatch )
-import Darcs.Repository ( RepoJob(..), Repository, withRepository )
-import Darcs.Repository.Match ( getRecordedUpToMatch )
+import Darcs.Patch.Match ( patchSetMatch )
+import Darcs.Repository ( RepoJob(..), withRepository )
+import Darcs.Repository.Match ( getPristineUpToMatch )
 import Darcs.Repository.State ( readPristine, readPristineAndPending )
 import Darcs.UI.Commands
     ( DarcsCommand(..)
@@ -36,7 +33,6 @@ import Darcs.UI.Completion ( knownFileArgs )
 import Darcs.UI.Flags ( DarcsFlag, pathsFromArgs, useCache )
 import Darcs.UI.Options ( oid, parseFlags, (?), (^) )
 import qualified Darcs.UI.Options.All as O
-import Darcs.Util.Lock ( withDelayedDir )
 import Darcs.Util.Path
     ( AbsolutePath
     , AnchoredPath
@@ -46,7 +42,6 @@ import Darcs.Util.Path
     )
 import Darcs.Util.Printer ( Doc, text )
 import Darcs.Util.Tree ( Tree, TreeItem(..), expand, list )
-import Darcs.Util.Tree.Plain ( readPlainTree )
 
 showFilesDescription :: String
 showFilesDescription = "Show version-controlled files in the working tree."
@@ -111,15 +106,11 @@ manifestHelper :: [DarcsFlag] -> [AnchoredPath] -> IO [FilePath]
 manifestHelper opts prefixes =
   fmap (map displayPath . onlysubdirs prefixes . listFilesOrDirs) $
     withRepository (useCache ? opts) $ RepoJob $ \r -> do
-      let mpsm = patchSetMatch matchFlags
-          fUpto = isJust mpsm
-          fPending = parseFlags O.pending opts
-      -- this covers all 4 possibilities
-      case (fUpto,fPending) of
-        (True, False) -> slurpUpto (fromJust mpsm) r
-        (True, True)  -> fail "can't mix match and pending flags"
-        (False,False) -> expand =<< readPristine r
-        (False,True)  -> expand =<< readPristineAndPending r -- pending is default
+      case (patchSetMatch matchFlags, parseFlags O.pending opts) of
+        (Nothing, False)  -> expand =<< readPristine r
+        (Nothing, True)   -> expand =<< readPristineAndPending r
+        (Just psm, False) -> getPristineUpToMatch r psm
+        (Just _, True)    -> fail "can't mix match and pending flags"
   where
     matchFlags = parseFlags O.matchUpToOne opts
 
@@ -134,11 +125,3 @@ manifestHelper opts prefixes =
         filesDirs False True t = anchoredRoot : [p | (p, SubTree _) <- list t]
         filesDirs True False t = [p | (p, File _) <- list t]
         filesDirs True True t = anchoredRoot : map fst (list t)
-
-slurpUpto :: (RepoPatch p, ApplyState p ~ Tree)
-          => PatchSetMatch -> Repository rt p wU wR -> IO (Tree IO)
-slurpUpto psm r = withDelayedDir "show.files" $ \_ -> do
-  getRecordedUpToMatch r psm
-  -- note: it is important that we expand the tree from inside the
-  -- withDelayedDir action, else it has no effect.
-  expand =<< readPlainTree "."

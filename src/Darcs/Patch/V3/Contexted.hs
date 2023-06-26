@@ -9,7 +9,8 @@ module Darcs.Patch.V3.Contexted
     , ctxView
     , ctxNoConflict
     , ctxToFL
-      -- * Construct
+    , ctxDepends
+      -- * Construct / Modify
     , ctx
     , ctxAdd
     , ctxAddRL
@@ -42,6 +43,7 @@ import Darcs.Patch.Invert
 import Darcs.Patch.Inspect
 import Darcs.Patch.Merge ( CleanMerge(..) )
 import Darcs.Patch.Read ( ReadPatch(..) )
+import Darcs.Patch.Permutations ( (=\~/=) )
 import Darcs.Util.Parser ( Parser, lexString )
 import Darcs.Patch.Show ( ShowPatchBasic(..), ShowPatchFor )
 import Darcs.Patch.Viewing ()
@@ -76,15 +78,6 @@ data Contexted p wX where
 -- context. (This assumes witnesses aren't coerced in an unsafe manner.)
 instance Ident p => Eq (Contexted p wX) where
   c1 == c2 = ctxId c1 == ctxId c2
-{-
--- Comparing the contexts is inefficient and unnecessary
--- if the patches have identities, see 'prop_ctxEq'.
-instance (Commute p, Eq2 p) => Eq (Contexted p wX) where
-  Contexted cx x == Contexted cy y
-    | IsEq <- cx =\/= cy
-    , IsEq <- x =\/= y = True
-    | otherwise = False
--}
 
 instance Ident p => Ord (Contexted p wX) where
   cp `compare` cq = ctxId cp `compare` ctxId cq
@@ -126,11 +119,12 @@ prop_ctxNotInv (Contexted NilFL _) = True
 prop_ctxNotInv (Contexted (p :>: ps) _) =
   invertId (ident p) `notElem` mapFL ident ps
 
--- This property states that equal 'Contexted' patches have equal content.
+-- | This property states that equal 'Contexted' patches have equal content
+-- up to reorderings of the context patches.
 prop_ctxEq :: (Commute p, Eq2 p, Ident p) => Contexted p wX -> Contexted p wX -> Bool
 prop_ctxEq cp@(Contexted ps p) cq@(Contexted qs q)
   | cp == cq =
-      case ps =\/= qs of
+      case ps =\~/= qs of
         IsEq -> isIsEq (p =\/= q)
         NotEq -> False
 prop_ctxEq _ _ = True
@@ -141,6 +135,12 @@ prop_ctxEq _ _ = True
 {-# INLINE ctxId #-}
 ctxId :: Ident p => Contexted p wX -> PatchId p
 ctxId (Contexted _ p) = ident p
+
+-- | Wether the first argument is contained (identity-wise) in the context of
+-- the second, in other words, the second depends on the first. This does not
+-- include equality, only proper dependency.
+ctxDepends :: Ident p => Contexted p wX -> Contexted p wX -> Bool
+ctxDepends (Contexted _ p1) (Contexted c2 _) = ident p1 `elem` mapFL ident c2
 
 -- | 'Contexted' patches conflict with each other if the identity of one is in
 -- the context of the other or they cannot be merged cleanly.
@@ -162,7 +162,7 @@ ctxNoConflict (Contexted cs p) cq =
 -}
 
 -- | We sometimes want to pattern match on a 'Contexted' patch but still guard
--- against violation of teh invariants. So we export a view that is isomorphic
+-- against violation of the invariants. So we export a view that is isomorphic
 -- to the 'Contexted' type but doesn't allow to manipulate the internals.
 ctxView :: Contexted p wX -> Sealed ((FL p :> p) wX)
 ctxView (Contexted cs p) = Sealed (cs :> p)

@@ -6,7 +6,8 @@ import qualified Darcs.Util.IndexedMonad as Indexed
 import Darcs.Patch.Commute ( Commute(..) )
 import Darcs.Patch.Invert ( Invert(..) )
 import Darcs.Patch.Set ( Origin )
-import Darcs.Patch.Witnesses.Ordered ( RL(..), FL(..), reverseFL, mapFL, (:>)(..) )
+import Darcs.Patch.Witnesses.Ordered
+  ( (:>)(..) , FL(..) , RL(..) , consGapFL , mapFL , reverseFL )
 import Darcs.Patch.Witnesses.Sealed
   ( Sealed(..), unseal, mapSeal, Sealed2(..)
   , FreeLeft, unFreeLeft, Gap(..)
@@ -15,7 +16,7 @@ import Darcs.Patch.Witnesses.Sealed
 import Darcs.UI.Commands.Test.Impl
   ( TestRunner(..), TestResult(..), TestResultValid(..), TestFailure(..)
   , runStrategy, StrategyResultRaw(..)
-  , PatchTree(..), patchTreeToFL
+  , PatchSeq(..), patchTreeToFL
   )
 import qualified Darcs.UI.Options.All as O
 
@@ -123,7 +124,7 @@ runStrategyOn testStrategy shrinkFailure transitions =
   unseal (fmap toPatchNums . fst . flip runTestingMonad finalState . runStrategy testStrategy shrinkFailure)
          (genPatchSequence initialState transitions)
 
-toPatchNums :: Sealed2 (PatchTree Patch) -> [Int]
+toPatchNums :: Sealed2 (PatchSeq Patch) -> [Int]
 toPatchNums (Sealed2 ps) = mapFL (\(Patch n _ _) -> n) (patchTreeToFL ps)
 
 genPatchSequence :: TestingState -> [WithDeps Transition] -> Sealed (RL Patch Origin)
@@ -133,8 +134,7 @@ genPatchSequence initialState transitions =
     doGen :: Int -> TestingState -> [WithDeps Transition] -> FreeLeft (FL Patch)
     doGen _ _ [] = emptyGap NilFL
     doGen n startingState (t:ts) =
-      joinGap (:>:)
-         (freeGap (patch n t))
+      consGapFL (patch n t)
          (doGen (n+1) (applyTransition (withDepsContents t) startingState) ts)
 
 

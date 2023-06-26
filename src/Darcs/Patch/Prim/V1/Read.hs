@@ -9,6 +9,7 @@ import Darcs.Patch.Prim.V1.Core
     , DirPatchType(..)
     , FilePatchType(..)
     )
+import Darcs.Patch.Prim.V1.Apply ()
 
 import Darcs.Util.Path (  )
 import Darcs.Patch.Format ( FileNameFormat )

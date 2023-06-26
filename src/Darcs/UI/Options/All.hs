@@ -88,6 +88,8 @@ module Darcs.UI.Options.All
     , setDefault
     , InheritDefault (..) -- re-export
     , inheritDefault
+    , WithPrefsTemplates (..) -- re-export
+    , withPrefsTemplates
 
     -- patch meta-data
     , patchname
@@ -153,12 +155,11 @@ module Darcs.UI.Options.All
     , AllowConflicts (..) -- re-export
     , conflictsNo
     , conflictsYes
-    , ExternalMerge (..) -- re-export
-    , externalMerge
+    , ResolveConflicts (..) -- re-export
     , reorder
 
     -- optimizations
-    , Compression (..) -- re-export
+    , Compression (..)
     , compress
     , usePacks
     , WithPatchIndex (..) -- re-export
@@ -167,6 +168,8 @@ module Darcs.UI.Options.All
     , Reorder (..) -- re-export
     , minimize
     , storeInMemory
+    , OptimizeDeep (..)
+    , optimizeDeep
 
     -- miscellaneous
     , Output (..)
@@ -241,8 +244,7 @@ module Darcs.UI.Options.All
 import Darcs.Prelude
 
 import Darcs.Repository.Flags
-    ( Compression (..)
-    , RemoteDarcs (..)
+    ( RemoteDarcs (..)
     , Reorder (..)
     , Verbosity (..)
     , UseCache (..)
@@ -261,12 +263,14 @@ import Darcs.Repository.Flags
     , InheritDefault (..)
     , UseIndex (..)
     , CloneKind (..)
-    , ExternalMerge (..)
     , AllowConflicts (..)
+    , ResolveConflicts (..)
     , WantGuiPause (..)
     , WithPatchIndex (..)
     , WithWorkingDir (..)
     , PatchFormat (..)
+    , WithPrefsTemplates(..)
+    , OptimizeDeep(..)
     )
 
 import qualified Darcs.UI.Options.Flags as F ( DarcsFlag(..) )
@@ -356,6 +360,10 @@ instance YesNo EnumPatches where
 instance YesNo InheritDefault where
   yes NoInheritDefault = False
   yes YesInheritDefault = True
+
+instance YesNo WithPrefsTemplates where
+  yes NoPrefsTemplates = False
+  yes WithPrefsTemplates = True
 
 -- * Root command
 
@@ -495,7 +503,7 @@ __xmloutput val = RawNoArg [] ["xml-output"] F.XMLOutput val "generate XML forma
 
 dryRun :: PrimDarcsOption DryRun
 dryRun = withDefault NoDryRun
-  [ RawNoArg [] ["dry-run"] F.DryRun YesDryRun "don't actually take the action" ]
+  [ RawNoArg ['n'] ["dry-run"] F.DryRun YesDryRun "don't actually take the action" ]
 
 dryRunXml :: DarcsOption a (DryRun -> XmlOutput -> a)
 dryRunXml = dryRun ^ xmlOutput
@@ -633,6 +641,12 @@ inheritDefault :: PrimDarcsOption InheritDefault
 inheritDefault = withDefault NoInheritDefault
   [ RawNoArg [] ["inherit-default"] F.InheritDefault YesInheritDefault "inherit default repository"
   , RawNoArg [] ["no-inherit-default"] F.NoInheritDefault NoInheritDefault "don't inherit default repository" ]
+
+withPrefsTemplates :: PrimDarcsOption WithPrefsTemplates
+withPrefsTemplates = withDefault WithPrefsTemplates
+  [ RawNoArg [] ["with-prefs-templates"] F.WithPrefsTemplates WithPrefsTemplates "create template-filled preferences"
+  , RawNoArg [] ["no-prefs-templates"] F.NoPrefsTemplates NoPrefsTemplates "create empty preferences"
+  ]
 
 -- * Specifying patch meta-data
 
@@ -980,32 +994,26 @@ verify = withDefault NoVerify
 conflictsNo :: PrimDarcsOption (Maybe AllowConflicts)
 conflictsNo = conflicts NoAllowConflicts
 
--- | pull, rebase pull: default to 'YesAllowConflictsAndMark'
+-- | pull, rebase pull: default to 'YesAllowConflicts' 'MarkConflicts'
 conflictsYes :: PrimDarcsOption (Maybe AllowConflicts)
-conflictsYes = conflicts YesAllowConflictsAndMark
+conflictsYes = conflicts (YesAllowConflicts MarkConflicts)
 
 conflicts :: AllowConflicts -> PrimDarcsOption (Maybe AllowConflicts)
 conflicts def = withDefault (Just def)
   [ RawNoArg [] ["mark-conflicts"]
-      F.MarkConflicts (Just YesAllowConflictsAndMark) "mark conflicts"
+      F.MarkConflicts (Just (YesAllowConflicts MarkConflicts)) "mark conflicts"
   , RawNoArg [] ["allow-conflicts"]
-      F.AllowConflicts (Just YesAllowConflicts) "allow conflicts, but don't mark them"
+      F.AllowConflicts (Just (YesAllowConflicts NoResolveConflicts))
+      "allow conflicts, but don't mark them"
+  , RawStrArg [] ["external-merge"]
+    F.ExternalMerge (\f -> [s | F.ExternalMerge s <- [f]])
+    (Just . YesAllowConflicts . ExternalMerge)
+    (\v -> [s | Just (YesAllowConflicts (ExternalMerge s)) <- [v]])
+    "COMMAND" "use external tool to merge conflicts"
   , RawNoArg [] ["dont-allow-conflicts","no-allow-conflicts","no-resolve-conflicts"]
       F.NoAllowConflicts (Just NoAllowConflicts) "fail if there are patches that would create conflicts"
   , RawNoArg [] ["skip-conflicts"]
       F.SkipConflicts Nothing "filter out any patches that would create conflicts" ]
-
--- Technically not an isomorphism.
-externalMerge :: PrimDarcsOption ExternalMerge
-externalMerge = imap (Iso fw bw) $ singleStrArg [] ["external-merge"] F.ExternalMerge arg
-    "COMMAND" "use external tool to merge conflicts"
-  where
-    arg (F.ExternalMerge s) = Just s
-    arg _ = Nothing
-    bw k (Just s) = k (YesExternalMerge s)
-    bw k Nothing = k NoExternalMerge
-    fw k (YesExternalMerge s) = k (Just s)
-    fw k NoExternalMerge = k Nothing
 
 -- | pull, apply, rebase pull, rebase apply
 reorder :: PrimDarcsOption Reorder
@@ -1017,6 +1025,10 @@ reorder = withDefault NoReorder
 
 -- * Optimizations
 
+data Compression = NoCompression | GzipCompression
+  deriving ( Eq, Show )
+
+-- | push
 compress :: PrimDarcsOption Compression
 compress = withDefault GzipCompression
   [ RawNoArg [] ["compress"] F.Compress GzipCompression "compress patch data"
@@ -1046,6 +1058,13 @@ storeInMemory = withDefault False
     "do patch application in memory rather than on disk"
   , RawNoArg [] ["no-store-in-memory"] F.ApplyOnDisk False
     "do patch application on disk" ]
+
+optimizeDeep :: PrimDarcsOption OptimizeDeep
+optimizeDeep = withDefault OptimizeShallow
+  [ RawNoArg [] ["deep"] F.OptimizeDeep OptimizeDeep
+    "also optimize clean tags in the complete history"
+  , RawNoArg [] ["shallow"] F.OptimizeShallow OptimizeShallow
+    "only reorder recent patches (works with lazy repo)" ]
 
 -- * Output
 

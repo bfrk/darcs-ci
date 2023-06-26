@@ -19,9 +19,6 @@ module Darcs.Patch.PatchInfoAnd
     ( Hopefully
     , PatchInfoAnd
     , PatchInfoAndG
-    , WPatchInfo
-    , unWPatchInfo
-    , compareWPatchInfo
     , piap
     , n2pia
     , patchInfoAndPatch
@@ -29,7 +26,6 @@ module Darcs.Patch.PatchInfoAnd
     , fmapFLPIAP
     , hopefully
     , info
-    , winfo
     , hopefullyM
     , createHashed
     , extractHash
@@ -44,39 +40,38 @@ import Control.Exception ( Exception, throw )
 import System.IO.Unsafe ( unsafeInterleaveIO )
 import Data.Typeable ( Typeable )
 
-import Darcs.Util.SignalHandler ( catchNonSignal )
-import Darcs.Util.Printer ( Doc, ($$), renderString, text, vcat )
-import Darcs.Patch.Ident ( Ident(..), PatchId, IdEq2(..) )
-import Darcs.Patch.Info ( PatchInfo, showPatchInfo, displayPatchInfo, justName )
+import Darcs.Patch.Apply ( Apply(..) )
+import Darcs.Patch.Commute ( Commute(..) )
 import Darcs.Patch.Conflict ( Conflict(..) )
 import Darcs.Patch.Debug ( PatchDebug(..) )
 import Darcs.Patch.Effect ( Effect(..) )
 import Darcs.Patch.FileHunk ( IsHunk(..) )
 import Darcs.Patch.Format ( PatchListFormat )
+import Darcs.Patch.FromPrim ( PrimPatchBase(..) )
+import Darcs.Patch.Ident ( Ident(..), PatchId )
+import Darcs.Patch.Info ( PatchInfo, displayPatchInfo, justName, showPatchInfo )
+import Darcs.Patch.Inspect ( PatchInspect(..) )
 import Darcs.Patch.Merge ( CleanMerge(..), Merge(..) )
 import Darcs.Patch.Named ( Named, fmapFL_Named )
-import Darcs.Patch.Apply ( Apply(..) )
-import Darcs.Patch.Commute ( Commute(..) )
-import Darcs.Patch.Inspect ( PatchInspect(..) )
-import Darcs.Patch.FromPrim ( PrimPatchBase(..) )
 import Darcs.Patch.Read ( ReadPatch(..) )
-import Darcs.Patch.Show ( ShowPatch(..) )
 import Darcs.Patch.Repair ( Repair(..), RepairToFL )
-import Darcs.Patch.Show ( ShowPatchBasic(..), ShowContextPatch(..) )
+import Darcs.Patch.Show ( ShowPatch(..) )
+import Darcs.Patch.Show ( ShowContextPatch(..), ShowPatchBasic(..) )
 import Darcs.Patch.Summary ( Summary )
-import Darcs.Patch.Witnesses.Eq ( Eq2(..), EqCheck(..) )
-import Darcs.Patch.Witnesses.Unsafe ( unsafeCoerceP )
+import Darcs.Patch.Witnesses.Eq ( Eq2(..) )
 import Darcs.Patch.Witnesses.Ordered
-  ( (:/\:)(..)
-  , (:>)(..)
-  , (:\/:)(..)
-  , FL
-  , mapFL
-  , mapRL_RL
-  )
-import Darcs.Patch.Witnesses.Sealed ( Sealed(Sealed), seal, mapSeal )
+    ( (:/\:)(..)
+    , (:>)(..)
+    , (:\/:)(..)
+    , FL
+    , mapFL
+    , mapRL_RL
+    )
+import Darcs.Patch.Witnesses.Sealed ( Sealed(Sealed), mapSeal, seal )
 import Darcs.Patch.Witnesses.Show ( Show1, Show2 )
 import Darcs.Util.Exception ( prettyException )
+import Darcs.Util.Printer ( Doc, renderString, text, vcat, ($$) )
+import Darcs.Util.SignalHandler ( catchNonSignal )
 import Darcs.Util.ValidHash ( PatchHash )
 
 -- | @'Hopefully' p C@ @(x y)@ is @'Either' String (p C@ @(x y))@ in a
@@ -107,19 +102,6 @@ data PatchInfoAndG p wA wB =
        (Hopefully p wA wB)
   deriving (Show)
 
--- | @'WPatchInfo' wA wB@ represents the info of a patch, marked with
--- the patch's witnesses.
-newtype WPatchInfo wA wB = WPatchInfo { unWPatchInfo :: PatchInfo }
-
--- This is actually unsafe if we ever commute patches and then compare them
--- using this function. TODO: consider adding an extra existential to WPatchInfo
--- (as with LabelledPatch in Darcs.Patch.Choices)
-compareWPatchInfo :: WPatchInfo wA wB -> WPatchInfo wC wD -> EqCheck (wA, wB) (wC, wD)
-compareWPatchInfo (WPatchInfo x) (WPatchInfo y) = if x == y then unsafeCoerceP IsEq else NotEq
-
-instance Eq2 WPatchInfo where
-   WPatchInfo x `unsafeCompare` WPatchInfo y = x == y
-
 fmapH :: (a wX wY -> b wW wZ) -> Hopefully a wX wY -> Hopefully b wW wZ
 fmapH f (Hopefully sh) = Hopefully (ff sh)
     where ff (Actually a) = Actually (f a)
@@ -133,9 +115,6 @@ info (PIAP i _) = i
 
 patchDesc :: forall p wX wY . PatchInfoAnd p wX wY -> String
 patchDesc p = justName $ info p
-
-winfo :: PatchInfoAnd p wA wB -> WPatchInfo wA wB
-winfo (PIAP i _) = WPatchInfo i
 
 -- | @'piap' i p@ creates a PatchInfoAnd containing p with info i.
 piap :: PatchInfo -> p wA wB -> PatchInfoAndG p wA wB
@@ -232,18 +211,26 @@ instance RepairToFL p => Repair (PatchInfoAnd p) where
 instance PrimPatchBase p => PrimPatchBase (PatchInfoAndG p) where
    type PrimOf (PatchInfoAndG p) = PrimOf p
 
--- Equality on PatchInfoAndG is solely determined by the PatchInfo
--- It is a global invariant of darcs that once a patch is recorded,
--- it should always have the same representation in the same context.
-instance Eq2 (PatchInfoAndG p) where
-    unsafeCompare (PIAP i _) (PIAP i2 _) = i == i2
+getHopefully :: Hopefully p wX wY -> SimpleHopefully p wX wY
+getHopefully (Hashed _ x) = x
+getHopefully (Hopefully x) = x
+
+instance Eq2 p => Eq2 (SimpleHopefully p) where
+    Actually p1 `unsafeCompare` Actually p2 = p1 `unsafeCompare` p2
+    _ `unsafeCompare` _ = error "cannot compare unavailable patches"
+
+instance Eq2 p => Eq2 (Hopefully p) where
+    Hashed h1 _ `unsafeCompare` Hashed h2 _ = h1 == h2
+    hp1 `unsafeCompare` hp2 =
+      getHopefully hp1 `unsafeCompare` getHopefully hp2
+
+instance Eq2 p => Eq2 (PatchInfoAndG p) where
+    PIAP i1 p1 `unsafeCompare` PIAP i2 p2 = i1 == i2 && p1 `unsafeCompare` p2
 
 type instance PatchId (PatchInfoAndG p) = PatchInfo
 
 instance Ident (PatchInfoAndG p) where
     ident (PIAP i _) = i
-
-instance IdEq2 (PatchInfoAndG p)
 
 instance PatchListFormat (PatchInfoAndG p)
 

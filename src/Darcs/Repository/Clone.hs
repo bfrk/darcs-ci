@@ -21,23 +21,22 @@ import Darcs.Repository.Create
     )
 import Darcs.Repository.Identify ( identifyRepositoryFor, ReadingOrWriting(..) )
 import Darcs.Repository.Pristine
-    ( ApplyDir(..)
-    , applyToTentativePristineCwd
+    ( applyToTentativePristine
     , createPristineDirectoryTree
     , writePristine
     )
 import Darcs.Repository.Hashed
     ( copyHashedInventory
-    , finalizeRepositoryChanges
-    , finalizeTentativeChanges
     , readPatches
-    , revertRepositoryChanges
-    , revertTentativeChanges
     , tentativelyRemovePatches
     , writeTentativeInventory
     )
+import Darcs.Repository.Transaction
+    ( finalizeRepositoryChanges
+    , revertRepositoryChanges
+    )
 import Darcs.Repository.Working
-    ( setScriptsExecutable
+    ( setAllScriptsExecutable
     , setScriptsExecutablePatches )
 import Darcs.Repository.InternalTypes
     ( Repository
@@ -46,8 +45,6 @@ import Darcs.Repository.InternalTypes
     , repoFormat
     , repoCache
     , modifyCache
-    , unsafeStartTransaction
-    , unsafeEndTransaction
     )
 import Darcs.Repository.Job ( withUMaskFlag )
 import Darcs.Util.Cache
@@ -97,7 +94,6 @@ import Darcs.Repository.Flags
     , UseCache(..)
     , RemoteDarcs (..)
     , remoteDarcs
-    , Compression (..)
     , CloneKind (..)
     , Verbosity (..)
     , DryRun (..)
@@ -111,13 +107,16 @@ import Darcs.Repository.Flags
     , WithPatchIndex (..)
     , PatchFormat (..)
     , AllowConflicts(..)
-    , ExternalMerge(..)
+    , ResolveConflicts(..)
+    , WithPrefsTemplates(..)
     )
 
 import Darcs.Patch ( RepoPatch, description )
-import Darcs.Patch.Depends ( findUncommon )
+import Darcs.Patch.Depends ( findCommon )
+import Darcs.Patch.Invertible ( mkInvertible )
 import Darcs.Patch.Set
-    ( patchSet2FL
+    ( Origin
+    , patchSet2FL
     , patchSet2RL
     , patchSetInventoryHashes
     , progressPatchSet
@@ -127,12 +126,10 @@ import Darcs.Patch.Progress ( progressRLShowTags, progressFL )
 import Darcs.Patch.Apply ( Apply(..) )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(..) )
 import Darcs.Patch.Witnesses.Ordered
-    ( FL(..)
+    ( Fork(..)
+    , FL(..)
     , RL(..)
-    , (:\/:)(..)
     , lengthFL
-    , bunchFL
-    , mapFL
     , mapRL
     , lengthRL
     , nullFL
@@ -146,6 +143,7 @@ import Darcs.Util.English ( englishNum, Noun(..) )
 import Darcs.Util.Global ( darcsdir )
 import Darcs.Util.URL ( isValidLocalPath )
 import Darcs.Util.SignalHandler ( catchInterrupt, withSignalsBlocked )
+import Darcs.Util.Ssh ( resetSshConnections )
 import Darcs.Util.Printer ( Doc, ($$), hsep, putDocLn, text )
 import Darcs.Util.Printer.Color ( unsafeRenderStringColored )
 import Darcs.Util.Progress
@@ -174,10 +172,11 @@ cloneRepository ::
     -> WithPatchIndex   -- use patch index
     -> Bool   -- use packs
     -> ForgetParent
+    -> WithPrefsTemplates
     -> IO ()
 cloneRepository repourl mysimplename v useCache cloneKind um rdarcs sse remoteRepos
                 setDefault inheritDefault matchFlags rfsource withWorkingDir
-                usePatchIndex usePacks forget =
+                usePatchIndex usePacks forget withPrefsTemplates =
   withUMaskFlag um $ withNewDirectory mysimplename $ do
       let patchfmt
             | formatHas Darcs3 rfsource = PatchFormat3
@@ -185,7 +184,8 @@ cloneRepository repourl mysimplename v useCache cloneKind um rdarcs sse remoteRe
             | otherwise                 = PatchFormat1
       EmptyRepository _toRepo <-
         createRepository patchfmt withWorkingDir
-          (if cloneKind == LazyClone then NoPatchIndex else usePatchIndex) useCache
+          (if cloneKind == LazyClone then NoPatchIndex else usePatchIndex)
+          useCache withPrefsTemplates
       debugMessage "Finished initializing new repository."
       addRepoSource repourl NoDryRun remoteRepos setDefault inheritDefault False
 
@@ -222,16 +222,16 @@ cloneRepository repourl mysimplename v useCache cloneKind um rdarcs sse remoteRe
        -- old-fashioned repositories are cloned differently since
        -- we need to copy all patches first and then build pristine
        copyRepoOldFashioned fromRepo _toRepo v withWorkingDir
-      when (sse == YesSetScriptsExecutable) setScriptsExecutable
+      when (sse == YesSetScriptsExecutable) setAllScriptsExecutable
       case patchSetMatch matchFlags of
        Nothing -> return ()
        Just psm -> do
         putInfo v $ text "Going to specified version..."
         -- the following is necessary to be able to read _toRepo's patches
-        _toRepo <- revertRepositoryChanges _toRepo NoUpdatePending
+        _toRepo <- revertRepositoryChanges _toRepo
         patches <- readPatches _toRepo
         Sealed context <- getOnePatchset _toRepo psm
-        to_remove :\/: only_in_context <- return $ findUncommon patches context
+        Fork _ to_remove only_in_context <- return $ findCommon patches context
         case only_in_context of
           NilFL -> do
             let num_to_remove = lengthFL to_remove
@@ -241,9 +241,8 @@ cloneRepository repourl mysimplename v useCache cloneKind um rdarcs sse remoteRe
               , englishNum num_to_remove (Noun "patch") ""
               ]
             _toRepo <-
-              tentativelyRemovePatches _toRepo GzipCompression NoUpdatePending to_remove
-            _toRepo <-
-              finalizeRepositoryChanges _toRepo NoUpdatePending GzipCompression NoDryRun
+              tentativelyRemovePatches _toRepo NoUpdatePending to_remove
+            _toRepo <- finalizeRepositoryChanges _toRepo NoDryRun
             runDefault (unapply to_remove) `catch` \(e :: SomeException) ->
                 fail ("Couldn't undo patch in working tree.\n" ++ show e)
             when (sse == YesSetScriptsExecutable) $ setScriptsExecutablePatches to_remove
@@ -257,7 +256,7 @@ cloneRepository repourl mysimplename v useCache cloneKind um rdarcs sse remoteRe
       -- check for unresolved conflicts
       patches <- readPatches _toRepo
       let conflicts = patchsetConflictResolutions patches
-      _ <- announceConflicts "clone" YesAllowConflictsAndMark NoExternalMerge conflicts
+      _ <- announceConflicts "clone" (YesAllowConflicts MarkConflicts) conflicts
       Sealed mangled_res <- return $ mangled conflicts
       unless (nullFL mangled_res) $
         withSignalsBlocked $ void $ applyToWorking _toRepo v mangled_res
@@ -385,33 +384,25 @@ cleanDir d = mapM_ (\x -> removeFile $ d </> x) =<< listDirectory d
 
 copyRepoOldFashioned :: forall p wU wR. (RepoPatch p, ApplyState p ~ Tree)
                         => Repository 'RO p wU wR  -- remote repo
-                        -> Repository 'RO p wU wR  -- local empty repo
+                        -> Repository 'RO p Origin Origin -- local empty repo
                         -> Verbosity
                         -> WithWorkingDir
                         -> IO ()
-copyRepoOldFashioned fromrepository _toRepo verb withWorkingDir = do
-  revertTentativeChanges _toRepo
-  _toRepo <- return $ unsafeStartTransaction _toRepo
-  patches <- readPatches fromrepository
+copyRepoOldFashioned fromRepo _toRepo verb withWorkingDir = do
+  _toRepo <- revertRepositoryChanges _toRepo
+  _ <- writePristine _toRepo emptyTree
+  patches <- readPatches fromRepo
   let k = "Copying patch"
   beginTedious k
   tediousSize k (lengthRL $ patchSet2RL patches)
   let patches' = progressPatchSet k patches
-  writeTentativeInventory _toRepo GzipCompression patches'
+  writeTentativeInventory _toRepo patches'
   endTedious k
-  finalizeTentativeChanges _toRepo GzipCompression
-  _toRepo <- return $ unsafeEndTransaction _toRepo
-  -- apply all patches into current hashed repository
-  _toRepo <- revertRepositoryChanges _toRepo NoUpdatePending
   local_patches <- readPatches _toRepo
-  _ <- writePristine _toRepo emptyTree
   let patchesToApply = progressFL "Applying patch" $ patchSet2FL local_patches
-  sequence_ $
-    mapFL (applyToTentativePristineCwd (repoCache _toRepo) ApplyNormal) $
-    bunchFL 100 patchesToApply
-  _toRepo <-
-    finalizeRepositoryChanges _toRepo NoUpdatePending GzipCompression NoDryRun
-  putVerbose verb $ text "Writing pristine and working tree contents..."
+  applyToTentativePristine _toRepo (mkInvertible patchesToApply)
+  _toRepo <- finalizeRepositoryChanges _toRepo NoDryRun
+  putVerbose verb $ text "Writing the working tree..."
   createPristineDirectoryTree _toRepo "." withWorkingDir
 
 -- | This function fetches all patches that the given repository has
@@ -435,8 +426,14 @@ fetchPatchesIfNecessary toRepo =
         c = repoCache toRepo
 
 allowCtrlC :: CloneKind -> IO () -> IO () -> IO ()
-allowCtrlC CompleteClone _       action = action
-allowCtrlC _             cleanup action = action `catchInterrupt` cleanup
+allowCtrlC CompleteClone _ action = action
+allowCtrlC _ cleanup action =
+  action `catchInterrupt` do
+    debugMessage "Cleanup after SIGINT in allowCtrlC"
+    -- the SIGINT has also killed our running ssh connections,
+    -- this will cause them to be restarted
+    resetSshConnections
+    cleanup
 
 hashedPatchHash :: PatchInfoAnd p wA wB -> Maybe PatchHash
 hashedPatchHash = either (const Nothing) Just . extractHash

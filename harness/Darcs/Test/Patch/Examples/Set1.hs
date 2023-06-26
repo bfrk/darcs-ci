@@ -44,10 +44,10 @@ import Darcs.Test.Patch.WithState ( Pair(..) )
 import Darcs.Patch.Witnesses.Ordered
 import Darcs.Patch.Witnesses.Sealed ( unseal )
 import Darcs.Patch.Witnesses.Unsafe ( unsafeCoerceP, unsafeCoercePEnd )
-import Darcs.Util.Path ( AnchoredPath, floatPath )
+import Darcs.Util.Path ( AnchoredPath, unsafeFloatPath )
 
 instance IsString AnchoredPath where
-  fromString = floatPath
+  fromString = unsafeFloatPath
 
 type Patch = V1.RepoPatchV1 V1.Prim
 

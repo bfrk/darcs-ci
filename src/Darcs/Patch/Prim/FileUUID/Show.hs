@@ -1,5 +1,5 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, UndecidableInstances #-}
 module Darcs.Patch.Prim.FileUUID.Show
     ( displayHunk )
     where
@@ -8,6 +8,7 @@ import Darcs.Prelude
 
 import qualified Data.ByteString as B
 
+import Darcs.Patch.Apply ( Apply(..) )
 import Darcs.Patch.Format ( PatchListFormat, FileNameFormat(..) )
 import Darcs.Patch.Show
     ( ShowPatchBasic(..), ShowPatch(..)
@@ -35,9 +36,9 @@ instance ShowPatchBasic Prim where
   showPatch fmt = showPrim (fileNameFormat fmt)
 
 -- dummy instance, does not actually show any context
-instance ShowContextPatch Prim where
+instance Apply Prim => ShowContextPatch Prim where
   -- showContextPatch f = showPrimCtx (fileNameFormat f)
-  showContextPatch f p = return $ showPatch f p
+  showContextPatch f p = apply p >> return (showPatch f p)
 
 instance ShowPatch Prim where
   summary = plainSummaryPrim

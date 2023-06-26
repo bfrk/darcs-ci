@@ -32,9 +32,9 @@ import Control.Monad ( MonadPlus, mplus, msum, mzero, guard )
 import Control.Applicative ( Alternative(..) )
 import Data.Maybe ( fromMaybe )
 
+import Darcs.Patch.Apply ( ApplyState )
 import Darcs.Patch.Commute ( selfCommuter )
 import Darcs.Patch.CommuteFn ( commuterIdFL, commuterFLId )
-import Darcs.Util.Path ( AnchoredPath )
 import Darcs.Patch.Invert ( invertRL )
 import Darcs.Patch.Merge ( CleanMerge(..), Merge(..) )
 import Darcs.Patch.Commute ( Commute(..) )
@@ -53,7 +53,7 @@ import Darcs.Patch.Conflict
 import Darcs.Patch.Unwind ( Unwind(..), Unwound(..), mkUnwound )
 import Darcs.Patch.Effect ( Effect(..) )
 import Darcs.Patch.FileHunk ( IsHunk(..) )
-import Darcs.Patch.Prim ( PrimPatch, is_filepatch )
+import Darcs.Patch.Prim ( PrimPatch )
 import Darcs.Patch.Permutations
     ( headPermutationsRL
     , simpleHeadPermutationsFL
@@ -140,15 +140,6 @@ cleverCommute c (p1 :> p2) = case c (p1 :> p2) of
                  Failed -> Failed
                  Unknown -> Unknown
 
--- | If we have two Filepatches which modify different files, we can return a
--- result early, since the patches trivially commute.
-speedyCommute :: PrimPatch prim => CommuteFunction prim
-speedyCommute (p1 :> p2)
-    | Just m1 <- isFilepatchMerger p1
-    , Just m2 <- isFilepatchMerger p2
-    , m1 /= m2 = Succeeded (unsafeCoerceP p2 :> unsafeCoerceP p1)
-    | otherwise = Unknown
-
 everythingElseCommute :: forall prim . PrimPatch prim => CommuteFunction prim
 everythingElseCommute (PP p1 :> PP p2) = toPerhaps $ do
     p2' :> p1' <- commute (p1 :> p2)
@@ -200,8 +191,7 @@ instance PrimPatch prim => Merge (RepoPatchV1 prim) where
 
 instance PrimPatch prim => Commute (RepoPatchV1 prim) where
     commute x = toMaybe $ msum
-                  [speedyCommute x,
-                   (cleverCommute mergerCommute) x,
+                  [(cleverCommute mergerCommute) x,
                    everythingElseCommute x
                   ]
 
@@ -215,15 +205,6 @@ instance PrimPatch prim => PatchInspect (RepoPatchV1 prim) where
     hunkMatches f (Merger _ _ p1 p2) = hunkMatches f p1 || hunkMatches f p2
     hunkMatches f c@(Regrem{}) = hunkMatches f $ invert c
     hunkMatches f (PP p) = hunkMatches f p
-
-isFilepatchMerger :: PrimPatch prim => RepoPatchV1 prim wX wY -> Maybe AnchoredPath
-isFilepatchMerger (PP p) = is_filepatch p
-isFilepatchMerger (Merger _ _ p1 p2) = do
-     f1 <- isFilepatchMerger p1
-     f2 <- isFilepatchMerger p2
-     if f1 == f2 then return f1 else Nothing
-isFilepatchMerger (Regrem und unw p1 p2)
-    = isFilepatchMerger (Merger und unw p1 p2)
 
 commuteRecursiveMerger :: PrimPatch prim
     => (RepoPatchV1 prim :> RepoPatchV1 prim) wX wY -> Perhaps ((RepoPatchV1 prim :> RepoPatchV1 prim) wX wY)
@@ -346,10 +327,7 @@ putBefore p1 (p2:>:p2s) =
 putBefore _ NilFL = Just (unsafeCoerceP NilFL)
 
 instance PrimPatch prim => CommuteNoConflicts (RepoPatchV1 prim) where
-  commuteNoConflicts x =
-    toMaybe $ msum [ speedyCommute x
-                   , everythingElseCommute x
-                   ]
+  commuteNoConflicts x = toMaybe $ everythingElseCommute x
 
 instance PrimPatch prim => Conflict (RepoPatchV1 prim) where
   isConflicted (PP _) = False
@@ -443,7 +421,8 @@ instance PrimPatch prim => Effect (RepoPatchV1 prim) where
     effect p@(Regrem{}) = invert $ effect $ invert p
     effect (PP p) = p :>: NilFL
 
-instance IsHunk prim => IsHunk (RepoPatchV1 prim) where
+instance (PrimPatch prim, ApplyState prim ~ ApplyState (RepoPatchV1 prim)) =>
+         IsHunk (RepoPatchV1 prim) where
     isHunk p = do PP p' <- return p
                   isHunk p'
 

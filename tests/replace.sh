@@ -9,14 +9,23 @@ darcs init
 
 echo "X X X" > foo
 echo $'A A,A\tA,A\vA' >> foo
+echo "aä" >> foo
+echo $'\02' >> foo
 darcs rec -alm "Added"
 
 # These should fail until replace handles tokens and
 # token-chars with leteral spaces in them
-darcs replace ' X ' ' XX ' --token-chars '[ X]' foo && exit 1 || true
-darcs replace $'A A'  'aaa' --token-chars '[^,]' foo && exit 1 || true
-darcs replace $'A\tA' 'aaa' --token-chars '[^,]' foo && exit 1 || true
-darcs replace $'A\vA' 'aaa' --token-chars '[^,]' foo && exit 1 || true
+not darcs replace ' X ' ' XX ' --token-chars '[ X]' foo
+not darcs replace $'A A'  'aaa' --token-chars '[^,]' foo
+not darcs replace $'A\tA' 'aaa' --token-chars '[^,]' foo
+not darcs replace $'A\vA' 'aaa' --token-chars '[^,]' foo
+
+# These should fail since darcs cannot handle non-ASCII token chars
+# nor non-printable ones
+not darcs replace 'X' 'ä' --token-chars '[Xä]' foo
+not darcs replace 'ä' 'X' --token-chars '[ä]' foo
+not darcs replace $'\02' 'X' --token-chars $'[X\02]' foo
+not darcs replace 'X' $'\02' --token-chars $'[X\02]' foo
 
 # Check that replace is not fooled by duplicate file names
 # (i.e. not trying to performe the replace twice in the same file)
@@ -68,9 +77,8 @@ darcs init
 
 echo a b a b a b > A
 darcs add A
-if darcs replace a c A | grep Skipping; then
-    exit 1
-fi
+darcs replace a c A > LOG
+not grep Skipping LOG
 cd ..
 
 rm -fr temp1
@@ -85,9 +93,8 @@ echo a b a b a b > A
 darcs add A
 darcs record --all --name=p1
 darcs mv A B
-if darcs replace a c B | grep Skipping; then
-    exit 1
-fi
+darcs replace a c B > LOG
+not grep Skipping LOG
 cd ..
 
 rm -fr temp1

@@ -15,10 +15,21 @@
 --  the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 --  Boston, MA 02110-1301, USA.
 
+-- | 'Named' patches group a set of changes with meta data ('PatchInfo') and
+-- explicit dependencies (created using `darcs tag` or using --ask-deps).
+--
+-- While the data constructor 'NamedP' is exported for technical reasons, code
+-- outside this modules should (and generally does) treat it as an abstract
+-- data type. The only exception is the rebase implementation i.e. the modules
+-- under "Darcs.Patch.Rebase".
+
+{-# LANGUAGE UndecidableInstances #-}
 module Darcs.Patch.Named
     ( Named(..)
+    -- treated as abstract data type except by Darcs.Patch.Rebase
     , infopatch
     , adddeps
+    , setinfo
     , anonymous
     , HasDeps(..)
     , patch2patchinfo
@@ -28,6 +39,7 @@ module Darcs.Patch.Named
     , fmapFL_Named
     , mergerIdNamed
     , ShowDepsFormat(..)
+    , ShowWhichDeps(..)
     , showDependencies
     ) where
 
@@ -45,9 +57,10 @@ import Darcs.Patch.Format ( PatchListFormat )
 import Darcs.Patch.Info ( PatchInfo, readPatchInfo, showPatchInfo, patchinfo,
                           piName, displayPatchInfo, makePatchname )
 import Darcs.Patch.Merge ( CleanMerge(..), Merge(..) )
-import Darcs.Patch.Apply ( Apply(..) )
+import Darcs.Patch.Object ( ObjectId )
+import Darcs.Patch.Apply ( Apply(..), ObjectIdOfPatch )
 import Darcs.Patch.Commute ( Commute(..) )
-import Darcs.Patch.Ident ( Ident(..), PatchId, IdEq2(..) )
+import Darcs.Patch.Ident ( Ident(..), PatchId )
 import Darcs.Patch.Inspect ( PatchInspect(..) )
 import Darcs.Patch.Permutations ( genCommuteWhatWeCanRL )
 import Darcs.Patch.Read ( ReadPatch(..) )
@@ -81,7 +94,7 @@ import Darcs.Patch.Witnesses.Show ( Show1, Show2 )
 
 import Darcs.Util.IsoDate ( showIsoDateTime, theBeginning )
 import Darcs.Util.Printer
-    ( Doc, ($$), (<+>), text, vcat, cyanText, blueText )
+    ( Doc, ($$), (<+>), text, vcat, cyanText, blueText, redText )
 
 -- | The @Named@ type adds a patch info about a patch, that is a name.
 data Named p wX wY where
@@ -105,8 +118,6 @@ type instance PatchId (Named p) = PatchInfo
 
 instance Ident (Named p) where
     ident = patch2patchinfo
-
-instance IdEq2 (Named p)
 
 instance IsHunk (Named p) where
     isHunk _ = Nothing
@@ -154,6 +165,9 @@ infopatch pi ps = NamedP pi [] (fromPrims pi ps) where
 adddeps :: Named p wX wY -> [PatchInfo] -> Named p wX wY
 adddeps (NamedP pi _ p) ds = NamedP pi ds p
 
+setinfo :: PatchInfo -> Named p wX wY -> Named p wX wY
+setinfo i (NamedP _ ds ps) = NamedP i ds ps
+
 -- | This slightly ad-hoc class is here so we can call 'getdeps' with patch
 -- types that wrap a 'Named', such as 'RebaseChange'.
 class HasDeps p where
@@ -180,8 +194,9 @@ fmapNamed f (NamedP i deps p) = NamedP i deps (mapFL_FL f p)
 fmapFL_Named :: (FL p wA wB -> FL q wC wD) -> Named p wA wB -> Named q wC wD
 fmapFL_Named f (NamedP i deps p) = NamedP i deps (f p)
 
-instance Eq2 (Named p) where
-    unsafeCompare (NamedP n1 _ _) (NamedP n2 _ _) = n1 == n2
+instance (Commute p, Eq2 p) => Eq2 (Named p) where
+    unsafeCompare (NamedP n1 ds1 ps1) (NamedP n2 ds2 ps2) =
+        n1 == n2 && ds1 == ds2 && unsafeCompare ps1 ps2
 
 instance Commute p => Commute (Named p) where
     commute (NamedP n1 d1 p1 :> NamedP n2 d2 p2) =
@@ -348,43 +363,55 @@ showNamedPrefix f@ForDisplay n [] p =
     $$ p
 showNamedPrefix f@ForDisplay n d p =
     showPatchInfo f n
-    $$ showDependencies ShowDepsVerbose d
+    $$ showDependencies ShowNormalDeps ShowDepsVerbose d
     $$ p
 
 instance (PatchListFormat p, ShowPatchBasic p) => ShowPatchBasic (Named p) where
     showPatch f (NamedP n d p) = showNamedPrefix f n d $ showPatch f p
 
-instance (Apply p, IsHunk p, PatchListFormat p,
-          ShowContextPatch p) => ShowContextPatch (Named p) where
+instance ( Apply p
+         , IsHunk p
+         , PatchListFormat p
+         , ObjectId (ObjectIdOfPatch p)
+         , ShowContextPatch p
+         ) =>
+         ShowContextPatch (Named p) where
     showContextPatch f (NamedP n d p) =
         showNamedPrefix f n d <$> showContextPatch f p
 
-data ShowDepsFormat = ShowDepsVerbose | ShowDepsSummary
-                        deriving (Eq)
+data ShowDepsFormat = ShowDepsVerbose | ShowDepsSummary deriving (Eq)
 
-showDependencies :: ShowDepsFormat -> [PatchInfo] -> Doc
-showDependencies format deps = vcat (map showDependency deps)
+-- | Support for rebase
+data ShowWhichDeps = ShowNormalDeps | ShowDroppedDeps deriving (Eq)
+
+showDependencies :: ShowWhichDeps -> ShowDepsFormat -> [PatchInfo] -> Doc
+showDependencies which format deps = vcat (map showDependency deps)
   where
     showDependency d =
-      mark <+>
-      cyanText (show (makePatchname d)) $$ asterisk <+> text (piName d)
-    mark
-      | format == ShowDepsVerbose = blueText "depend"
-      | otherwise = text "D"
-    asterisk = text "  *"
+      case format of
+        ShowDepsVerbose ->
+          mark which format <+> cyanText (show (makePatchname d)) $$
+          text "  *" <+> text (piName d)
+        ShowDepsSummary ->
+          mark which format <+>
+          cyanText (take 8 (show (makePatchname d))) <+> text (piName d)
+    mark ShowNormalDeps ShowDepsVerbose = blueText "depend"
+    mark ShowDroppedDeps ShowDepsVerbose = redText "dropped"
+    mark ShowNormalDeps ShowDepsSummary = text "D"
+    mark ShowDroppedDeps ShowDepsSummary = text "D!"
 
 instance (Summary p, PatchListFormat p,
           PrimPatchBase p, ShowPatch p) => ShowPatch (Named p) where
     description (NamedP n _ _) = displayPatchInfo n
     summary (NamedP _ ds ps) =
-        showDependencies ShowDepsSummary ds $$ plainSummaryFL ps
+        showDependencies ShowNormalDeps ShowDepsSummary ds $$ plainSummaryFL ps
     summaryFL nps =
-        showDependencies ShowDepsSummary ds $$ plainSummaryFL ps
+        showDependencies ShowNormalDeps ShowDepsSummary ds $$ plainSummaryFL ps
       where
         ds = nubSort $ concat $ mapFL getdeps nps
         ps = concatFL $ mapFL_FL patchcontents nps
     content (NamedP _ ds ps) =
-        showDependencies ShowDepsVerbose ds $$ displayPatch ps
+        showDependencies ShowNormalDeps ShowDepsVerbose ds $$ displayPatch ps
 
 instance Show2 p => Show1 (Named p wX)
 

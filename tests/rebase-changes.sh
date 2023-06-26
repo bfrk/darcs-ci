@@ -37,4 +37,4 @@ darcs rebase changes --verbose | grep "third"
 # now we should see a conflict with change 2
 # which removes the line "first"
 darcs rebase changes --verbose | grep "first"
-darcs rebase changes --verbose | grep "conflicts:"
+darcs rebase changes --verbose | grep "conflictor"

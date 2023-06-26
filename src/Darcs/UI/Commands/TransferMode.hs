@@ -20,10 +20,10 @@ module Darcs.UI.Commands.TransferMode ( transferMode ) where
 
 import Darcs.Prelude
 
+import System.Directory ( withCurrentDirectory )
 import Control.Exception ( catch )
 import System.IO ( stdout, hFlush )
 
-import Darcs.Util.File ( withCurrentDirectory )
 import Darcs.Util.Exception ( prettyException )
 import Darcs.UI.Commands ( DarcsCommand(..), withStdOpts, nodefaults, amInRepository )
 import Darcs.UI.Completion ( noArgs )

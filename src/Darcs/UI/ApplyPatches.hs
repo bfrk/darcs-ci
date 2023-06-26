@@ -19,14 +19,13 @@ import Darcs.UI.Commands
     )
 import Darcs.UI.Commands.Util ( printDryRunMessageAndExit )
 import Darcs.UI.Flags
-    ( DarcsFlag, verbosity, compress, reorder, allowConflicts, externalMerge
+    ( DarcsFlag, verbosity, reorder, allowConflicts
     , wantGuiPause, diffingOpts, setScriptsExecutable, isInteractive
     , xmlOutput, dryRun
     )
 import qualified Darcs.UI.Options.All as O
 import Darcs.UI.Options ( (?) )
 import Darcs.UI.Commands.Util ( testTentativeAndMaybeExit )
-import Darcs.Repository.Flags ( UpdatePending(..) )
 import Darcs.Repository
     ( Repository
     , AccessType(..)
@@ -105,8 +104,7 @@ mergeAndTest :: (RepoPatch p, ApplyState p ~ Tree)
 mergeAndTest cmdName opts repository patches = do
     pw <- tentativelyMergePatches repository cmdName
                          (allowConflicts opts)
-                         (externalMerge ? opts) (wantGuiPause opts)
-                         (compress ? opts) (verbosity ? opts)
+                         (wantGuiPause opts)
                          (reorder ? opts) (diffingOpts opts)
                          patches
     tree <- readPristine repository
@@ -140,9 +138,7 @@ applyPatchesFinish :: (RepoPatch p, ApplyState p ~ Tree)
                    -> IO ()
 applyPatchesFinish cmdName opts _repository pw any_applied = do
     withSignalsBlocked $ do
-        _repository <-
-            finalizeRepositoryChanges _repository YesUpdatePending (compress ? opts)
-                (O.dryRun ? opts)
+        _repository <- finalizeRepositoryChanges _repository (O.dryRun ? opts)
         void $ applyToWorking _repository (verbosity ? opts) pw
         when (setScriptsExecutable ? opts == O.YesSetScriptsExecutable) $
             setScriptsExecutablePatches pw

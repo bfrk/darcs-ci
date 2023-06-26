@@ -74,7 +74,7 @@ import Darcs.Util.Lock ( withTempDir )
 import Darcs.Util.File ( copyTree )
 import Darcs.Repository.Flags
     ( AllowConflicts (..)
-    , ExternalMerge (..)
+    , ResolveConflicts (..)
     , WantGuiPause (..)
     , DiffAlgorithm (..)
     )
@@ -150,26 +150,27 @@ showUnravelled sep =
 announceConflicts :: PrimPatch prim
                   => String
                   -> AllowConflicts
-                  -> ExternalMerge
                   -> StandardResolution prim wX
                   -> IO Bool
-announceConflicts cmd allowConflicts externalMerge conflicts =
+announceConflicts cmd allowConflicts conflicts =
   case nubSort (conflictedPaths conflicts) of
     [] -> return False
     cfs -> do
       ePutDocLn $ vcat $ redText
         "We have conflicts in the following files:" : map (text . displayPath) cfs
-      when (allowConflicts == YesAllowConflictsAndMark) $ warnUnmangled conflicts
-      if allowConflicts `elem` [YesAllowConflicts,YesAllowConflictsAndMark]
-              || externalMerge /= NoExternalMerge
-        then return True
-        else fail $
+      case allowConflicts of
+        NoAllowConflicts ->
+          fail $
           "Refusing to "++cmd++" patches leading to conflicts.\n"++
           "If you would rather apply the patch and mark the conflicts,\n"++
           "use the --mark-conflicts or --allow-conflicts options to "++cmd++"\n"++
           "These can set as defaults by adding\n"++
           " "++cmd++" mark-conflicts\n"++
           "to "++darcsdir++"/prefs/defaults in the target repo. "
+        YesAllowConflicts MarkConflicts -> do
+          warnUnmangled conflicts
+          return True
+        _ -> return True
 
 externalResolution :: forall p wX wY wZ wA. (RepoPatch p, ApplyState p ~ Tree.Tree)
                    => DiffAlgorithm

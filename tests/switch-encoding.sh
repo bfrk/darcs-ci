@@ -3,6 +3,8 @@
 switch_to_utf8_locale
 lc_utf8=$LC_ALL
 
+rm -rf E U
+
 darcs init E
 darcs clone E U
 

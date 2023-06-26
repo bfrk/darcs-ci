@@ -29,14 +29,17 @@ import Control.Monad ( forM )
 import Data.Maybe( catMaybes )
 import qualified Data.ByteString.Lazy as BL
 import System.FilePath( (</>) )
-import System.Directory ( listDirectory, createDirectoryIfMissing )
+import System.Directory
+    ( createDirectoryIfMissing
+    , listDirectory
+    , withCurrentDirectory
+    )
 import System.Posix.Files
     ( getSymbolicLinkStatus, isDirectory, isRegularFile, FileStatus )
 
 import Darcs.Prelude
 
 import Darcs.Util.Path
-import Darcs.Util.File ( withCurrentDirectory )
 import Darcs.Util.ByteString ( readSegment )
 import Darcs.Util.Tree( Tree(), TreeItem(..)
                           , Blob(..), makeTree

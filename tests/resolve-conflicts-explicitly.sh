@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 # Test that we can resolve a conflict by explicitly depending on
 # the conflicting patches, thereby accepting the "default" resolution
 # (i.e. not to apply both) as correctly resolving the conflict.

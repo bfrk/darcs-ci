@@ -61,14 +61,14 @@ import Darcs.UI.PatchHeader
 
 import Darcs.Repository.Flags ( UpdatePending(..) )
 import Darcs.Patch ( RepoPatch, description, PrimOf
-                   , effect, invert, invertFL, sortCoalesceFL
+                   , effect, invert, invertFL, canonizeFL
                    )
 import Darcs.Patch.Apply ( ApplyState )
-import Darcs.Patch.Depends ( patchSetUnion, findCommonWithThem )
+import Darcs.Patch.Depends ( contextPatches, patchSetUnion, findCommon )
 import Darcs.Patch.Info ( isTag )
 import Darcs.Patch.Named ( fmapFL_Named )
 import Darcs.Patch.PatchInfoAnd ( hopefully )
-import Darcs.Patch.Set ( Origin, PatchSet, patchSet2RL )
+import Darcs.Patch.Set ( Origin, PatchSet )
 import Darcs.Patch.Split ( primSplitter )
 import Darcs.Patch.PatchInfoAnd ( PatchInfoAnd, info, patchDesc )
 import Darcs.Patch.Rebase.Fixup ( RebaseFixup(..) )
@@ -90,6 +90,7 @@ import Darcs.Repository
     , readPatches
     , tentativelyRemoveFromPW
     )
+import Darcs.Repository.Pending ( readTentativePending, writeTentativePending )
 import Darcs.Repository.Prefs ( getDefaultRepo )
 import Darcs.UI.SelectChanges
     ( WhichChanges(..)
@@ -102,10 +103,10 @@ import qualified Darcs.UI.SelectChanges as S
     )
 import Darcs.Util.Exception ( clarifyErrors )
 import Darcs.Patch.Witnesses.Ordered
-    ( FL(..), RL, (:>)(..), (+>+)
+    ( Fork(..), FL(..), RL, (:>)(..), (+>+)
     , nullFL, reverseRL, reverseFL, mapFL_FL
     )
-import Darcs.Patch.Witnesses.Sealed ( Sealed(..), FlippedSeal(..) )
+import Darcs.Patch.Witnesses.Sealed ( Sealed(..) )
 
 import Darcs.Util.English ( anyOfClause, itemizeVertical )
 import Darcs.Util.Printer ( Doc, formatWords, putDocLn, text, (<+>), ($$), ($+$) )
@@ -180,11 +181,9 @@ amend = DarcsCommand
       ^ O.lookforreplaces
       ^ O.lookformoves
       ^ O.repoDir
-      ^ O.withContext
       ^ O.diffAlgorithm
     advancedOpts
-      = O.compress
-      ^ O.umask
+      = O.umask
       ^ O.setScriptsExecutable
     allOpts = withStdOpts basicOpts advancedOpts
     amendCmd fps flags args = pathSetFromArgs fps args >>= doAmend flags
@@ -197,10 +196,10 @@ doAmend cfg files =
   withRepoLock (O.useCache ? cfg) (O.umask ? cfg) $
       RebaseAwareJob $ \(repository :: Repository 'RW p wU wR) -> do
     patchSet <- readPatches repository
-    FlippedSeal patches <- filterNotInRemote cfg repository patchSet
-    withSelectedPatchFromList "amend" patches (patchSelOpts cfg) $ \ (_ :> oldp) -> do
+    _ :> candidates <- filterNotInRemote cfg repository patchSet
+    withSelectedPatchFromList "amend" candidates (patchSelOpts cfg) $
+     \(kept :> oldp) -> do
       announceFiles (O.verbosity ? cfg) files "Amending changes in"
-      pristine <- readPristine repository
       pending :> working <-
         readPendingAndWorking (diffingOpts cfg) repository files
       -- auxiliary function needed because the witness types differ for the
@@ -213,9 +212,8 @@ doAmend cfg files =
                        (patchSelOpts cfg)
                        (Just (primSplitter (O.diffAlgorithm ? cfg)))
                        files
-                       (Just pristine)
             (chosenPatches :> _) <- runInvertibleSelection ch selection_config
-            addChangesToPatch cfg repository oldp chosenPatches pending working
+            addChangesToPatch cfg repository kept oldp chosenPatches pending working
       if not (isTag (info oldp))
         -- amending a normal patch
         then
@@ -224,13 +222,13 @@ doAmend cfg files =
               let selection_config =
                     selectionConfigPrim Last "unrecord" (patchSelOpts cfg)
                       (Just (primSplitter (O.diffAlgorithm ? cfg)))
-                      files (Just pristine)
+                      files
               (_ :> chosenPrims) <-
                 runInvertibleSelection (effect oldp) selection_config
               let invPrims = reverseRL (invertFL chosenPrims)
-              addChangesToPatch cfg repository oldp invPrims pending working
+              addChangesToPatch cfg repository kept oldp invPrims pending working
             else
-              go (sortCoalesceFL (pending +>+ working))
+              go (canonizeFL (O.diffAlgorithm ? cfg) (pending +>+ working))
         -- amending a tag
         else
           if hasEditMetadata cfg && isNothing files
@@ -253,15 +251,18 @@ doAmend cfg files =
 addChangesToPatch :: (RepoPatch p, ApplyState p ~ Tree)
                   => Config
                   -> Repository 'RW p wU wR
-                  -> PatchInfoAnd p wX wR
-                  -> FL (PrimOf p) wR wY
-                  -> FL (PrimOf p) wR wP
-                  -> FL (PrimOf p) wP wU
+                  -> RL (PatchInfoAnd p) wC wX -- ^ the context
+                  -> PatchInfoAnd p wX wR -- ^ original patch
+                  -> FL (PrimOf p) wR wY  -- ^ changes to add
+                  -> FL (PrimOf p) wR wP  -- ^ pending
+                  -> FL (PrimOf p) wP wU  -- ^ working
                   -> IO ()
-addChangesToPatch cfg _repository oldp chs pending working =
+addChangesToPatch cfg _repository context oldp chs pending working =
   if nullFL chs && not (hasEditMetadata cfg)
     then putInfo cfg "You don't want to record anything!"
     else do
+      -- remember the old pending for the amend --unrecord case, see below
+      Sealed old_pending <- readTentativePending _repository
       -- If a rebase is in progress, we want to manually update the rebase
       -- state, using the amendments directly as rebase fixups. This is
       -- necessary because otherwise we will first remove the original patch
@@ -280,7 +281,6 @@ addChangesToPatch cfg _repository oldp chs pending working =
           _repository <-
             tentativelyRemovePatches
               _repository
-              (O.compress ? cfg)
               NoUpdatePending
               (oldp :>: NilFL)
           (mlogf, newp) <-
@@ -288,7 +288,7 @@ addChangesToPatch cfg _repository oldp chs pending working =
             updatePatchHeader
               "amend"
               (if O.askDeps ? cfg
-                 then AskAboutDeps _repository
+                 then AskAboutDeps context
                  else NoAskAboutDeps)
               (patchSelOpts cfg)
               (patchHeaderConfig cfg)
@@ -300,12 +300,7 @@ addChangesToPatch cfg _repository oldp chs pending working =
                 NilFL
           setEnvDarcsFiles newp
           _repository <-
-            tentativelyAddPatch
-              _repository
-              (O.compress ? cfg)
-              (O.verbosity ? cfg)
-              NoUpdatePending
-              newp
+            tentativelyAddPatch _repository NoUpdatePending newp
           return (_repository, fixups, (mlogf, newp))
       let failmsg = maybe "" (\lf -> "\nLogfile left in " ++ lf ++ ".") mlogf
       tp <- readPristine _repository
@@ -313,10 +308,13 @@ addChangesToPatch cfg _repository oldp chs pending working =
         ("you have a bad patch: '" ++ patchDesc newp ++ "'")
         "amend it"
         (Just failmsg)
-      tentativelyRemoveFromPW _repository chs pending working
+      if O.amendUnrecord ? cfg then
+        writeTentativePending _repository $ invert chs +>+ old_pending
+      else
+        tentativelyRemoveFromPW _repository chs pending working
       _repository <-
-        finalizeRepositoryChanges _repository YesUpdatePending (O.compress ? cfg)
-          (O.dryRun ? cfg) `clarifyErrors` failmsg
+        finalizeRepositoryChanges _repository (O.dryRun ? cfg)
+          `clarifyErrors` failmsg
       case O.verbosity ? cfg of
         O.NormalVerbosity -> putDocLn "Finished amending patch."
         O.Verbose -> putDocLn $ "Finished amending patch:" $$ description newp
@@ -327,18 +325,23 @@ filterNotInRemote :: RepoPatch p
                   => Config
                   -> Repository 'RW p wU wR
                   -> PatchSet p Origin wR
-                  -> IO (FlippedSeal (RL (PatchInfoAnd p)) wR)
+                  -> IO ((PatchSet p :> RL (PatchInfoAnd p)) Origin wR)
 filterNotInRemote cfg repository patchSet = do
     nirs <- mapM getNotInRemotePath (O.notInRemote ? cfg)
     if null nirs
       then
-        return (FlippedSeal (patchSet2RL patchSet))
+        -- We call contextPatches here because
+        -- (a) selecting patches beyond the latest clean tag is impossible anyway
+        -- (b) makes it easier to reconstruct a PatchSet w/o the selected patch
+        -- (c) avoids listing the complete list of patches in the repo when user
+        --     rejects the last selectable patch
+        return (contextPatches patchSet)
       else do
         putInfo cfg $
           "Determining patches not in" <+> anyOfClause nirs $$ itemizeVertical 2 nirs
         Sealed thems <- patchSetUnion `fmap` mapM readNir nirs
-        _ :> only_ours <- return $ findCommonWithThem patchSet thems
-        return (FlippedSeal (reverseFL only_ours))
+        Fork in_remote only_ours _ <- return $ findCommon patchSet thems
+        return (in_remote :> reverseFL only_ours)
   where
     readNir loc = do
       repo <- identifyRepositoryFor Reading repository (O.useCache ? cfg) loc
@@ -366,7 +369,6 @@ patchSelOpts cfg = S.PatchSelectionOptions
     , S.interactive = isInteractive cfg
     , S.selectDeps = O.PromptDeps -- option not supported, use default
     , S.withSummary = O.NoSummary -- option not supported, use default
-    , S.withContext = O.withContext ? cfg
     }
 
 isInteractive :: Config -> Bool

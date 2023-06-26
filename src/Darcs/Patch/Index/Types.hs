@@ -19,10 +19,10 @@ module Darcs.Patch.Index.Types where
 
 import Darcs.Prelude
 
+import Darcs.Patch.Info ( makePatchname, PatchInfo )
 import Darcs.Util.Hash( SHA1, sha1short, sha1zero )
 import Darcs.Util.Path ( anchorPath, AnchoredPath )
 import Data.Binary ( Binary(..) )
-import Data.Word ( Word32 )
 
 -- | The FileId for a file consists of the FilePath (creation name)
 --   and an index. The index denotes how many files
@@ -48,23 +48,12 @@ newtype PatchId = PID {patchId :: SHA1}
 pid2string :: PatchId -> String
 pid2string = show . patchId
 
--- | This is used to track changes to files
-data PatchMod a
-  = PTouch a
-  | PCreateFile a
-  | PCreateDir a
-  | PRename a
-            a
-  | PRemove a
-  | PDuplicateTouch a
-    -- ^ this is used for duplicate patches that don't
-    --   have any effect, but we still want to keep
-    --   track of them
-  deriving (Show, Eq, Functor)
-
-short :: PatchId -> Word32
-short (PID sha1) = sha1short sha1
+short :: PatchId -> Int
+short (PID sha1) = fromIntegral $ sha1short sha1
 
 zero :: PatchId
 zero = PID sha1zero
+
+makePatchID :: PatchInfo -> PatchId
+makePatchID = PID . makePatchname
 

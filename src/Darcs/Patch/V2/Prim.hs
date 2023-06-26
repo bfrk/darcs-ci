@@ -33,8 +33,8 @@ import Darcs.Patch.Witnesses.Show ( Show1, Show2 )
 import Darcs.Patch.Witnesses.Sealed ( mapSeal )
 
 import Darcs.Patch.Prim.Class
-    ( PrimConstruct(..), PrimCanonize(..)
-    , PrimClassify(..), PrimDetails(..)
+    ( PrimConstruct(..), PrimCoalesce(..)
+    , PrimDetails(..)
     , PrimShow(..), PrimRead(..)
     , PrimApply(..)
     , PrimSift(..)
@@ -52,8 +52,7 @@ newtype Prim x y = Prim { unPrim :: Base.Prim x y } deriving
     , Eq2
     , PatchInspect
     , PrimApply
-    , PrimCanonize
-    , PrimClassify
+    , PrimCoalesce
     , PrimConstruct
     , PrimDetails
     , PrimMangleUnravelled

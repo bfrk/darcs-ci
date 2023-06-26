@@ -25,7 +25,6 @@ module Darcs.Util.Cache
     , reportBadSources
     , closestWritableDirectory
     , dropNonRepos
-    , Compression(..)
     ) where
 
 import Control.Concurrent.MVar ( MVar, modifyMVar_, newMVar, readMVar )
@@ -40,6 +39,7 @@ import System.Directory
     , getDirectoryContents
     , getPermissions
     , removeFile
+    , withCurrentDirectory
     )
 import qualified System.Directory as SD ( writable )
 import System.FilePath.Posix ( dropFileName, joinPath, (</>) )
@@ -59,11 +59,10 @@ import Darcs.Util.File
     , fetchFilePS
     , gzFetchFilePS
     , speculateFileOrUrl
-    , withCurrentDirectory
     , withTemp
     )
 import Darcs.Util.Global ( darcsdir, defaultRemoteDarcsCmd )
-import Darcs.Util.Lock ( gzWriteAtomicFilePS, writeAtomicFilePS )
+import Darcs.Util.Lock ( gzWriteAtomicFilePS )
 import Darcs.Util.Progress ( debugMessage, progressList )
 import Darcs.Util.URL ( isHttpUrl, isSshUrl, isValidLocalPath )
 import Darcs.Util.ValidHash
@@ -414,7 +413,9 @@ fetchFileUsingCachePrivate fromWhere (Ca cache) hash = do
                             fail $ "Hash failure in " ++ cacheFile
                         return x2
                      else return x1
-            mapM_ (tryLinking cacheFile filename subdir) cs
+            -- Linking is optional here; the catchall prevents darcs from
+            -- failing if repo and cache are on different file systems.
+            mapM_ (tryLinking cacheFile filename subdir) cs `catchall` return ()
             return (cacheFile, x)
             `catchall` do
                 debugMessage "Caught exception, now attempt creating cache."
@@ -442,7 +443,10 @@ fetchFileUsingCachePrivate fromWhere (Ca cache) hash = do
 
     ffuc [] = fail ("Couldn't fetch " ++ filename ++ "\nin subdir "
                           ++ hashedDir subdir ++ " from sources:\n"
-                          ++ show (Ca cache))
+                          ++ show (Ca cache)
+                          ++ if subdir == HashedPristineDir
+                             then "\nRun `darcs repair` to fix this problem."
+                             else "")
 
 tryLinking :: FilePath -> FilePath -> HashedDir -> CacheLoc -> IO ()
 tryLinking source filename subdir c =
@@ -457,16 +461,12 @@ createCache (Cache Directory _ d) subdir filename =
     createDirectoryIfMissing True (d </> hashedDir subdir </> bucketFolder filename)
 createCache _ _ _ = return ()
 
-data Compression = NoCompression
-                 | GzipCompression
-    deriving ( Eq, Show )
-
 -- | Write file content, except if it is already in the cache, in
 -- which case merely create a hard link to that file. The returned value
 -- is the size and hash of the content.
 writeFileUsingCache
-  :: ValidHash h => Cache -> Compression -> B.ByteString -> IO h
-writeFileUsingCache (Ca cache) compr content = do
+  :: ValidHash h => Cache -> B.ByteString -> IO h
+writeFileUsingCache (Ca cache) content = do
     debugMessage $ "writeFileUsingCache "++filename
     (fn, _) <- fetchFileUsingCachePrivate LocalOnly (Ca cache) hash
     mapM_ (tryLinking fn filename subdir) cache
@@ -485,12 +485,12 @@ writeFileUsingCache (Ca cache) compr content = do
         | otherwise = do
             createCache c subdir filename
             let cacheFile = hashedFilePath c subdir filename
-            case compr of
-              NoCompression -> writeAtomicFilePS cacheFile content
-              GzipCompression -> gzWriteAtomicFilePS cacheFile content
+            gzWriteAtomicFilePS cacheFile content
             -- create links in all other writable locations
             debugMessage $ "writeFileUsingCache remaining sources:\n"++show (Ca cs)
-            mapM_ (tryLinking cacheFile filename subdir) cs
+            -- Linking is optional here; the catchall prevents darcs from
+            -- failing if repo and cache are on different file systems.
+            mapM_ (tryLinking cacheFile filename subdir) cs `catchall` return ()
             return hash
     wfuc [] = fail $ "No location to write file " ++ (hashedDir subdir </> filename)
 

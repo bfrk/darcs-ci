@@ -30,7 +30,6 @@ import Control.Monad ( unless, when, filterM, void )
 #ifndef WIN32
 import Control.Monad ( liftM2 )
 #endif
-import Control.Concurrent.MVar ( MVar )
 import System.Exit ( ExitCode(..) )
 import System.Environment
     ( getEnv
@@ -41,7 +40,6 @@ import System.IO
     ( Handle
     , hClose
     , hIsTerminalDevice
-    , hPutStr
     , stderr
     , stdout
     )
@@ -49,7 +47,6 @@ import System.IO
 import System.FilePath.Posix ( (</>) )
 #endif
 import System.Process ( createProcess, proc, CreateProcess(..), runInteractiveProcess, waitForProcess, StdStream(..) )
-import System.Process.Internals ( ProcessHandle )
 
 #ifndef WIN32
 import GHC.IO.Encoding
@@ -66,7 +63,8 @@ import GHC.IO.Exception ( IOErrorType(ResourceVanished) )
 import Foreign.C ( withCString )
 import Foreign.C.String ( CString )
 import Foreign.Ptr ( nullPtr )
-import Darcs.Util.Lock ( canonFilename, writeDocBinFile )
+import Darcs.Util.Lock ( writeDocBinFile )
+import System.Directory ( canonicalizePath )
 #endif
 
 import Darcs.UI.Options.All ( Sign(..), Verify(..), Compression(..) )
@@ -105,7 +103,6 @@ import Darcs.Util.Printer
     , simplePrinters
     , text
     )
-import qualified Darcs.Util.Ratified as Ratified
 import Darcs.UI.Email ( formatHeader )
 
 #ifndef WIN32
@@ -222,7 +219,7 @@ sendEmailDoc f t s cc Nothing _mbundle body = do
                hPutDoc h body
                hClose h
                writeDocBinFile "mailed_patch" body
-               cfn <- canonFilename fn
+               cfn <- canonicalizePath fn
                withCString cfn $ \pcfn ->
                 c_send_email fp tp ccp sp nullPtr pcfn
   when (r /= 0) $ do
@@ -285,31 +282,24 @@ foreign import ccall "win32/send_email.h send_email" c_send_email
 #endif
 
 execPSPipe :: String -> [String] -> B.ByteString -> IO B.ByteString
-execPSPipe c args ps = fmap renderPS
-                     $ execDocPipe c args
-                     $ packedString ps
-
-execAndGetOutput :: FilePath -> [String] -> Doc
-                 -> IO (ProcessHandle, MVar (), B.ByteString)
-execAndGetOutput c args instr = do
-       (i,o,e,pid) <- runInteractiveProcess c args Nothing Nothing
-       _ <- forkIO $ hPutDoc i instr >> hClose i
-       mvare <- newEmptyMVar
-       _ <- forkIO ((Ratified.hGetContents e >>= -- ratify: immediately consumed
-                hPutStr stderr)
-               `finally` putMVar mvare ())
-       out <- B.hGetContents o
-       return (pid, mvare, out)
+execPSPipe command args input =
+  withoutProgress $ do
+    (hi, ho, he, pid) <- runInteractiveProcess command args Nothing Nothing
+    _ <- forkIO $ B.hPut hi input >> hClose hi
+    done <- newEmptyMVar
+    _ <- forkIO $ (B.hGetContents he >>= B.hPut stderr) `finally` putMVar done ()
+    output <- B.hGetContents ho
+    rval <- waitForProcess pid
+    takeMVar done
+    case rval of
+      ExitFailure ec ->
+        fail $
+        "External program '" ++ command ++ "' failed with exit code " ++ show ec
+      ExitSuccess -> return output
 
 execDocPipe :: String -> [String] -> Doc -> IO Doc
-execDocPipe c args instr = withoutProgress $ do
-       (pid, mvare, out) <- execAndGetOutput c args instr
-       rval <- waitForProcess pid
-       takeMVar mvare
-       case rval of
-         ExitFailure ec ->fail $ "External program '"++c++
-                          "' failed with exit code "++ show ec
-         ExitSuccess -> return $ packedString out
+execDocPipe command args input =
+  packedString <$> execPSPipe command args (renderPS input)
 
 signString :: Sign -> Doc -> IO Doc
 signString NoSign d = return d
@@ -405,12 +395,10 @@ viewDocWith pr msg = do
              case mbViewerPlusArgs of
                   Just viewerPlusArgs -> do
                     case words viewerPlusArgs of
-                      [] -> error "impossible"
+                      [] -> pipeDocToPager "" [] pr msg
                       (viewer : args) -> pipeDocToPager viewer args pr msg
                   Nothing -> return $ ExitFailure 127 -- No such command
-               -- TEMPORARY passing the -K option should be removed as soon as
-               -- we can use the delegate_ctrl_c feature in process
-               `ortryrunning` pipeDocToPager  "less" ["-RK"] pr msg
+               `ortryrunning` pipeDocToPager  "less" ["-R"] pr msg
                `ortryrunning` pipeDocToPager  "more" [] pr msg
 #ifdef WIN32
                `ortryrunning` pipeDocToPager  "more.com" [] pr msg

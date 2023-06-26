@@ -37,9 +37,7 @@ cd ..
 rm -rf R2
 darcs clone -q C R2
 cd R2
-sed -i -e 's/[bc]/&2X/' f
-darcs record -am 'p2X'
-sed -i -e 's/2X/2/' f
+sed -i -e 's/[bc]/&2/' f
 darcs record -am 'p2'
 cd ..
 
@@ -68,73 +66,100 @@ cd ..
 
 cd C
 darcs pull -a ../R*
-cd ..
 
-# The maximal non-conflicting subsets are:
-#  {p1, p3, p5}, {p1, p4}, {p2, p4} {p2, p5}
-# They are what I would expect conflict resolution
-# to display as alternatives to the baseline.
+# For darcs-3 patches we do not merge non-conflicting
+# alternatives.
 
-baseline='
+cat <<EOF > f.darcs-3
+v v v v v v v
 a
 b
 c
 d
 e
 f
-'
+=============
+a
+b
+c
+d
+e5
+f5
+*************
+a
+b
+c
+d4
+e4
+f
+*************
+a
+b
+c3
+d3
+e
+f
+*************
+a
+b2
+c2
+d
+e
+f
+*************
+a1
+b1
+c
+d
+e
+f
+^ ^ ^ ^ ^ ^ ^
+EOF
 
-p25='
+# The maximal non-conflicting subsets are:
+#  {p1, p3, p5}, {p1, p4}, {p2, p4} {p2, p5}
+# They are what darcs displays as alternatives to the baseline
+# for darcs-1 patches.
+
+cat <<EOF > f.darcs-1
+v v v v v v v
+a
+b
+c
+d
+e
+f
+=============
 a
 b2
 c2
 d
 e5
 f5
-'
-
-p24='
+*************
 a
 b2
 c2
 d4
 e4
 f
-'
-
-p14='
+*************
 a1
 b1
 c
 d4
 e4
 f
-'
-
-p135='
+*************
 a1
 b1
 c3
 d3
 e5
 f5
-'
+^ ^ ^ ^ ^ ^ ^
+EOF
 
-cd C
-# now check that:
-
-# * there is exactly one conflict resolution
-test $(grep -cF 'v v v v v v v' f) = 1
-test $(grep -cF '=============' f) = 1
-test $(grep -cF '^ ^ ^ ^ ^ ^ ^' f) = 1
-
-# * each of the alternatives occur at least once
-cat f | tr '\n' 'X' > xf
-for p in "$baseline" "$p25" "$p24" "$p14" "$p135"; do
-  grep $(echo -n "$p" | tr '\n' 'X') xf
-done
-
-# * there are 4 alternatives to the baseline
-test $(grep -cF '*************' f) = 3
+diff f f.$format >&2
 
 cd ..
