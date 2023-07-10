@@ -41,8 +41,7 @@ darcs rec -lam 'add baz'
 
 echo 'yyyy' | darcs rebase suspend
 
-darcs rebase unsuspend --to-patch 'bar' -a 2>log
+darcs rebase unsuspend --to-patch 'bar' -a
 darcs changes | grep 'add foo'
 darcs changes | grep 'add bar'
 darcs changes | not grep 'add baz'
-grep "1 suspended patch" log

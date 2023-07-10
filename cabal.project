@@ -1,2 +1,3 @@
 packages: .
-constraints: tls < 1.7
+-- constraint for aeson needed until http-conduit fixes their upper bound
+constraints: tls < 1.7, aeson < 2.2

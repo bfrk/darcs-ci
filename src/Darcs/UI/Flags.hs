@@ -26,6 +26,7 @@ module Darcs.UI.Flags
     , wantGuiPause
     , isInteractive
     , willRemoveLogFile
+    , includeBoring
     , setDefault
     , allowConflicts
     , hasXmlOutput
@@ -59,6 +60,7 @@ module Darcs.UI.Flags
     , O.reorder
     , O.minimize
     , O.editDescription
+    , O.externalMerge
     , O.maxCount
     , O.matchAny
     , O.withContext
@@ -170,10 +172,7 @@ wantGuiPause fs =
     else O.NoWantGuiPause
   where
     hasDiffCmd = isJust . O.diffCmd . parseFlags O.extDiff
-    hasExternalMerge flags =
-      case O.conflictsNo ? flags of
-        Just (O.YesAllowConflicts (O.ExternalMerge _)) -> True
-        _ -> False
+    hasExternalMerge = (/= O.NoExternalMerge) . parseFlags O.externalMerge
     hasPause = (== O.YesWantGuiPause) . parseFlags O.pauseForGui
 
 -- | Non-trivial interaction between options. Explicit @-i@ or @-a@ dominates,
@@ -191,6 +190,9 @@ isInteractive def = oparse (O.dryRunXml ^ O.changesFormat ^ O.interactive) decid
 
 willRemoveLogFile :: Config -> Bool
 willRemoveLogFile = O._rmlogfile . parseFlags O.logfile
+
+includeBoring :: Config -> Bool
+includeBoring cfg = O.includeBoring ? cfg
 
 setDefault :: Bool -> Config -> O.SetDefault
 setDefault defYes = maybe def noDef . parseFlags O.setDefault where

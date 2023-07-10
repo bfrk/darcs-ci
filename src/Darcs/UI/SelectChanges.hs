@@ -66,7 +66,7 @@ import Control.Monad.State
     , modify, runStateT, state
     )
 import Control.Monad.Trans ( liftIO )
-import Data.List ( intercalate, union, (\\) )
+import Data.List ( intercalate, union )
 import Data.Maybe ( isJust )
 import System.Exit ( exitSuccess )
 
@@ -102,7 +102,7 @@ import Darcs.Patch.Match
     , matchAPatch
     )
 import Darcs.Patch.Named ( adddeps, anonymous )
-import Darcs.Patch.PatchInfoAnd ( PatchInfoAnd, info, n2pia )
+import Darcs.Patch.PatchInfoAnd ( PatchInfoAnd, n2pia )
 import Darcs.Patch.Permutations ( commuteWhatWeCanRL )
 import Darcs.Patch.Show ( ShowPatch, ShowContextPatch )
 import Darcs.Patch.Split ( Splitter(..) )
@@ -1028,6 +1028,9 @@ getDefault False InLast  = 'n'
 -- such that the new patch will explicitly depend on them. The patches offered
 -- include only those that the new patch does not already depend on. To support
 -- amend, we pass in the old dependencies, too.
+--
+-- TODO This currently does not allow the user to remove explicit dependencies
+-- from a patch using amend --ask-deps.
 askAboutDepends
   :: (RepoPatch p, ApplyState p ~ Tree)
   => RL (PatchInfoAnd p) wX wR  -- ^ patches to choose from
@@ -1035,48 +1038,20 @@ askAboutDepends
   -> PatchSelectionOptions
   -> [PatchInfo]                -- ^ old explicit dependencies
   -> IO [PatchInfo]
-askAboutDepends to_ask pa' ps_opts olddeps = do
+askAboutDepends context pa' ps_opts olddeps = do
   -- Ideally we'd just default the olddeps to yes but still ask about them.
   -- SelectChanges doesn't currently (17/12/09) offer a way to do this so would
-  -- have to have this support added first. This is not easy to do, though.
-
-  -- As a cheap alternative we do two selection passes: one where the user can
-  -- drop old dependencies and one where they can add new ones.
-  _ :> to_drop <-
-    runSelection (reverseRL to_ask) $
-      -- An explicit dependency that we /drop/ can be commuted to the right
-      -- i.e. forward in the history without dragging others with them, thus we
-      -- use LastReversed. We also use a custom match criterion to offer only
-      -- patches we do explicitly depend on.
-      selectionConfigDepends LastReversed "drop dependency on" (`elem` olddeps)
-  let keep = olddeps \\ mapFL info to_drop
-      dropped = olddeps \\ keep
+  -- have to have this support added first.
   -- Note: using anonymous here is safe since we don't store any patches
   -- and only return a list of PatchInfo
-  pa <- n2pia . flip adddeps keep <$> anonymous pa'
+  pa <- n2pia . flip adddeps olddeps <$> anonymous pa'
   -- get rid of all (implicit and explicit) dependencies of pa
-  _ :> _ :> non_deps <- return $ commuteWhatWeCanRL (to_ask :> pa)
+  _ :> _ :> non_deps <- return $ commuteWhatWeCanRL (context :> pa)
   candidates :> _ <-
     runSelection (reverseRL non_deps) $
-      -- Adding explicit dependencies should drag dependent patches with them
-      -- (though they will be filtered out later), so we use FirstReversed. The
-      -- matcher is there so we don't re-offer dependencies we dropped in the
-      -- previous run.
-      selectionConfigDepends FirstReversed "depend on" (`notElem` dropped)
-  return $ keep `union` independentPatchIds (reverseFL candidates)
-  where
-    selectionConfigDepends whch name matchFn =
-      PSC
-        { opts = ps_opts {matchFlags = [], interactive = True}
-        , splitter = Nothing
-        , files = Nothing
-        , matchCriterion =
-            MatchCriterion
-              {mcHasNonrange = True, mcFunction = matchFn . info}
-        , jobname = name
-        , allowSkipAll = True
-        , whichChanges = whch
-        }
+      selectionConfig FirstReversed "depend on" ps_opts
+        { matchFlags = [], interactive = True } Nothing Nothing
+  return $ olddeps `union` independentPatchIds (reverseFL candidates)
 
 -- | From an 'RL' of patches select the identities of those that are
 -- not depended upon by later patches.

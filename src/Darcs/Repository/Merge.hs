@@ -54,9 +54,9 @@ import Darcs.Patch.Witnesses.Sealed ( Sealed(Sealed), seal )
 import Darcs.Repository.Flags
     ( DiffOpts (..)
     , AllowConflicts (..)
-    , ResolveConflicts (..)
     , Reorder (..)
     , UpdatePending (..)
+    , ExternalMerge (..)
     , WantGuiPause (..)
     )
 import Darcs.Repository.Hashed
@@ -224,14 +224,14 @@ tentativelyMergePatches_ :: (RepoPatch p, ApplyState p ~ Tree)
                          => MakeChanges
                          -> Repository 'RW p wU wR -> String
                          -> AllowConflicts
-                         -> WantGuiPause
+                         -> ExternalMerge -> WantGuiPause
                          -> Reorder
                          -> DiffOpts
                          -> Fork (PatchSet p)
                                  (FL (PatchInfoAnd p))
                                  (FL (PatchInfoAnd p)) Origin wR wY
                          -> IO (Sealed (FL (PrimOf p) wU))
-tentativelyMergePatches_ mc _repo cmd allowConflicts wantGuiPause
+tentativelyMergePatches_ mc _repo cmd allowConflicts externalMerge wantGuiPause
   reorder diffingOpts@DiffOpts{..} (Fork context us them) = do
     (them' :/\: us') <-
       return $ merge (progressFL "Merging us" us :\/: progressFL "Merging them" them)
@@ -246,9 +246,10 @@ tentativelyMergePatches_ mc _repo cmd allowConflicts wantGuiPause
           standardResolution
             (patchSet2RL context +<<+ us :<: anonpw)
             (progressRL "Examining patches for conflicts" $ reverseFL them'')
+        standard_resolution = mangled conflicts
 
     debugMessage "Checking for conflicts..."
-    when (allowConflicts == YesAllowConflicts MarkConflicts) $
+    when (allowConflicts == YesAllowConflictsAndMark) $
         mapM_ backupByCopying $
         map (anchorPath (repoLocation _repo)) $
         conflictedPaths conflicts
@@ -278,15 +279,16 @@ tentativelyMergePatches_ mc _repo cmd allowConflicts wantGuiPause
 
     debugMessage "Working out conflict markup..."
     Sealed resolution <-
-      if have_conflicts then
-        case allowConflicts of
-          YesAllowConflicts (ExternalMerge merge_cmd) ->
-            externalResolution diffAlg working merge_cmd wantGuiPause
+        case (externalMerge, have_conflicts) of
+          (NoExternalMerge, _) ->
+            return $
+              if allowConflicts == YesAllowConflicts
+                then seal NilFL
+                else standard_resolution
+          (_, False) -> return $ standard_resolution
+          (YesExternalMerge c, True) ->
+            externalResolution diffAlg working c wantGuiPause
               (effect us +>+ pw) (effect them) them''content
-          YesAllowConflicts NoResolveConflicts -> return $ seal NilFL
-          YesAllowConflicts MarkConflicts -> return $ mangled conflicts
-          NoAllowConflicts -> error "impossible" -- was handled in announceConflicts
-      else return $ seal NilFL
 
     debugMessage "Adding patches to the inventory and writing new pending..."
     when (mc == MakeChanges) $ do
@@ -313,7 +315,7 @@ tentativelyMergePatches_ mc _repo cmd allowConflicts wantGuiPause
 tentativelyMergePatches :: (RepoPatch p, ApplyState p ~ Tree)
                         => Repository 'RW p wU wR -> String
                         -> AllowConflicts
-                        -> WantGuiPause
+                        -> ExternalMerge -> WantGuiPause
                         -> Reorder
                         -> DiffOpts
                         -> Fork (PatchSet p)
@@ -325,7 +327,7 @@ tentativelyMergePatches = tentativelyMergePatches_ MakeChanges
 considerMergeToWorking :: (RepoPatch p, ApplyState p ~ Tree)
                        => Repository 'RW p wU wR -> String
                        -> AllowConflicts
-                       -> WantGuiPause
+                       -> ExternalMerge -> WantGuiPause
                        -> Reorder
                        -> DiffOpts
                        -> Fork (PatchSet p)

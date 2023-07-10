@@ -19,7 +19,7 @@ import Darcs.UI.Commands
     )
 import Darcs.UI.Commands.Util ( printDryRunMessageAndExit )
 import Darcs.UI.Flags
-    ( DarcsFlag, verbosity, reorder, allowConflicts
+    ( DarcsFlag, verbosity, reorder, allowConflicts, externalMerge
     , wantGuiPause, diffingOpts, setScriptsExecutable, isInteractive
     , xmlOutput, dryRun
     )
@@ -104,7 +104,7 @@ mergeAndTest :: (RepoPatch p, ApplyState p ~ Tree)
 mergeAndTest cmdName opts repository patches = do
     pw <- tentativelyMergePatches repository cmdName
                          (allowConflicts opts)
-                         (wantGuiPause opts)
+                         (externalMerge ? opts) (wantGuiPause opts)
                          (reorder ? opts) (diffingOpts opts)
                          patches
     tree <- readPristine repository

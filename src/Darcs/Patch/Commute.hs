@@ -18,31 +18,25 @@ import Darcs.Patch.Witnesses.Ordered
     ( FL(..), RL(..), reverseFL, reverseRL,
     (:>)(..) )
 
-{- | Class of patches that that can be commuted.
-
-Instances should obey the following laws:
-
-[commute-symmetry]
-
-    prop> commute (p:>q) == Just (q':>p') <=> commute (q':>p') == Just (p':>q)
-
-[invert-commute]
-
-    If patches are invertible, then
-
-    prop> commute (p:>q) == Just (q':>p') <=> commute (invert q:>invert p) == Just (invert p':>invert q')
-
-The more general law
-
-[square-commute]
-
-    prop> commute (p:>q) == Just (q':>p') => commute (invert p:>q') == Just (q:>invert p')
-
-is valid in general only provided we know (a priori) that @'commute' ('invert'
-p':>'q')@ succeeds, in other words, that p and q are not in conflict with each
-other. See "Darcs.Patch.CommuteNoConflicts" for an extended discussion.
-
--}
+-- | Commute represents things that can be (possibly) commuted.
+--
+-- Instances should obey the following laws:
+--
+-- * Symmetry
+--
+--   prop> commute (p:>q) == Just (q':>p') <=> commute (q':>p') == Just (p':>q)
+--
+-- * If an instance @'Invert' p@ exists, then
+--
+--   prop> commute (p:>q) == Just (q':>p') <=> commute (invert q:>invert p) == Just (invert p':>invert q')
+--
+-- * The more general Square-Commute law
+--
+--   prop> commute (p:>q) == Just (q':>p') => commute (invert p:>q') == Just (q:>invert p')
+--
+--   is required to hold only for primitive patches, i.e. if there is /no/
+--   instance @'Merge' p@, because together with 'merge' it implies that
+--   any two patches commute.
 class Commute p where
     commute :: (p :> p) wX wY -> Maybe ((p :> p) wX wY)
 

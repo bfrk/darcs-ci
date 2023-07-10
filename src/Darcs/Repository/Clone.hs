@@ -107,7 +107,6 @@ import Darcs.Repository.Flags
     , WithPatchIndex (..)
     , PatchFormat (..)
     , AllowConflicts(..)
-    , ResolveConflicts(..)
     , WithPrefsTemplates(..)
     )
 
@@ -256,7 +255,7 @@ cloneRepository repourl mysimplename v useCache cloneKind um rdarcs sse remoteRe
       -- check for unresolved conflicts
       patches <- readPatches _toRepo
       let conflicts = patchsetConflictResolutions patches
-      _ <- announceConflicts "clone" (YesAllowConflicts MarkConflicts) conflicts
+      _ <- announceConflicts "clone" YesAllowConflictsAndMark conflicts
       Sealed mangled_res <- return $ mangled conflicts
       unless (nullFL mangled_res) $
         withSignalsBlocked $ void $ applyToWorking _toRepo v mangled_res

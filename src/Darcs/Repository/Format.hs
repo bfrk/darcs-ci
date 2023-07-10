@@ -66,7 +66,7 @@ module Darcs.Repository.Format
     , identifyRepoFormat
     , tryIdentifyRepoFormat
     , createRepoFormat
-    , unsafeWriteRepoFormat
+    , writeRepoFormat
     , writeProblem
     , readProblem
     , transferProblem
@@ -218,10 +218,8 @@ tryIdentifyRepoFormat repo = do
     makeErrorMsg e =  "Not a repository: " ++ repo ++ ":\n" ++ e
 
 -- | Write the repo format to the given file.
--- This is unsafe because we don't check that we are allowed to write
--- to the repo.
-unsafeWriteRepoFormat :: RepoFormat -> FilePath -> IO ()
-unsafeWriteRepoFormat rf loc = writeBinFile loc $ BC.pack $ show rf
+writeRepoFormat :: RepoFormat -> FilePath -> IO ()
+writeRepoFormat rf loc = writeBinFile loc $ BC.pack $ show rf
 -- note: this assumes show returns ascii
 
 -- | Create a repo format. The first argument specifies the patch

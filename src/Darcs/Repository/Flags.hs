@@ -21,7 +21,7 @@ module Darcs.Repository.Flags
     , UseIndex (..)
     , CloneKind (..)
     , AllowConflicts (..)
-    , ResolveConflicts (..)
+    , ExternalMerge (..)
     , WorkRepo (..)
     , WantGuiPause (..)
     , WithPatchIndex (..)
@@ -109,10 +109,10 @@ data CloneKind = LazyClone       -- ^Just copy pristine and inventories
                | CompleteClone   -- ^Same as Normal but omit telling user they can interrumpt
     deriving ( Eq, Show )
 
-data AllowConflicts = NoAllowConflicts | YesAllowConflicts ResolveConflicts
+data AllowConflicts = NoAllowConflicts | YesAllowConflicts | YesAllowConflictsAndMark
     deriving ( Eq, Show )
 
-data ResolveConflicts = NoResolveConflicts | MarkConflicts | ExternalMerge String
+data ExternalMerge = YesExternalMerge String | NoExternalMerge
     deriving ( Eq, Show )
 
 data WorkRepo = WorkRepoDir String | WorkRepoPossibleURL String | WorkRepoCurrentDir
