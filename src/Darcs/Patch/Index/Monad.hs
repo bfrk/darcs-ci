@@ -28,8 +28,9 @@ import Darcs.Prelude
 
 import Darcs.Patch.Apply ( Apply(..) )
 import Darcs.Patch.ApplyMonad ( ApplyMonad(..), ApplyMonadTree(..) )
+import Control.Monad ( when, forM_ )
 import Control.Monad.Catch ( MonadThrow(..), SomeException )
-import Control.Monad.State
+import Control.Monad.State ( MonadState, StateT, execStateT, gets, modify )
 import Control.Arrow
 import Darcs.Util.Path ( AnchoredPath, anchorPath, movedirfilename, isPrefix )
 import qualified Data.Set as S

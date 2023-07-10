@@ -30,7 +30,8 @@ import Data.List.Ordered ( nubSort )
 import Data.Maybe ( catMaybes, fromMaybe, isJust )
 import Control.Arrow ( second )
 import Control.Exception ( catch, IOException )
-import Control.Monad.State.Strict
+import Control.Monad ( when, unless )
+import Control.Monad.State.Strict ( evalState, get, gets, modify )
 
 import Darcs.UI.PrintPatch ( showFriendly )
 import Darcs.Patch.PatchInfoAnd ( PatchInfoAndG, fmapFLPIAP, hopefullyM, info )

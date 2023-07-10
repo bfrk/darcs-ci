@@ -11,6 +11,8 @@ module Darcs.Patch.Ident
     , fastRemoveSubsequenceRL
     , findCommonFL
     , findCommonRL
+    , findCommonWithThemFL
+    , findCommonWithThemRL
     , commuteToPrefix
     -- * Properties
     , prop_identInvariantUnderCommute
@@ -237,36 +239,44 @@ findCommonFL :: (Commute p, Ident p)
              -> FL p wX wZ
              -> Fork (FL p) (FL p) (FL p) wX wY wZ
 findCommonFL xs ys =
-  case commuteToPrefix commonIds xs of
-    Nothing -> error "failed to commute common patches (lhs)"
-    Just (cxs :> xs') ->
-      case commuteToPrefix commonIds ys of
-        Nothing -> error "failed to commute common patches (rhs)"
-        Just (cys :> ys') ->
+  case findCommonWithThemFL xs ys of
+    cxs :> xs' ->
+      case findCommonWithThemFL ys xs of
+        cys :> ys' ->
           case cxs =\^/= cys of
             NotEq -> error "common patches aren't equal"
-            IsEq -> Fork cxs (reverseRL xs') (reverseRL ys')
+            IsEq -> Fork cxs xs' ys'
+
+findCommonWithThemFL
+  :: (Commute p, Ident p) => FL p wX wY -> FL p wX wZ -> (FL p :> FL p) wX wY
+findCommonWithThemFL xs ys =
+  case partitionFL' ((`S.member` yids) . ident) NilRL NilRL xs of
+    cxs :> NilRL :> xs' -> cxs :> reverseRL xs'
+    _ -> error "failed to commute common patches"
   where
-    commonIds =
-      S.fromList (mapFL ident xs) `S.intersection` S.fromList (mapFL ident ys)
+    yids = S.fromList (mapFL ident ys)
 
 findCommonRL :: (Commute p, Ident p)
              => RL p wX wY
              -> RL p wX wZ
              -> Fork (RL p) (RL p) (RL p) wX wY wZ
 findCommonRL xs ys =
-  case partitionRL' (not . (`S.member` commonIds) . ident) xs of
-    cxs :> NilFL :> xs' ->
-      case partitionRL' (not . (`S.member` commonIds) . ident) ys of
-        cys :> NilFL :> ys' ->
+  case findCommonWithThemRL xs ys of
+    cxs :> xs' ->
+      case findCommonWithThemRL ys xs of
+        cys :> ys' ->
           case cxs =\^/= cys of
             NotEq -> error "common patches aren't equal"
-            IsEq -> Fork (reverseFL cxs) xs' ys'
-        _ -> error "failed to commute common patches (rhs)"
-    _ -> error "failed to commute common patches (lhs)"
+            IsEq -> Fork cxs xs' ys'
+
+findCommonWithThemRL
+  :: (Commute p, Ident p) => RL p wX wY -> RL p wX wZ -> (RL p :> RL p) wX wY
+findCommonWithThemRL xs ys =
+  case partitionRL' (not . (`S.member` yids) . ident) xs of
+    cxs :> NilFL :> xs' -> reverseFL cxs :> xs'
+    _ -> error "failed to commute common patches"
   where
-    commonIds =
-      S.fromList (mapRL ident xs) `S.intersection` S.fromList (mapRL ident ys)
+    yids = S.fromList (mapRL ident ys)
 
 -- | Try to commute all patches matching any of the 'PatchId's in the set to the
 -- head of an 'FL', i.e. backwards in history.

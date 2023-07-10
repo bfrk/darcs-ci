@@ -112,7 +112,7 @@ import Darcs.Repository.Flags
     )
 
 import Darcs.Patch ( RepoPatch, description )
-import Darcs.Patch.Depends ( findCommon )
+import Darcs.Patch.Depends ( findUncommon )
 import Darcs.Patch.Invertible ( mkInvertible )
 import Darcs.Patch.Set
     ( Origin
@@ -126,7 +126,7 @@ import Darcs.Patch.Progress ( progressRLShowTags, progressFL )
 import Darcs.Patch.Apply ( Apply(..) )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(..) )
 import Darcs.Patch.Witnesses.Ordered
-    ( Fork(..)
+    ( (:\/:)(..)
     , FL(..)
     , RL(..)
     , lengthFL
@@ -231,7 +231,7 @@ cloneRepository repourl mysimplename v useCache cloneKind um rdarcs sse remoteRe
         _toRepo <- revertRepositoryChanges _toRepo
         patches <- readPatches _toRepo
         Sealed context <- getOnePatchset _toRepo psm
-        Fork _ to_remove only_in_context <- return $ findCommon patches context
+        to_remove :\/: only_in_context <- return $ findUncommon patches context
         case only_in_context of
           NilFL -> do
             let num_to_remove = lengthFL to_remove

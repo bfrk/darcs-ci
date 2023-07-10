@@ -40,6 +40,8 @@ module Darcs.Patch.Depends
     ( getUncovered
     , areUnrelatedRepos
     , findCommon
+    , findCommonWithThem
+    , findUncommon
     , patchSetMerge
     , countUsThem
     , removeFromPatchSet
@@ -59,7 +61,11 @@ import Data.List ( delete, foldl1', intersect, (\\) )
 
 import Darcs.Patch.Named ( getdeps )
 import Darcs.Patch.Commute ( Commute )
-import Darcs.Patch.Ident ( fastRemoveSubsequenceRL, findCommonRL )
+import Darcs.Patch.Ident
+    ( fastRemoveSubsequenceRL
+    , findCommonRL
+    , findCommonWithThemRL
+    )
 import Darcs.Patch.Info ( PatchInfo, isTag )
 import Darcs.Patch.Merge ( Merge(..) )
 import Darcs.Patch.Permutations ( partitionRL )
@@ -331,6 +337,30 @@ findCommon us them =
         Fork more_common us'' them'' ->
           Fork (PatchSet common more_common) (reverseRL us'') (reverseRL them'')
 
+findCommonWithThem
+  :: Commute p
+  => PatchSet p Origin wX
+  -> PatchSet p Origin wY
+  -> (PatchSet p :> FL (PatchInfoAnd p)) Origin wX
+findCommonWithThem us them =
+  case taggedIntersection us them of
+    Fork common us' them' ->
+      case findCommonWithThemRL us' them' of
+        more_common :> us'' ->
+          PatchSet common more_common :> reverseRL us''
+
+findUncommon
+  :: Commute p
+  => PatchSet p Origin wX
+  -> PatchSet p Origin wY
+  -> (FL (PatchInfoAnd p) :\/: FL (PatchInfoAnd p)) wX wY
+findUncommon us them =
+  case taggedIntersection us them of
+    Fork _ us' them' ->
+      case (findCommonWithThemRL us' them', findCommonWithThemRL them' us') of
+        (_ :> us'', _ :> them'') ->
+          reverseRL us'' :\/: unsafeCoercePStart (reverseRL them'')
+
 countUsThem :: Commute p
             => PatchSet p Origin wX
             -> PatchSet p Origin wY
@@ -346,13 +376,7 @@ patchSetMerge
   => PatchSet p Origin wX
   -> PatchSet p Origin wY
   -> (FL (PatchInfoAnd p) :/\: FL (PatchInfoAnd p)) wX wY
--- The first two special cases are semantically redundant but important
--- for optimization; patchSetUnion below relies on that.
-patchSetMerge us (PatchSet NilRL NilRL) = NilFL :/\: patchSet2FL us
-patchSetMerge (PatchSet NilRL NilRL) them = patchSet2FL them :/\: NilFL
-patchSetMerge us them =
-  case findCommon us them of
-    Fork _ us' them' -> merge (us' :\/: them')
+patchSetMerge us them = merge (findUncommon us them)
 
 -- | A 'PatchSet' consisting of the patches common to all input 'PatchSet's.
 -- This is *undefined* for the empty list since intersection of 'PatchSet's
@@ -362,8 +386,8 @@ patchSetIntersection
 patchSetIntersection = foldr1 go
   where
     go (Sealed ps) (Sealed acc) =
-      case findCommon ps acc of
-        Fork common _ _ -> seal common
+      case findCommonWithThem ps acc of
+        common :> _ -> seal common
 
 -- | A 'PatchSet' consisting of the patches contained in any of the input
 -- 'PatchSet's. The input 'PatchSet's are merged in left to right order, left

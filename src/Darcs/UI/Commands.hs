@@ -75,10 +75,10 @@ import Darcs.Repository.Prefs ( defaultrepo )
 import Darcs.UI.Options
     ( DarcsOptDescr
     , DarcsOption
+    , OptMsg
     , defaultFlags
     , ocheck
     , odesc
-    , oempty
     , optDescr
     , parseFlags
     , (?)
@@ -161,7 +161,7 @@ data CommandOptions = CommandOptions
   { coBasicOptions :: [DarcsOptDescr DarcsFlag]
   , coAdvancedOptions :: [DarcsOptDescr DarcsFlag]
   , coDefaults :: [DarcsFlag]
-  , coCheckOptions :: [DarcsFlag] -> [String]
+  , coCheckOptions :: [DarcsFlag] -> [OptMsg]
   }
 
 -- | Construct 'CommandOptions' from the command specific basic and advanced
@@ -185,15 +185,15 @@ withStdOpts bopts aopts =
 
 -- | For the given 'DarcsCommand' check the given 'DarcsFlag's for
 -- consistency
-commandCheckOptions :: DarcsCommand -> [DarcsFlag] -> [String]
+commandCheckOptions :: DarcsCommand -> [DarcsFlag] -> [OptMsg]
 commandCheckOptions DarcsCommand {commandOptions=co} = coCheckOptions co
-commandCheckOptions SuperCommand {} = ocheck (stdCmdActions ^ oempty)
+commandCheckOptions SuperCommand {} = ocheck stdCmdActions
 
 -- | Built-in default values for all 'DarcsFlag's supported by the given
 -- command
 commandDefaults :: DarcsCommand -> [DarcsFlag]
 commandDefaults DarcsCommand {commandOptions=co} = coDefaults co
-commandDefaults SuperCommand {} = defaultFlags (stdCmdActions ^ oempty)
+commandDefaults SuperCommand {} = defaultFlags stdCmdActions
 
 -- | Option descriptions split into basic and advanced options
 commandAlloptions :: DarcsCommand

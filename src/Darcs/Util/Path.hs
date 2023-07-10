@@ -226,7 +226,6 @@ ioAbsolute dir =
 -- is an arbitrary absolute @path@. Find the longest prefix of @path@ that
 -- points to the same @directory@; if there is none, return 'Nothing', else
 -- return 'Just' the remainder.
-{-# NOINLINE makeRelativeTo #-}
 makeRelativeTo :: HasCallStack => AbsolutePath -> AbsolutePath -> IO (Maybe SubPath)
 makeRelativeTo (AbsolutePath dir) (AbsolutePath path) = do
   dir_stat <- getFileStatus dir

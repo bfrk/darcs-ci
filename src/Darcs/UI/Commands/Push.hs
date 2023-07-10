@@ -57,7 +57,7 @@ import Darcs.Repository
 import Darcs.Patch ( RepoPatch, description )
 import Darcs.Patch.Apply( ApplyState )
 import Darcs.Patch.Witnesses.Ordered
-    ( Fork(..), (:>)(..), RL, FL, nullRL,
+    ( (:>)(..), RL, FL, nullRL,
     nullFL, reverseFL, mapFL_FL, mapRL )
 import Darcs.Repository.Prefs ( addRepoSource, getPreflist )
 import Darcs.UI.External ( signString, darcsProgram
@@ -72,7 +72,7 @@ import Darcs.UI.SelectChanges
     , runSelection
     )
 import qualified Darcs.UI.SelectChanges as S ( PatchSelectionOptions (..) )
-import Darcs.Patch.Depends ( findCommon, countUsThem )
+import Darcs.Patch.Depends ( findCommonWithThem, countUsThem )
 import Darcs.Patch.Bundle ( makeBundle )
 import Darcs.Patch.Show( ShowPatch )
 import Darcs.Patch.Set ( PatchSet, Origin )
@@ -189,7 +189,7 @@ prepareBundle opts repodir repository = do
   addRepoSource repodir (dryRun ? opts) (remoteRepos ? opts)
       (setDefault False opts) (O.inheritDefault ? opts) (isInteractive True opts)
   us <- readPatches repository
-  Fork common only_us _ <- return $ findCommon us them
+  common :> only_us <- return $ findCommonWithThem us them
   prePushChatter opts us (reverseFL only_us) them
   let direction = if changesReverse ? opts then FirstReversed else First
       selection_config = selectionConfig direction "push" (pushPatchSelOpts opts) Nothing Nothing

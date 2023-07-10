@@ -26,7 +26,7 @@ module Darcs.UI.Commands.Pull ( -- * Commands.
 import Darcs.Prelude
 
 import System.Exit ( exitSuccess )
-import Control.Monad ( when, unless, (>=>) )
+import Control.Monad ( when, unless, (>=>), (<=<) )
 import Data.List ( nub )
 import Data.Maybe ( fromMaybe )
 
@@ -80,6 +80,7 @@ import Darcs.Patch.Permutations ( partitionFL )
 import Darcs.Repository.Prefs ( addToPreflist, addRepoSource, getPreflist, showMotd )
 import Darcs.Patch.Depends
     ( findCommon
+    , findCommonWithThem
     , patchSetIntersection
     , patchSetUnion
     )
@@ -276,7 +277,7 @@ fetchPatches o opts unfixedrepourls@(_:_) jobname repository = do
   checkUnrelatedRepos (parseFlags O.allowUnrelatedRepos opts) us them
 
   Fork common us' them' <- return $ findCommon us them
-  Fork _ _ compl' <- return $ findCommon us compl
+  _ :> compl' <- return $ findCommonWithThem compl us
 
   let avoided = mapFL info compl'
   ps :> _ <- return $ partitionFL (not . (`elem` avoided) . info) them'
@@ -321,36 +322,31 @@ makeBundle opts (Sealed (Fork common _ to_be_fetched)) =
       let o = fromMaybe stdOut (getOutput opts fname)
       useAbsoluteOrStd writeDocBinFile putDoc o bundle
 
-{- Read in the specified pull-from repositories.  Perform
-Intersection, Union, or Complement read.  In patch-theory terms
-(stated in set algebra, where + is union and & is intersection
-and \ is complement):
+{- | Read in the specified pull-from repositories, and depending on whether
+to perform intersection, union, or complement, return two 'PatchSet's: the
+patches we want to pull and the ones we do not want to pull. In set-algebra
+terms (using + for union, & for intersection):
 
-    Union =         ((R1 + R2 + ... + Rn) \ Rc)
-    Intersection =  ((R1 & R2 & ... & Rn) \ Rc)
-    Complement =    (R1 \ Rc) \ ((R2 + R3 + ... + Rn) \ Rc)
+[union]
+    > (R1 + R2 + ... + Rn, {})
+[intersection]
+    > (R1 & R2 & ... & Rn, {})
+[complement]
+    > (R1, R2 + R3 + ... + Rn)
 
-                        where Rc = local repo
-                              R1 = 1st specified pull repo
-                              R2, R3, Rn = other specified pull repo
-
-Since Rc is not provided here yet, the result of readRepos is a
-tuple: the first patchset(s) to be complemented against Rc and then
-the second patchset(s) to be complemented against Rc.
 -}
-
 readRepos :: RepoPatch p
           => Repository rt p wU wR -> [DarcsFlag] -> [String]
           -> IO (SealedPatchSet p Origin,SealedPatchSet p Origin)
 readRepos _ _ [] = error "impossible case"
-readRepos to_repo opts us =
-    do rs <- mapM (\u -> do r <- identifyRepositoryFor Reading to_repo (useCache ? opts) u
-                            ps <- readPatches r
-                            return $ seal ps) us
-       return $ case parseFlags O.repoCombinator opts of
-                  O.Intersection -> (patchSetIntersection rs, seal emptyPatchSet)
-                  O.Complement -> (head rs, patchSetUnion $ tail rs)
-                  O.Union -> (patchSetUnion rs, seal emptyPatchSet)
+readRepos to_repo opts from_locations = do
+  let identifyRepo = identifyRepositoryFor Reading to_repo (useCache ? opts)
+  rs <- mapM (fmap seal . readPatches <=< identifyRepo) from_locations
+  return
+    $ case parseFlags O.repoCombinator opts of
+        O.Intersection -> (patchSetIntersection rs, seal emptyPatchSet)
+        O.Complement -> (head rs, patchSetUnion $ tail rs)
+        O.Union -> (patchSetUnion rs, seal emptyPatchSet)
 
 pullPatchSelOpts :: [DarcsFlag] -> S.PatchSelectionOptions
 pullPatchSelOpts flags = S.PatchSelectionOptions

@@ -28,7 +28,7 @@ import Darcs.Patch.CommuteFn
 import Darcs.Patch.Debug ( PatchDebug(..) )
 import Darcs.Patch.Effect ( Effect(..) )
 import Darcs.Patch.FileHunk ( IsHunk(..) )
-import Darcs.Patch.Format ( PatchListFormat(..), ListFormat(..) )
+import Darcs.Patch.Format ( PatchListFormat(..) )
 import Darcs.Patch.Ident ( Ident(..), PatchId )
 import Darcs.Patch.Info ( PatchInfo, patchinfo, displayPatchInfo )
 import Darcs.Patch.Invert ( invert )
@@ -49,7 +49,7 @@ import Darcs.Patch.Apply ( Apply(..) )
 import Darcs.Patch.Commute ( Commute(..) )
 import Darcs.Patch.Inspect ( PatchInspect(..) )
 import Darcs.Patch.Read ( ReadPatch(..) )
-import Darcs.Patch.Show ( ShowPatch(..), displayPatch )
+import Darcs.Patch.Show ( ShowPatch(..) )
 import Darcs.Patch.Summary
     ( ConflictState(..)
     , IsConflictedPrim(..)
@@ -86,14 +86,12 @@ import Darcs.Patch.Witnesses.Unsafe ( unsafeCoerceP )
 import qualified Darcs.Util.Diff as D ( DiffAlgorithm )
 import Darcs.Util.IsoDate ( getIsoDateTime )
 import Darcs.Util.Parser ( lexString )
-import Darcs.Util.Printer ( Doc, ($$), (<+>), blueText, renderString )
+import Darcs.Util.Printer ( Doc, ($$), (<+>), blueText )
 
 import qualified Data.ByteString.Char8 as BC ( pack )
 import Data.List ( (\\) )
 import Data.List.Ordered ( nubSort )
 import Data.Maybe ( fromMaybe )
-
-import Debug.Trace
 
 data RebaseChange prim wX wY where
     RC :: FL (RebaseFixup prim) wX wY -> Named prim wY wZ -> RebaseChange prim wX wZ
@@ -250,11 +248,6 @@ data WithDroppedDeps p wX wY =
         wddPatch :: p wX wY,
         wddDependedOn :: [PatchInfo]
     }
-
-instance ShowPatchBasic p => ShowPatchBasic (WithDroppedDeps p) where
-  showPatch fmt (WithDroppedDeps p _) = showPatch fmt p
-instance PatchListFormat p => PatchListFormat (WithDroppedDeps p) where
-  patchListFormat = ListFormatDefault
 
 noDroppedDeps :: p wX wY -> WithDroppedDeps p wX wY
 noDroppedDeps p = WithDroppedDeps p []
@@ -421,9 +414,6 @@ forceCommutes ((PrimFixup p :>: ps) :> q) =
 fromPrimNamed :: FromPrim p => Named (PrimOf p) wX wY -> Named p wX wY
 fromPrimNamed (NamedP n deps ps) = NamedP n deps (fromPrims n ps)
 
-traceWith :: (a -> String) -> a -> a
-traceWith f a = trace (f a) a
-
 -- |Turn a selected rebase patch back into a patch we can apply to
 -- the main repository, together with residual fixups that need
 -- to go back into the rebase state (unless the rebase is now finished).
@@ -434,9 +424,7 @@ extractRebaseChange
   => D.DiffAlgorithm
   -> FL (RebaseChange (PrimOf p)) wX wY
   -> (FL (WDDNamed p) :> FL (RebaseFixup (PrimOf p))) wX wY
-extractRebaseChange da rcs =
-  traceWith (\(p:>q) -> renderString (displayPatch p $$ displayPatch q)) $
-    go (NilFL :> rcs)
+extractRebaseChange da rcs = go (NilFL :> rcs)
   where
     go
       :: forall wA wB

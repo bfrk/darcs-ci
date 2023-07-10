@@ -40,6 +40,33 @@ darcs rec -am 'patch Z'
 
 darcs obliterate --dry-run --patch 'patch Y' | not grep 'patch Z'
 
-echo 'yYyY' | tr '[A-Z]' '[a-z]' | darcs amend --ask-deps
+# add explicit dependency on 'patch Z'
+echo 'yyd' | darcs amend --ask-deps
 
 darcs obliterate --dry-run --patch 'patch Y' | grep 'patch Z'
+
+# remove the explicit dependency; note that it shouldn't ask
+# us about the one we dropped
+echo 'yyd' | darcs amend --ask-deps
+
+darcs obliterate --dry-run --patch 'patch Y' | not grep 'patch Z'
+
+# add another independent patch
+touch b
+darcs rec -lam 'patch B'
+
+# add explicit dependency on 'patch B' and 'patch Y'
+echo 'yyyd' | darcs amend --patch 'patch Z' --ask-deps
+
+darcs obliterate --dry-run --patch 'patch Y' | grep 'patch Z'
+darcs obliterate --dry-run --patch 'patch B' | grep 'patch Z'
+
+# remove the one on 'patch B', keep that on 'patch Y';
+# note that we aren't offered to re-add 'patch B'
+
+echo 'yyd' | darcs amend --patch 'patch Z' --ask-deps
+
+darcs obliterate --dry-run --patch 'patch Y' | grep 'patch Z'
+darcs obliterate --dry-run --patch 'patch B' | not grep 'patch Z'
+
+cd ..

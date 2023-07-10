@@ -5,7 +5,8 @@ import qualified Prelude
 import qualified Data.ByteString.Lazy.Char8 as BLC
 import qualified Data.ByteString.Char8 as BC
 import System.Directory( doesFileExist, removeFile )
-import Control.Monad.Identity
+import Control.Monad ( when, forM_ )
+import Control.Monad.Identity ( Identity, runIdentity )
 import Control.Monad.Trans( lift )
 import Control.Applicative( (<$>) )
 import Codec.Archive.Zip( extractFilesFromArchive, toArchive )

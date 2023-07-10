@@ -64,7 +64,7 @@ import Darcs.Patch ( RepoPatch, description, PrimOf
                    , effect, invert, invertFL, canonizeFL
                    )
 import Darcs.Patch.Apply ( ApplyState )
-import Darcs.Patch.Depends ( contextPatches, patchSetUnion, findCommon )
+import Darcs.Patch.Depends ( contextPatches, patchSetUnion, findCommonWithThem )
 import Darcs.Patch.Info ( isTag )
 import Darcs.Patch.Named ( fmapFL_Named )
 import Darcs.Patch.PatchInfoAnd ( hopefully )
@@ -103,7 +103,7 @@ import qualified Darcs.UI.SelectChanges as S
     )
 import Darcs.Util.Exception ( clarifyErrors )
 import Darcs.Patch.Witnesses.Ordered
-    ( Fork(..), FL(..), RL, (:>)(..), (+>+)
+    ( FL(..), RL, (:>)(..), (+>+)
     , nullFL, reverseRL, reverseFL, mapFL_FL
     )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(..) )
@@ -194,7 +194,7 @@ amendrecord = commandAlias "amend-record" Nothing amend
 doAmend :: Config -> Maybe [AnchoredPath] -> IO ()
 doAmend cfg files =
   withRepoLock (O.useCache ? cfg) (O.umask ? cfg) $
-      RebaseAwareJob $ \(repository :: Repository 'RW p wU wR) -> do
+      RepoJob $ \(repository :: Repository 'RW p wU wR) -> do
     patchSet <- readPatches repository
     _ :> candidates <- filterNotInRemote cfg repository patchSet
     withSelectedPatchFromList "amend" candidates (patchSelOpts cfg) $
@@ -248,15 +248,16 @@ doAmend cfg files =
               go NilFL
 
 
-addChangesToPatch :: (RepoPatch p, ApplyState p ~ Tree)
-                  => Config
-                  -> Repository 'RW p wU wR
-                  -> RL (PatchInfoAnd p) wC wX -- ^ the context
-                  -> PatchInfoAnd p wX wR -- ^ original patch
-                  -> FL (PrimOf p) wR wY  -- ^ changes to add
-                  -> FL (PrimOf p) wR wP  -- ^ pending
-                  -> FL (PrimOf p) wP wU  -- ^ working
-                  -> IO ()
+addChangesToPatch
+  :: (RepoPatch p, ApplyState p ~ Tree)
+  => Config
+  -> Repository 'RW p wU wR
+  -> RL (PatchInfoAnd p) wC wX  -- ^ candidates for --ask-deps
+  -> PatchInfoAnd p wX wR       -- ^ original patch
+  -> FL (PrimOf p) wR wY        -- ^ changes to add
+  -> FL (PrimOf p) wR wP        -- ^ pending
+  -> FL (PrimOf p) wP wU        -- ^ working
+  -> IO ()
 addChangesToPatch cfg _repository context oldp chs pending working =
   if nullFL chs && not (hasEditMetadata cfg)
     then putInfo cfg "You don't want to record anything!"
@@ -340,7 +341,7 @@ filterNotInRemote cfg repository patchSet = do
         putInfo cfg $
           "Determining patches not in" <+> anyOfClause nirs $$ itemizeVertical 2 nirs
         Sealed thems <- patchSetUnion `fmap` mapM readNir nirs
-        Fork in_remote only_ours _ <- return $ findCommon patchSet thems
+        in_remote :> only_ours <- return $ findCommonWithThem patchSet thems
         return (in_remote :> reverseFL only_ours)
   where
     readNir loc = do

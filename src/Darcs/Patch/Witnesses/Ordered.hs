@@ -82,10 +82,6 @@ module Darcs.Patch.Witnesses.Ordered
     , breakRL
     , takeWhileRL
     , concatRLFL
-    -- * Functions on 'Fork's
-    , dropRight
-    , dropLeft
-    , dropCommon
     ) where
 
 import Darcs.Prelude
@@ -556,14 +552,3 @@ initsFL (x :>: xs) =
 concatRLFL :: RL (FL p) wX wY -> RL p wX wY
 concatRLFL NilRL = NilRL
 concatRLFL (ps :<: p) = concatRLFL ps +<<+ p
-
--- * Functions on 'Fork's
-
-dropRight :: Fork p q r wX wY wZ -> (p :> q) wX wY
-dropRight (Fork x y _) = x :> y
-
-dropLeft :: Fork p q r wX wY wZ -> (p :> r) wX wZ
-dropLeft (Fork x _ z) = x :> z
-
-dropCommon :: Fork p q r wX wY wZ -> (q :\/: r) wY wZ
-dropCommon (Fork _ y z) = y :\/: z

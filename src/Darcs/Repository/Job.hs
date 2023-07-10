@@ -16,7 +16,7 @@
 -- the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 -- Boston, MA 02110-1301, USA.
 
-{-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE MultiWayIf #-}
 
 module Darcs.Repository.Job
     ( RepoJob(..)
@@ -45,8 +45,6 @@ import Darcs.Repository.Flags ( UMask(..), UseCache(..) )
 import Darcs.Repository.Format
     ( RepoProperty( Darcs2
                   , Darcs3
-                  , RebaseInProgress
-                  , RebaseInProgress_2_16
                   , HashedInventory
                   )
     , formatHas
@@ -63,9 +61,7 @@ import Darcs.Repository.InternalTypes
     )
 import Darcs.Repository.Paths ( lockPath )
 import Darcs.Repository.Rebase
-    ( startRebaseJob
-    , rebaseJob
-    , maybeDisplaySuspendedStatus
+    ( displayRebaseStatus
     , checkOldStyleRebaseStatus
     )
 import Darcs.Util.Lock ( withLock, withLockCanFail )
@@ -102,52 +98,52 @@ withUMask umask job =
            (reset_umask rc)
            job
 
--- |A @RepoJob@ wraps up an action to be performed with a repository. Because repositories
--- can contain different types of patches, such actions typically need to be polymorphic
--- in the kind of patch they work on. @RepoJob@ is used to wrap up the polymorphism,
--- and the various functions that act on a @RepoJob@ are responsible for instantiating
--- the underlying action with the appropriate patch type.
-data RepoJob rt a
-    -- = RepoJob (forall p wR wU . RepoPatch p => Repository p wU wR -> IO a)
-    -- TODO: Unbind Tree from RepoJob, possibly renaming existing RepoJob
-    =
-    -- |The most common @RepoJob@; the underlying action can accept any patch type that
-    -- a darcs repository may use.
-      RepoJob (forall p wR wU . (RepoPatch p, ApplyState p ~ Tree) => Repository rt p wU wR -> IO a)
-    -- |A job that only works on darcs 1 patches
-    | V1Job (forall wR wU . Repository rt (RepoPatchV1 V1.Prim) wU wR -> IO a)
-    -- |A job that only works on darcs 2 patches
-    | V2Job (forall wR wU . Repository rt (RepoPatchV2 V2.Prim) wU wR -> IO a)
-    -- |A job that works on any repository where the patch type @p@ has 'PrimOf' @p@ = 'Prim'.
-    --
-    -- This was added to support darcsden, which inspects the internals of V1 prim patches.
-    --
-    -- In future this should be replaced with a more abstract inspection API as part of 'PrimPatch'.
-    | PrimV1Job (forall p wR wU . (RepoPatch p, ApplyState p ~ Tree, IsPrimV1 (PrimOf p))
-               => Repository rt p wU wR -> IO a)
-    -- A job that works on normal darcs repositories, but will want access to the rebase patch if it exists.
-    | RebaseAwareJob (forall p wR wU . (RepoPatch p, ApplyState p ~ Tree) => Repository rt p wU wR -> IO a)
-    | RebaseJob (forall p wR wU . (RepoPatch p, ApplyState p ~ Tree) => Repository rt p wU wR -> IO a)
-    | OldRebaseJob (forall p wR wU . (RepoPatch p, ApplyState p ~ Tree) => Repository rt p wU wR -> IO a)
-    | StartRebaseJob (forall p wR wU . (RepoPatch p, ApplyState p ~ Tree) => Repository rt p wU wR -> IO a)
+-- | The type of procedures accepted by the constructors of 'RepoJob'.
+-- The first parameter is a constraint on the patch type.
+type Job c rt a = forall p wR wU . c p => Repository rt p wU wR -> IO a
 
-onRepoJob :: RepoJob rt1 a -- original repojob passed to withXxx
-          -> (forall p wR wU . (RepoPatch p, ApplyState p ~ Tree) =>
-              (Repository rt1 p wU wR -> IO a)
-              -> Repository rt2 p wU wR -> IO a)
-          -> RepoJob rt2 a -- result job takes a Repo rt2
+type TreePatch p = (RepoPatch p, ApplyState p ~ Tree)
+type V1Patch p = p ~ RepoPatchV1 V1.Prim
+type V2Patch p = p ~ RepoPatchV2 V2.Prim
+type PrimV1Patch p = (TreePatch p, IsPrimV1 (PrimOf p))
+
+-- |A @RepoJob@ wraps up an action to be performed with a repository. Because
+-- repositories can contain different types of patches, such actions typically
+-- need to be polymorphic in the kind of patch they work on. @RepoJob@ is used
+-- to wrap up the polymorphism, and the various functions that act on a
+-- @RepoJob@ are responsible for instantiating the underlying action with the
+-- appropriate patch type.
+data RepoJob rt a
+    -- TODO: Unbind Tree from RepoJob, possibly renaming existing RepoJob
+
+    -- |The most common 'RepoJob'; the underlying action can accept any patch
+    -- whose 'ApplyState' is 'Tree'.
+    = RepoJob (Job TreePatch rt a)
+    -- |A job that only works on darcs 1 patches
+    | V1Job (Job V1Patch rt a)
+    -- |A job that only works on darcs 2 patches
+    | V2Job (Job V2Patch rt a)
+    -- |A job that works on any repository where the patch type @p@ has
+    -- 'PrimOf' @p@ = 'Prim'. This was added to support darcsden, which
+    -- inspects the internals of V1 prim patches. In future it should be
+    -- replaced with a more abstract inspection API as part of 'PrimPatch'.
+    | PrimV1Job (Job PrimV1Patch rt a)
+    -- |A job that works even if there is an old-style rebase in progress.
+    | OldRebaseJob (Job TreePatch rt a)
+
+onRepoJob
+  :: RepoJob rt1 a -- original repojob passed to withXxx
+  -> (  forall p wR wU
+      . TreePatch p
+     => (Repository rt1 p wU wR -> IO a)
+     -> (Repository rt2 p wU wR -> IO a)
+     )
+  -> RepoJob rt2 a -- result job takes a Repo rt2
 onRepoJob (RepoJob job) f = RepoJob (f job)
 onRepoJob (V1Job job) f = V1Job (f job)
 onRepoJob (V2Job job) f = V2Job (f job)
 onRepoJob (PrimV1Job job) f = PrimV1Job (f job)
-onRepoJob (RebaseAwareJob job) f = RebaseAwareJob (f job)
-onRepoJob (RebaseJob job) f = RebaseJob (f job)
 onRepoJob (OldRebaseJob job) f = OldRebaseJob (f job)
-onRepoJob (StartRebaseJob job) f = StartRebaseJob (f job)
-
--- | apply a given RepoJob to a repository in the current working directory
-withRepository :: UseCache -> RepoJob 'RO a -> IO a
-withRepository useCache = withRepositoryLocation useCache "."
 
 -- | This is just an internal type to Darcs.Repository.Job for
 -- calling runJob in a strongly-typed way
@@ -177,100 +173,60 @@ checkPrimV1 RepoV1 = Dict
 checkPrimV1 RepoV2 = Dict
 checkPrimV1 RepoV3 = Dict
 
--- | apply a given RepoJob to a repository in a given url
-withRepositoryLocation :: UseCache -> String -> RepoJob 'RO a -> IO a
-withRepositoryLocation useCache url repojob = do
-    repo <- identifyRepository useCache url
-
-    let
-        rf = repoFormat repo
-
-        -- in order to pass SRepoType and RepoPatchType at different types, we need a polymorphic
-        -- function that we call in two different ways, rather than directly varying the argument.
-        runJob1 :: Bool -> Repository rt pDummy wU wR -> RepoJob rt a -> IO a
-        runJob1 hasRebase =
-          if formatHas Darcs3 rf
-          then runJob RepoV3 hasRebase
-          else
-            if formatHas Darcs2 rf
-            then runJob RepoV2 hasRebase
-            else runJob RepoV1 hasRebase
-
-    runJob1
-      (formatHas RebaseInProgress rf || formatHas RebaseInProgress_2_16 rf)
-      repo
-      repojob
-
 runJob
   :: forall rt p pDummy wR wU a
    . RepoPatch p
   => RepoPatchType p
-  -> Bool
   -> Repository rt pDummy wU wR
   -> RepoJob rt a
   -> IO a
-runJob patchType hasRebase repo repojob = do
-
+runJob patchType repo repojob = do
   -- The actual type the repository should have is only known when
   -- when this function is called, so we need to "cast" it to its proper type
   let
     therepo = unsafeCoercePatchType repo :: Repository rt p wU wR
-
+    incompatible want got = fail $
+      "This repository contains darcs "++got++" patches,\
+      \ but the command requires darcs "++want++" patches."
   Dict <- return $ checkTree patchType
-  case repojob of
-    RepoJob job -> do
-      checkOldStyleRebaseStatus therepo
-      job therepo
-        `finally`
-          maybeDisplaySuspendedStatus therepo
+  let thejob =
+        case repojob of
+          RepoJob job -> do
+            checkOldStyleRebaseStatus therepo
+            job therepo
+          PrimV1Job job -> do
+            Dict <- return $ checkPrimV1 patchType
+            checkOldStyleRebaseStatus therepo
+            job therepo
+          V2Job job ->
+            case patchType of
+              RepoV2 -> do
+                checkOldStyleRebaseStatus therepo
+                job therepo
+              RepoV1 -> incompatible "v2" "v1"
+              RepoV3 -> incompatible "v2" "v3"
+          V1Job job ->
+            case patchType of
+              RepoV1 -> do
+                checkOldStyleRebaseStatus therepo
+                job therepo
+              RepoV2 -> incompatible "v1" "v2"
+              RepoV3 -> incompatible "v1" "v3"
+          OldRebaseJob job -> job therepo
+  thejob `finally` displayRebaseStatus therepo
 
-    PrimV1Job job -> do
-      Dict <- return $ checkPrimV1 patchType
-      checkOldStyleRebaseStatus therepo
-      job therepo `finally` maybeDisplaySuspendedStatus therepo
+-- | apply a given RepoJob to a repository in a given url
+withRepositoryLocation :: UseCache -> String -> RepoJob 'RO a -> IO a
+withRepositoryLocation useCache url repojob = do
+  repo <- identifyRepository useCache url
+  let rf = repoFormat repo
+  if | formatHas Darcs3 rf -> runJob RepoV3 repo repojob
+     | formatHas Darcs2 rf -> runJob RepoV2 repo repojob
+     | otherwise -> runJob RepoV1 repo repojob
 
-    V2Job job ->
-      case patchType of
-        RepoV2 -> job therepo
-        RepoV1 ->
-          fail $    "This repository contains darcs v1 patches,"
-                 ++ " but the command requires darcs v2 patches."
-        RepoV3 ->
-          fail $    "This repository contains darcs v3 patches,"
-                 ++ " but the command requires darcs v2 patches."
-
-    V1Job job ->
-      case patchType of
-        RepoV1 -> job therepo
-        RepoV2 ->
-          fail $    "This repository contains darcs v2 patches,"
-                 ++ " but the command requires darcs v1 patches."
-        RepoV3 ->
-          fail $    "This repository contains darcs v3 patches,"
-                 ++ " but the command requires darcs v1 patches."
-
-    RebaseAwareJob job ->
-      case hasRebase of
-        False -> job therepo
-        True -> do
-          checkOldStyleRebaseStatus therepo
-          rebaseJob job therepo
-
-    RebaseJob job ->
-      case hasRebase of
-        False ->
-          fail "No rebase in progress. Try 'darcs rebase suspend' first."
-        True -> do
-          checkOldStyleRebaseStatus therepo
-          rebaseJob job therepo
-
-    OldRebaseJob job -> do
-      -- no checkOldStyleRebaseStatus, this is for 'rebase upgrade'
-      job therepo `finally` maybeDisplaySuspendedStatus therepo
-
-    StartRebaseJob job -> do
-      checkOldStyleRebaseStatus therepo
-      startRebaseJob job therepo
+-- | apply a given RepoJob to a repository in the current working directory
+withRepository :: UseCache -> RepoJob 'RO a -> IO a
+withRepository useCache = withRepositoryLocation useCache "."
 
 -- | Apply a given RepoJob to a repository in the current working directory.
 -- However, before doing the job, take the repo lock and initializes a repo

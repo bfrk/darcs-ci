@@ -40,8 +40,8 @@ import Test.Framework (Test, testGroup)
 
 import Darcs.Patch.Info
     ( PatchInfo(..), rawPatchInfo, showPatchInfo, readPatchInfo
-    , piLog, piAuthor, piName, validDate, validLog, validAuthor
-    , validDatePS, validLogPS, validAuthorPS, piDateString
+    , piLog, piAuthor, piName, validLog, validAuthor
+    , validLogPS, validAuthorPS, piDateString
     )
 import Darcs.Test.TestOnly.Instance ()
 import Darcs.Util.Parser ( parse )
@@ -49,6 +49,7 @@ import Darcs.Patch.Show ( ShowPatchFor(..) )
 import Darcs.Util.ByteString
     ( decodeLocale, packStringToUTF8, unpackPSFromUTF8, linesPS )
 import Darcs.Util.Printer ( renderPS )
+import Darcs.Util.IsoDate (showIsoDateTime, theBeginning)
 
 testSuite :: Test
 testSuite = testGroup "Darcs.Patch.Info"
@@ -112,7 +113,7 @@ generateJunk =
 -- (the added junk will be different on each call).
 arbitraryUTF8PatchInfo :: Gen PatchInfo
 arbitraryUTF8PatchInfo = do
-    d <- arbitrary `suchThat` validDate
+    let d = showIsoDateTime theBeginning
     n <- (asString `fmap` arbitrary) `suchThat` validLog
     a <- (asString `fmap` arbitrary) `suchThat` validAuthor
     l <- lines `fmap` scale (* 2) (asString <$> arbitrary)
@@ -125,7 +126,7 @@ arbitraryUTF8PatchInfo = do
 --   inverted" setting.
 arbitraryUnencodedPatchInfo :: Gen PatchInfo
 arbitraryUnencodedPatchInfo = do
-    d <- arbitraryByteString `suchThat` validDatePS
+    let d = BC.pack (showIsoDateTime theBeginning)
     n <- arbitraryByteString `suchThat` validLogPS
     a <- arbitraryByteString `suchThat` validAuthorPS
     l <- linesPS `fmap` scale (* 2) arbitraryByteString

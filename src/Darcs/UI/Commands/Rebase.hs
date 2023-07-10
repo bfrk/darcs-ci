@@ -55,7 +55,8 @@ import Darcs.Repository.Flags
     )
 import Darcs.Repository.Merge ( tentativelyMergePatches )
 import Darcs.Repository.Rebase
-    ( readRebase
+    ( checkHasRebase
+    , readRebase
     , readTentativeRebase
     , writeTentativeRebase
     )
@@ -118,6 +119,7 @@ import Darcs.UI.SelectChanges
     , viewChanges
     )
 import qualified Darcs.UI.SelectChanges as S ( PatchSelectionOptions (..) )
+import Darcs.Patch.Witnesses.Eq ( EqCheck(..) )
 import Darcs.Patch.Witnesses.Ordered
     ( FL(..), (+>+), mapFL_FL
     , concatFL, mapFL, nullFL, lengthFL, reverseFL
@@ -243,9 +245,7 @@ suspend = DarcsCommand
 
 suspendCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 suspendCmd _ opts _args =
-    withRepoLock (useCache ? opts) (umask ? opts) $
-    StartRebaseJob $
-    \_repository -> do
+  withRepoLock (useCache ? opts) (umask ? opts) $ RepoJob $ \_repository -> do
     suspended <- readTentativeRebase _repository
     (_ :> candidates) <- preselectPatches opts _repository
     let direction = if changesReverse ? opts then Last else LastReversed
@@ -369,7 +369,8 @@ reify = DarcsCommand
 unsuspendCmd :: String -> Bool -> (AbsolutePath, AbsolutePath)
              -> [DarcsFlag] -> [String] -> IO ()
 unsuspendCmd cmd reifyFixups _ opts _args =
-  withRepoLock (useCache ? opts) (umask ? opts) $ RebaseJob $ \_repository -> do
+  withRepoLock (useCache ? opts) (umask ? opts) $ RepoJob $ \_repository -> do
+    checkHasRebase _repository
     Items suspended <- readTentativeRebase _repository
 
     let matchFlags = O.matchSeveralOrFirst ? opts
@@ -432,9 +433,10 @@ unsuspendCmd cmd reifyFixups _ opts _args =
 
     -- TODO should catch logfiles (fst value from updatePatchHeader) and
     -- clean them up as in AmendRecord
-    -- Note: we can hijack because we already asked about that on suspend time
+    -- Note: we can allow hijack attempts here without warning the user
+    -- because we already asked about that on suspend time
     (unsuspended_ps, ps_to_keep') <-
-      runHijackT IgnoreHijack $ hijack ps_to_unsuspend (unseal Items ps_to_keep)
+      runHijackT IgnoreHijack $ handleUnsuspend ps_to_unsuspend (unseal Items ps_to_keep)
     _repository <-
       tentativelyAddPatches _repository NoUpdatePending unsuspended_ps
     let effect_unsuspended = concatFL (mapFL_FL effect unsuspended_ps)
@@ -456,12 +458,13 @@ unsuspendCmd cmd reifyFixups _ opts _args =
 
     where da = diffAlgorithm ? opts
 
-          hijack :: forall p wR wT. (RepoPatch p, ApplyState p ~ Tree)
+          handleUnsuspend
+                 :: forall p wR wT. (RepoPatch p, ApplyState p ~ Tree)
                  => FL (WDDNamed p) wR wT
                  -> Suspended p wT
                  -> HijackT IO (FL (PatchInfoAnd p) wR wT, Suspended p wT)
-          hijack NilFL to_keep = return (NilFL, to_keep)
-          hijack (p :>: ps) to_keep = do
+          handleUnsuspend NilFL to_keep = return (NilFL, to_keep)
+          handleUnsuspend (p :>: ps) to_keep = do
               case wddDependedOn p of
                   [] -> return ()
                   deps -> liftIO $ do
@@ -481,22 +484,33 @@ unsuspendCmd cmd reifyFixups _ opts _args =
               -- and clean them up as in AmendRecord
               -- TODO should also ask user to supply explicit dependencies as
               -- replacements for those that have been lost (if any, see above)
-              p' <- snd <$> updatePatchHeader cmd
+              p' <- snd <$> updatePatchHeader @p cmd
                       NoAskAboutDeps
                       (patchSelOpts True opts)
                       (patchHeaderConfig opts)
                       (fmapFL_Named effect (wddPatch p)) NilFL
-              -- create a rename that undoes the change we just made
-              let rename = Rename (info p') (patch2patchinfo (wddPatch p))
-              -- push it through the remaining patches to fix them up
-              Just (ps2 :> rename2) <-
+              -- Create a rename that undoes the change we just made, so that the
+              -- context of patch names match up in the following sequence. We don't
+              -- track patch names properly in witnesses yet and so the rename appears
+              -- to have a null effect on the context.
+              --   p' :: WDDNamed p wR wR2
+              --   rename :: RebaseName wR2 wR2
+              --   ps :: FL (WDDNamed p) wR2 wT
+              let rename :: RebaseName wR2 wR2
+                  rename = Rename (info p') (patch2patchinfo (wddPatch p))
+              -- push it through the remaining patches to fix them up, which should leave
+              -- us with
+              --   p' :: WDDNamed p wR wR2
+              --   ps2 :: FL (WDDNamed p) wR2 wT2
+              --   rename2 :: RebaseName wT2 wT2
+              Just (ps2 :> (rename2 :: RebaseName wT2 wT2')) <-
                 return $ commuterIdFL (commuterIdWDD commuteNameNamed) (rename :> ps)
+              -- However the commute operation loses the information that the rename2 has
+              -- a null effect on the context so we have to assert it manually.
+              IsEq <- return (unsafeCoerceP IsEq :: EqCheck wT2 wT2')
               to_keep' <- return $ S.simplifyPush da (NameFixup rename2) to_keep
-              (converted, to_keep'') <- hijack ps2 to_keep'
-              -- the rename still has a null effect on the context after
-              -- commuting, but it is not easy to convince the type-checker,
-              -- so we just coerce here
-              return $ unsafeCoerceP (p' :>: converted, to_keep'')
+              (converted, to_keep'') <- handleUnsuspend ps2 to_keep'
+              return (p' :>: converted, to_keep'')
 
 inject :: DarcsCommand
 inject = DarcsCommand
@@ -520,9 +534,9 @@ inject = DarcsCommand
 
 injectCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 injectCmd _ opts _args =
-    withRepoLock (useCache ? opts) (umask ? opts) $
-    RebaseJob $
+  withRepoLock (useCache ? opts) (umask ? opts) $ RepoJob $
     \(_repository :: Repository 'RW p wU wR) -> do
+    checkHasRebase _repository
     Items selects <- readTentativeRebase _repository
 
     -- TODO this selection doesn't need to respect dependencies
@@ -595,7 +609,8 @@ obliterate = DarcsCommand
 
 obliterateCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 obliterateCmd _ opts _args =
-  withRepoLock (useCache ? opts) (umask ? opts) $ RebaseJob $ \_repository -> do
+  withRepoLock (useCache ? opts) (umask ? opts) $ RepoJob $ \_repository -> do
+    checkHasRebase _repository
     Items selects <- readTentativeRebase _repository
 
     -- TODO this selection doesn't need to respect dependencies
@@ -687,8 +702,8 @@ data Edit prim wX = Edit
 
 editCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 editCmd _ opts _args =
-  withRepoLock (useCache ? opts) (umask ? opts) $
-  RebaseJob $ \_repository -> do
+  withRepoLock (useCache ? opts) (umask ? opts) $ RepoJob $ \_repository -> do
+    checkHasRebase _repository
     Items items <- readTentativeRebase _repository
     let initial_state =
           EditState
@@ -979,7 +994,7 @@ apply = DarcsCommand
 data RebasePatchApplier = RebasePatchApplier
 
 instance PatchApplier RebasePatchApplier where
-    repoJob RebasePatchApplier f = StartRebaseJob (f PatchProxy)
+    repoJob RebasePatchApplier f = RepoJob (f PatchProxy)
     applyPatches RebasePatchApplier PatchProxy = applyPatchesForRebaseCmd
 
 applyPatchesForRebaseCmd
@@ -1080,8 +1095,8 @@ log = DarcsCommand
 
 logCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 logCmd _ opts _files =
-    withRepository (useCache ? opts) $
-    RebaseJob $ \_repository -> do
+    withRepository (useCache ? opts) $ RepoJob $ \_repository -> do
+        checkHasRebase _repository
         Items ps <- readRebase _repository
         let psToShow = mapFL_FL n2pia ps
         if isInteractive False opts
@@ -1121,9 +1136,8 @@ upgrade = DarcsCommand
 
 upgradeCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 upgradeCmd _ opts _args =
-  withRepoLock (useCache ? opts) (umask ? opts) $
-  OldRebaseJob $ \(_repo :: Repository 'RW p wU wR) ->
-    upgradeOldStyleRebase _repo
+  withRepoLock (useCache ? opts) (umask ? opts) $ OldRebaseJob $ \repo ->
+    upgradeOldStyleRebase repo
 
 {-
 TODO:

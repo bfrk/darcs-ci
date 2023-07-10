@@ -26,6 +26,7 @@ module Darcs.UI.RunCommand
 import Darcs.Prelude
 
 import Control.Monad ( unless, when )
+import Data.List ( intercalate )
 import System.Console.GetOpt( ArgOrder( Permute, RequireOrder ),
                               OptDescr( Option ),
                               getOpt )
@@ -106,7 +107,7 @@ runCommand msuper cmd args = do
       new_wd <- getCurrentDirectory
       user_defs <- getGlobal   "defaults"
       repo_defs <- getPreflist "defaults"
-      let (flags,flag_errors) =
+      let (flags, (flag_warnings, flag_errors)) =
             applyDefaults (fmap commandName msuper) cmd old_wd user_defs repo_defs cmdline_flags
       case parseFlags stdCmdActions flags of
         Just Help -> viewDoc $ getCommandHelp msuper cmd
@@ -121,11 +122,14 @@ runCommand msuper cmd args = do
             "Unable to '" ++ "darcs " ++ superName msuper ++ commandName cmd ++
             "' here:\n" ++ complaint
           Right () -> do
-            ePutDocLn $ vcat $ map text $ getopt_errs ++ flag_errors
-            extra <- commandArgdefaults cmd flags old_wd orig_extra
-            case extraArgumentsError extra cmd msuper of
-              Nothing     -> runWithHooks cmd (new_wd, old_wd) flags extra
-              Just msg    -> die msg
+            ePutDocLn $ vcat $ map text $ flag_warnings
+            case getopt_errs ++ flag_errors of
+              [] -> do
+                extra <- commandArgdefaults cmd flags old_wd orig_extra
+                case extraArgumentsError extra cmd msuper of
+                  Nothing     -> runWithHooks cmd (new_wd, old_wd) flags extra
+                  Just msg    -> die msg
+              errors -> fail $ intercalate "\n" errors
 
 fixupMsgs :: (a, b, [String]) -> (a, b, [String])
 fixupMsgs (fs,as,es) = (fs,as,map (("command line: "++).chompTrailingNewline) es)

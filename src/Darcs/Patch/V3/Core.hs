@@ -53,7 +53,7 @@ import Darcs.Patch.Ident
     , findCommonFL
     , (=\^/=)
     )
-import Darcs.Patch.Invert ( Invert, invert, invertFL )
+import Darcs.Patch.Invert ( Invert, invert )
 import Darcs.Patch.Merge
     ( CleanMerge(..)
     , Merge(..)
@@ -94,7 +94,6 @@ import Darcs.Patch.V3.Contexted
     , ctxAddInvFL
     , ctxAddFL
     , commutePast
-    , commutePastRL
     , ctxToFL
     , ctxTouches
     , ctxHunkMatches
@@ -273,39 +272,41 @@ instance (SignedId name, StorableId name, PrimPatch prim)
   => CommuteNoConflicts (RepoPatchV3 name prim) where
 
   -- two prim patches that commute
-  commuteNoConflicts (Prim p :> Prim q)
-    | Just (q' :> p') <- commute (p :> q) = Just (Prim q' :> Prim p')
+  commuteNoConflicts (Prim p :> Prim q) = do
+    q' :> p' <- commute (p :> q)
+    return $ Prim q' :> Prim p'
   -- commute a conflictor past a prim patch where everything goes smoothly
-  commuteNoConflicts (Conflictor r x cp :> Prim q)
-    | Just (q' :> r') <- commuteRL (reverseFL r :> q)
-    , let iq = invert q
-    , Just cp' <- commutePast iq cp
-    , Just x' <- S.fromList <$> mapM (commutePast iq) (S.toList x) =
-        Just (Prim q' :> Conflictor (reverseRL r') x' cp')
+  -- i.e. everything in the lhs commutes past the rhs
+  commuteNoConflicts (Conflictor r x cp :> Prim q) = do
+    q' :> r' <- commuteRL (reverseFL r :> q)
+    let iq = invert q
+    cp' <- commutePast iq cp
+    x' <- S.fromList <$> mapM (commutePast iq) (S.toList x)
+    return $ Prim q' :> Conflictor (reverseRL r') x' cp'
   -- commute a prim patch past a conflictor where everything goes smoothly
-  commuteNoConflicts (Prim p :> Conflictor s y cq)
-    | Just (s' :> p') <- commuteFL (p :> s)
-    , Just cq' <- commutePast p' cq
-    , Just y' <- S.fromList <$> mapM (commutePast p') (S.toList y) =
-        Just (Conflictor s' y' cq' :> Prim p')
-  -- commuting a conflictor past another one
-  -- e.g. [z^, {:z}, :y] :> [, {:z}, :x] where x :> y <-> y :> x
+  -- (completely symmetric to the previous case)
+  commuteNoConflicts (Prim p :> Conflictor s y cq) = do
+    s' :> p' <- commuteFL (p :> s)
+    cq' <- commutePast p' cq
+    y' <- S.fromList <$> mapM (commutePast p') (S.toList y)
+    return $ Conflictor s' y' cq' :> Prim p'
+  -- commuting a conflictor past another one where everything goes smoothly
   commuteNoConflicts (Conflictor com_r x cp :> Conflictor s y cq) = do
-    -- com = prims in the effect of the lhs that the rhs also conflicts with
+    -- com = prims in the effect of the lhs that the rhs also conflicts with;
+    -- these remain on the lhs
     com :> rr <- commuteToPrefix (S.map (invertId . ctxId) y) com_r
     s' :> rr' <- commuteRLFL (rr :> s)
-    cp' <- commutePastRL (invertFL s) cp
-    cq' <- commutePastRL rr' cq
-    let sq = ctxAddFL s cq
-    guard (ctxNoConflict sq cp)
-    let sy = S.map (ctxAddFL s) y
-    guard $ all (ctxNoConflict sq) (S.difference x sy)
-    guard $ all (ctxNoConflict cp) (S.difference sy x)
-    return $
-      Conflictor (com +>+ s') (S.map (ctxAddRL rr') y) cq'
-      :>
-      Conflictor (reverseRL rr') (S.map (ctxAddInvFL s) x) cp'
-  commuteNoConflicts _ = Nothing
+    let cp' = ctxAddInvFL s cp
+        cq' = ctxAddRL rr' cq
+    -- obviously p and q must not conflict, nor depend on each other
+    guard (ctxNoConflict cq cp')
+    let x' = S.map (ctxAddInvFL s) x
+        y' = S.map (ctxAddRL rr') y
+    -- somewhat less obviously, p must not conflict with the patches that only
+    -- q conflicts with, nor depend on them, and vice versa
+    guard $ all (ctxNoConflict cp') (S.difference y x')
+    guard $ all (ctxNoConflict cq) (S.difference x' y)
+    return $ Conflictor (com +>+ s') y' cq' :> Conflictor (reverseRL rr') x' cp'
 
 -- * Commute
 

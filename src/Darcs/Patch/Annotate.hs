@@ -44,7 +44,8 @@ module Darcs.Patch.Annotate
 
 import Darcs.Prelude
 
-import Control.Monad.State ( modify, modify', when, gets, execState )
+import Control.Monad ( when )
+import Control.Monad.State ( modify, modify', gets, execState )
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC

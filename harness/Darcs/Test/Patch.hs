@@ -81,6 +81,7 @@ import Darcs.Test.Patch.WithState
     , makeWS2Gen
     )
 
+import qualified Darcs.Test.Patch.Depends
 import qualified Darcs.Test.Patch.Info
 import qualified Darcs.Test.Patch.Selection
 
@@ -511,6 +512,7 @@ testSuite =
     , repoPatchV1Tests
     , repoPatchV2Tests
     , repoPatchV3Tests
+    , Darcs.Test.Patch.Depends.testSuite
     , Darcs.Test.Patch.Info.testSuite
     , Darcs.Test.Patch.Selection.testSuite
     ]

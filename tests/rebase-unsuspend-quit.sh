@@ -1,6 +1,6 @@
 #!/bin/sh -e
 ##
-## Test rebase unsuspend --to-patch
+## Test rebase unsuspend, with quit
 ##
 ## Copyright (C) 2011 Ganesh Sittampalam
 ##
@@ -41,8 +41,5 @@ darcs rec -lam 'add baz'
 
 echo 'yyyy' | darcs rebase suspend
 
-darcs rebase unsuspend --to-patch 'bar' -a 2>log
-darcs changes | grep 'add foo'
-darcs changes | grep 'add bar'
-darcs changes | not grep 'add baz'
-grep "1 suspended patch" log
+echo yyq | darcs rebase unsuspend 2> log
+grep "3 suspended patches" log

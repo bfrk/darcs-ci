@@ -82,7 +82,7 @@ import Darcs.Patch ( RepoPatch, description, applyToTree, effect, invert )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(..) )
 import Darcs.Patch.Witnesses.Unsafe ( unsafeCoerceP )
 import Darcs.Patch.Witnesses.Ordered
-    ( Fork(..), FL(..), (:>)(..), (:\/:)(..),
+    ( FL(..), (:>)(..), (:\/:)(..),
     mapFL, mapFL_FL, lengthFL, nullFL )
 import Darcs.Patch.Bundle
     ( makeBundle
@@ -113,7 +113,7 @@ import Darcs.UI.SelectChanges
     , runSelection
     )
 import qualified Darcs.UI.SelectChanges as S ( PatchSelectionOptions(..) )
-import Darcs.Patch.Depends ( findCommon )
+import Darcs.Patch.Depends ( findCommonWithThem )
 import Darcs.Util.Prompt ( askUser, promptYorn )
 import Data.Text.Encoding       ( decodeUtf8' )
 import Darcs.Util.Progress ( debugMessage )
@@ -222,7 +222,7 @@ sendToThem :: (RepoPatch p, ApplyState p ~ Tree)
            -> PatchSet p Origin wX -> IO ()
 sendToThem repo opts wtds their_name them = do
   us <- readPatches repo
-  Fork common us' _ <- return $ findCommon us them
+  common :> us' <- return $ findCommonWithThem us them
   checkUnrelatedRepos (O.allowUnrelatedRepos ? opts) us them
   case us' of
       NilFL -> do putInfo opts nothingSendable
