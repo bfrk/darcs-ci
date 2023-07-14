@@ -26,6 +26,8 @@
 . lib                           # Load some portability helpers.
 darcs init      --repo R        # Create our test repos.
 
+abort_windows # umasks don't really work there
+
 cd R
 echo 'Example content.' > f
 darcs record -lam 'Add f' --umask 022

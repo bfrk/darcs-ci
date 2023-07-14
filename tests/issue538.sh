@@ -4,13 +4,18 @@
 
 . ./lib
 
+if echo $OS | grep -i windows; then
+    echo I do not know how to run a test program under windows
+    exit 0
+fi
+
 function make_repo_with_test {
     mkdir temp1 ; cd temp1 ; darcs init
     echo "#!/bin/sh" > test.sh
     echo "echo 'hello world'" >> test.sh
     darcs add test.sh
     darcs record --author=test@test -am test
-    darcs setpref test "$(pwd)/test.sh"
+    darcs setpref test './test.sh'
 }
 
 # test record with --set-scripts-executable

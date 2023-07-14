@@ -26,6 +26,8 @@
 
 . lib
 
+abort_windows                   # does not work on Windows.
+
 trap "chmod a+r $PWD/temp1/unreadable $PWD/temp1/d" EXIT
 
 mkdir temp1

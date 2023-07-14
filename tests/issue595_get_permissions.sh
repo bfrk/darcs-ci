@@ -13,6 +13,8 @@
 
 . lib
 
+abort_windows
+
 rm -rf tmp_remote tmp_restrictive
 
 # Set up a "remote" repo

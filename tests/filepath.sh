@@ -23,15 +23,18 @@ cd ..
 # local vs remote filepaths
 # ----------------------------------------------------------------------
 
-darcs get temp1 temp2
-cd temp2
-mkdir -p dir
-darcs add dir
-cd dir
-touch foo:bar
-darcs add --reserved-ok foo:bar
-cd ../..
-rm -rf temp2
+# Windows does not allow ':' in file names
+if !os_is_windows; then
+  darcs get temp1 temp2
+  cd temp2
+  mkdir -p dir
+  darcs add dir
+  cd dir
+  touch foo:bar
+  darcs add --reserved-ok foo:bar
+  cd ../..
+  rm -rf temp2
+fi
 
 # ----------------------------------------------------------------------
 # repodir stuff

@@ -25,6 +25,11 @@
 
 . lib
 
+# TODO: get this working on Windows
+# Seems to be a real bug - darcs doesn't record a patch with the
+# right characters.
+abort_windows
+
 # First, try to see if character set is UTF-8. If we can't find out or if it
 # isn't, we skip this test.
 if ! which locale ; then

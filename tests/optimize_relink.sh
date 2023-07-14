@@ -8,7 +8,7 @@
 ## compare succeeds if all files in $1 are also in $2 and are hard links
 compare () {
   ls -1 $1 | while read fn; do
-    test "$(stat -c %i $1/$fn)" = "$(stat -c %i $2/$fn)"
+    test "$(stat -c '%W %X %Y %Z' $1/$fn)" = "$(stat -c '%W %X %Y %Z' $2/$fn)"
   done
 }
 

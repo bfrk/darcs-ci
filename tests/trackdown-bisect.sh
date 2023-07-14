@@ -42,7 +42,7 @@ function is_found_good_patch  {
 
 # Test command - Success condition is that file 'j' have one inside (1)
 # That means if it has zero (0) it is failing test. 
-test_cmd='grep -q 1 j'
+test_cmd='bash -c "grep -q 1 j"'
 
 #############################################################################
 # Section with test-cases

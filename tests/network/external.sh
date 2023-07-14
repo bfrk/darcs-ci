@@ -7,10 +7,11 @@
 rm -rf temp1
 rm -f fakessh
 
-fakessh=./fakessh
-echo '#!/bin/sh' > $fakessh
-echo 'echo hello > touchedby_fakessh' >> $fakessh
-chmod u+x $fakessh
+fakessh=$(pwd)/fakessh
+cat >$fakessh.hs <EOF
+main = writeFile "touchedby_fakessh" "hello"
+EOF
+ghc --make $fakessh.hs
 
 export DARCS_SSH=$fakessh
 export DARCS_SCP=$fakessh
