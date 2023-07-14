@@ -41,22 +41,23 @@ import Darcs.Patch
     , effect
     , listConflictedFiles )
 import Darcs.Patch.Apply ( ApplyState )
+import Darcs.Patch.Depends ( slightlyOptimizePatchset )
 import Darcs.Patch.Invertible ( mkInvertible )
 import Darcs.Patch.Named ( patchcontents, anonymous )
 import Darcs.Patch.PatchInfoAnd ( PatchInfoAnd, n2pia, hopefully )
 import Darcs.Patch.Progress( progressFL, progressRL )
-import Darcs.Patch.Set ( PatchSet, Origin, patchSet2RL )
+import Darcs.Patch.Set ( PatchSet, Origin, appendPSFL, patchSet2RL )
 import Darcs.Patch.Witnesses.Ordered
     ( FL(..), RL(..), Fork(..), (:\/:)(..), (:/\:)(..), (+>+), (+<<+)
-    , mapFL_FL, concatFL, reverseFL )
+    , lengthFL, mapFL_FL, concatFL, reverseFL )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(Sealed), seal )
 
 import Darcs.Repository.Flags
     ( DiffOpts (..)
     , AllowConflicts (..)
+    , ResolveConflicts (..)
     , Reorder (..)
     , UpdatePending (..)
-    , ExternalMerge (..)
     , WantGuiPause (..)
     )
 import Darcs.Repository.Hashed
@@ -70,10 +71,11 @@ import Darcs.Repository.Pristine
 import Darcs.Repository.InternalTypes ( AccessType(RW), Repository, repoLocation )
 import Darcs.Repository.Pending ( setTentativePending )
 import Darcs.Repository.Resolution
-    ( externalResolution
-    , standardResolution
-    , StandardResolution(..)
+    ( StandardResolution(..)
     , announceConflicts
+    , externalResolution
+    , patchsetConflictResolutions
+    , standardResolution
     )
 import Darcs.Repository.State ( unrecordedChanges, readUnrecorded )
 
@@ -224,14 +226,14 @@ tentativelyMergePatches_ :: (RepoPatch p, ApplyState p ~ Tree)
                          => MakeChanges
                          -> Repository 'RW p wU wR -> String
                          -> AllowConflicts
-                         -> ExternalMerge -> WantGuiPause
+                         -> WantGuiPause
                          -> Reorder
                          -> DiffOpts
                          -> Fork (PatchSet p)
                                  (FL (PatchInfoAnd p))
                                  (FL (PatchInfoAnd p)) Origin wR wY
                          -> IO (Sealed (FL (PrimOf p) wU))
-tentativelyMergePatches_ mc _repo cmd allowConflicts externalMerge wantGuiPause
+tentativelyMergePatches_ mc _repo cmd allowConflicts wantGuiPause
   reorder diffingOpts@DiffOpts{..} (Fork context us them) = do
     (them' :/\: us') <-
       return $ merge (progressFL "Merging us" us :\/: progressFL "Merging them" them)
@@ -242,14 +244,24 @@ tentativelyMergePatches_ mc _repo cmd allowConflicts externalMerge wantGuiPause
     anonpw <- n2pia `fmap` anonymous pw
     pw' :/\: them'' <- return $ merge (them' :\/: anonpw :>: NilFL)
     let them''content = concatFL $ mapFL_FL (patchcontents . hopefully) them''
+        no_conflicts_in_them =
+          null $ conflictedPaths $ patchsetConflictResolutions $
+          slightlyOptimizePatchset (appendPSFL context them)
         conflicts =
-          standardResolution
-            (patchSet2RL context +<<+ us :<: anonpw)
-            (progressRL "Examining patches for conflicts" $ reverseFL them'')
-        standard_resolution = mangled conflicts
+          let us'' = us' +>+ pw' in
+          -- This optimization is valid only if @them@ didn't have
+          -- (unresolved) conflicts in the first place
+          if lengthFL us'' < lengthFL them'' && no_conflicts_in_them then
+            standardResolution
+              (patchSet2RL context +<<+ them)
+              (progressRL "Examining patches for conflicts" $ reverseFL us'')
+          else
+            standardResolution
+              (patchSet2RL context +<<+ us :<: anonpw)
+              (progressRL "Examining patches for conflicts" $ reverseFL them'')
 
     debugMessage "Checking for conflicts..."
-    when (allowConflicts == YesAllowConflictsAndMark) $
+    when (allowConflicts == YesAllowConflicts MarkConflicts) $
         mapM_ backupByCopying $
         map (anchorPath (repoLocation _repo)) $
         conflictedPaths conflicts
@@ -279,16 +291,15 @@ tentativelyMergePatches_ mc _repo cmd allowConflicts externalMerge wantGuiPause
 
     debugMessage "Working out conflict markup..."
     Sealed resolution <-
-        case (externalMerge, have_conflicts) of
-          (NoExternalMerge, _) ->
-            return $
-              if allowConflicts == YesAllowConflicts
-                then seal NilFL
-                else standard_resolution
-          (_, False) -> return $ standard_resolution
-          (YesExternalMerge c, True) ->
-            externalResolution diffAlg working c wantGuiPause
+      if have_conflicts then
+        case allowConflicts of
+          YesAllowConflicts (ExternalMerge merge_cmd) ->
+            externalResolution diffAlg working merge_cmd wantGuiPause
               (effect us +>+ pw) (effect them) them''content
+          YesAllowConflicts NoResolveConflicts -> return $ seal NilFL
+          YesAllowConflicts MarkConflicts -> return $ mangled conflicts
+          NoAllowConflicts -> error "impossible" -- was handled in announceConflicts
+      else return $ seal NilFL
 
     debugMessage "Adding patches to the inventory and writing new pending..."
     when (mc == MakeChanges) $ do
@@ -315,7 +326,7 @@ tentativelyMergePatches_ mc _repo cmd allowConflicts externalMerge wantGuiPause
 tentativelyMergePatches :: (RepoPatch p, ApplyState p ~ Tree)
                         => Repository 'RW p wU wR -> String
                         -> AllowConflicts
-                        -> ExternalMerge -> WantGuiPause
+                        -> WantGuiPause
                         -> Reorder
                         -> DiffOpts
                         -> Fork (PatchSet p)
@@ -327,7 +338,7 @@ tentativelyMergePatches = tentativelyMergePatches_ MakeChanges
 considerMergeToWorking :: (RepoPatch p, ApplyState p ~ Tree)
                        => Repository 'RW p wU wR -> String
                        -> AllowConflicts
-                       -> ExternalMerge -> WantGuiPause
+                       -> WantGuiPause
                        -> Reorder
                        -> DiffOpts
                        -> Fork (PatchSet p)

@@ -99,7 +99,6 @@ import Darcs.Repository.Flags
     , DryRun (..)
     , UMask (..)
     , SetScriptsExecutable (..)
-    , RemoteRepos (..)
     , SetDefault (..)
     , InheritDefault (..)
     , WithWorkingDir (..)
@@ -107,6 +106,7 @@ import Darcs.Repository.Flags
     , WithPatchIndex (..)
     , PatchFormat (..)
     , AllowConflicts(..)
+    , ResolveConflicts(..)
     , WithPrefsTemplates(..)
     )
 
@@ -162,7 +162,6 @@ cloneRepository ::
     -> CloneKind
     -> UMask -> RemoteDarcs
     -> SetScriptsExecutable
-    -> RemoteRepos
     -> SetDefault
     -> InheritDefault
     -> [MatchFlag]
@@ -173,7 +172,7 @@ cloneRepository ::
     -> ForgetParent
     -> WithPrefsTemplates
     -> IO ()
-cloneRepository repourl mysimplename v useCache cloneKind um rdarcs sse remoteRepos
+cloneRepository repourl mysimplename v useCache cloneKind um rdarcs sse
                 setDefault inheritDefault matchFlags rfsource withWorkingDir
                 usePatchIndex usePacks forget withPrefsTemplates =
   withUMaskFlag um $ withNewDirectory mysimplename $ do
@@ -186,7 +185,7 @@ cloneRepository repourl mysimplename v useCache cloneKind um rdarcs sse remoteRe
           (if cloneKind == LazyClone then NoPatchIndex else usePatchIndex)
           useCache withPrefsTemplates
       debugMessage "Finished initializing new repository."
-      addRepoSource repourl NoDryRun remoteRepos setDefault inheritDefault False
+      addRepoSource repourl NoDryRun setDefault inheritDefault
 
       debugMessage "Identifying remote repository..."
       fromRepo <- identifyRepositoryFor Reading _toRepo useCache repourl
@@ -255,7 +254,7 @@ cloneRepository repourl mysimplename v useCache cloneKind um rdarcs sse remoteRe
       -- check for unresolved conflicts
       patches <- readPatches _toRepo
       let conflicts = patchsetConflictResolutions patches
-      _ <- announceConflicts "clone" YesAllowConflictsAndMark conflicts
+      _ <- announceConflicts "clone" (YesAllowConflicts MarkConflicts) conflicts
       Sealed mangled_res <- return $ mangled conflicts
       unless (nullFL mangled_res) $
         withSignalsBlocked $ void $ applyToWorking _toRepo v mangled_res

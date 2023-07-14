@@ -28,6 +28,7 @@ module Darcs.Patch.ApplyMonad
   ( ApplyMonad(..), ApplyMonadTrans(..), ApplyMonadOperations
   , withFileNames
   , ApplyMonadTree(..)
+  , evalApplyMonad
   ) where
 
 import Darcs.Prelude
@@ -53,6 +54,10 @@ class (Monad m, ApplyMonad state (ApplyMonadOver state m))
 instance MonadThrow m => ApplyMonadTrans Tree m where
   type ApplyMonadOver Tree m = TM.TreeMonad m
   runApplyMonad = TM.virtualTreeMonad
+
+evalApplyMonad
+  :: ApplyMonadTrans state m => ApplyMonadOver state m a -> state m -> m a
+evalApplyMonad action st = fst <$> runApplyMonad action st
 
 type family ApplyMonadOperations (state :: (* -> *) -> *) :: (* -> *) -> Constraint
 

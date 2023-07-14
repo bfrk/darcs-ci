@@ -37,8 +37,8 @@ instance ShowPatchBasic Prim where
 
 -- dummy instance, does not actually show any context
 instance Apply Prim => ShowContextPatch Prim where
-  -- showContextPatch f = showPrimCtx (fileNameFormat f)
-  showContextPatch f p = apply p >> return (showPatch f p)
+  -- showPatchWithContextAndApply f = showPrimWithContextAndApply (fileNameFormat f)
+  showPatchWithContextAndApply f p = apply p >> return (showPatch f p)
 
 instance ShowPatch Prim where
   summary = plainSummaryPrim
@@ -53,7 +53,7 @@ instance PrimShow Prim where
   showPrim _ (Manifest f (L d p)) = showManifest "manifest" d f p
   showPrim _ (Demanifest f (L d p)) = showManifest "demanifest" d f p
   showPrim _ Identity = blueText "identity"
-  showPrimCtx _ _ = error "show with context not implemented"
+  showPrimWithContextAndApply _ _ = error "show with context not implemented"
 
 showManifest :: String -> UUID -> UUID -> Name -> Doc
 showManifest txt dir file name =

@@ -39,21 +39,24 @@ module Darcs.Patch.Permutations
     , partitionConflictingFL
     , (=\~/=)
     , (=/~\=)
+    , nubFL
     ) where
 
 import Darcs.Prelude
 
+import Data.List ( nubBy )
 import Data.Maybe ( mapMaybe )
 import Darcs.Patch.Commute ( Commute, commute, commuteFL, commuteRL )
 import Darcs.Patch.CommuteFn ( CommuteFn )
 import Darcs.Patch.Merge ( CleanMerge(..), cleanMergeFL )
-import Darcs.Patch.Witnesses.Eq ( Eq2(..), EqCheck(..) )
+import Darcs.Patch.Witnesses.Eq ( Eq2(..), EqCheck(..), isIsEq )
 import Darcs.Patch.Witnesses.Ordered
     ( FL(..), RL(..), (:>)(..), (:\/:)(..), (:/\:)(..)
     , (+<+), (+>+)
     , lengthFL, lengthRL
     , reverseFL, reverseRL
     )
+import Darcs.Patch.Witnesses.Sealed ( Sealed(..) )
 
 -- | Split an 'FL' according to a predicate, using commutation as necessary,
 -- into those that satisfy the predicate and can be commuted to the left, and
@@ -127,16 +130,14 @@ partitionRL :: forall p wX wY. Commute p
             => (forall wU wV . p wU wV -> Bool) -- ^predicate; if true we would like the patch in the "right" list
             -> RL p wX wY                       -- ^input 'RL'
             -> (RL p :> RL p) wX wY             -- ^"left" and "right" results
-partitionRL keepright = go . (:> NilFL)
+partitionRL cond input = go (input :> NilFL :> NilFL)
   where
-    go :: (RL p :> FL p) wA wB -> (RL p :> RL p) wA wB
-    go (NilRL :> qs) = (reverseFL qs :> NilRL)
-    go (ps :<: p :> qs)
-      | keepright p
-      , Just (qs' :> p') <- commuteFL (p :> qs) =
-          case go (ps :> qs') of
-            a :> b -> a :> b :<: p'
-      | otherwise = go (ps :> p :>: qs)
+    go :: (RL p :> FL p :> FL p) wA wB -> (RL p :> RL p) wA wB
+    go (NilRL :> no :> yes) = (reverseFL no :> reverseFL yes)
+    go (ps :<: p :> no :> yes)
+      | cond p
+      , Just (no' :> p') <- commuteFL (p :> no) = go (ps :> no' :> p' :>: yes)
+      | otherwise = go (ps :> p :>: no :> yes)
 
 commuteWhatWeCanFL :: Commute p => (p :> FL p) wX wY -> (FL p :> p :> FL p) wX wY
 commuteWhatWeCanFL = genCommuteWhatWeCanFL commute
@@ -305,6 +306,11 @@ a =/~\= b
       | Just ys <- removeRL x ys_x = cmpSameLength xs ys
     cmpSameLength NilRL NilRL = IsEq
     cmpSameLength _ _ = NotEq
+
+-- | A variant of 'nub' that is based on '=\~/= i.e. ignores (internal) ordering.
+nubFL :: (Commute p, Eq2 p) => [Sealed (FL p wX)] -> [Sealed (FL p wX)]
+nubFL = nubBy eqSealedFL where
+  eqSealedFL (Sealed ps) (Sealed qs) = isIsEq (ps =\~/= qs)
 
 -- | Partition a list into the patches that merge cleanly with the given
 -- patch and those that don't (including dependencies)

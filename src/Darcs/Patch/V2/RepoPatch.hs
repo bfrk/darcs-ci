@@ -32,7 +32,7 @@ import Darcs.Prelude hiding ( (*>) )
 import Control.Monad ( mplus, liftM )
 import qualified Data.ByteString.Char8 as BC ( ByteString, pack )
 import Data.Maybe ( fromMaybe )
-import Data.List ( partition, nub )
+import Data.List ( partition )
 import Data.List.Ordered ( nubSort )
 
 import Darcs.Patch.Commute ( commuteFL, commuteRL
@@ -60,7 +60,7 @@ import Darcs.Patch.Apply ( Apply(..) )
 import Darcs.Patch.Inspect ( PatchInspect(..) )
 import Darcs.Patch.Permutations ( commuteWhatWeCanFL, commuteWhatWeCanRL
                                 , genCommuteWhatWeCanRL, removeRL, removeFL
-                                , removeSubsequenceFL, (=\~/=), (=/~\=) )
+                                , removeSubsequenceFL, nubFL, (=\~/=), (=/~\=) )
 import Darcs.Patch.Show
     ( ShowPatch(..), ShowPatchBasic(..), ShowContextPatch(..), ShowPatchFor(..)
     , displayPatch )
@@ -372,7 +372,7 @@ instance PrimPatch prim => Conflict (RepoPatchV2 prim) where
         resolveOne :: RepoPatchV2 prim wX wY -> [[Sealed (FL prim wY)]]
         resolveOne (Conflictor ix xx x) = [unravelled]
           where
-            unravelled = nub $ filter isCons $ map (`mergeWith` xIxNonXX) xIxNonXX
+            unravelled = nubFL $ filter isCons $ map (`mergeWith` xIxNonXX) xIxNonXX
             xIxNonXX = x : ix ++ nonxx
             nonxx = nonxx_ (reverseFL $ xx2patches ix xx)
         resolveOne _ = []
@@ -860,8 +860,8 @@ instance PrimPatch prim => ShowPatchBasic (RepoPatchV2 prim) where
         showNon f p
 
 instance PrimPatch prim => ShowContextPatch (RepoPatchV2 prim) where
-    showContextPatch f (Normal p) = showContextPatch f p
-    showContextPatch f p = apply p >> return (showPatch f p)
+    showPatchWithContextAndApply f (Normal p) = showPatchWithContextAndApply f p
+    showPatchWithContextAndApply f p = apply p >> return (showPatch f p)
 
 instance PrimPatch prim => ShowPatch (RepoPatchV2 prim) where
     summary = plainSummary

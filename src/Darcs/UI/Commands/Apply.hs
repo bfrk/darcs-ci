@@ -108,30 +108,40 @@ applyHelp = vsep $ map formatWords
   , [ "If `--test` is supplied and a test is defined (see `darcs setpref`), the"
     , "bundle will be rejected if the test fails after applying it."
     ]
-  , [ "A patch bundle may introduce unresolved conflicts with existing"
-    , "patches or with the working tree.  By default, Darcs will add conflict"
-    , "markers (see `darcs mark-conflicts`)."
+  , [ "Unlike most Darcs commands, `darcs apply` defaults to `--all`.  Use the"
+    , "`--interactive` option to pick which patches to apply from a bundle."
     ]
-  , [ "The `--external-merge` option lets you resolve these conflicts"
+  , [ "A patch bundle may introduce unresolved conflicts with existing"
+    , "patches or with the working tree.  By default, Darcs will refuse to"
+    , "apply conflicting patches (`--no-allow-conflicts`)."
+    ]
+  , [ "The `--mark-conflicts` option instructs Darcs to allow conflicts and"
+    , "try to add conflict markup in your working tree. Note that this may"
+    , "(partly) fail, because some conflicts cannot be marked, such as e.g."
+    , "conflicts between two adds of the same file. In this case Darcs will"
+    , "warn you and display the conflicting changes instead. When Darcs"
+    , "detects conflicts with unrecord changes, it will give you an extra"
+    , "warning and prompts you to confirm that you want to continue. This is"
+    , "because your original unrecorded changes cannot be automatically"
+    , "restored by Darcs. Note that conflict markup is something Darcs"
+    , "adds to your working tree files. Nevertheless, you"
+    , "can always re-construct it using `darcs mark-conflicts`."
+    ]
+  , [ "The `--external-merge` option lets you resolve conflicts"
     , "using an external merge tool.  In the option, `%a` is replaced with"
     , "the common ancestor (merge base), `%1` with the first version, `%2`"
     , "with the second version, and `%o` with the path where your resolved"
     , "content should go.  For example, to use the xxdiff visual merge tool"
     , "you'd specify: `--external-merge='xxdiff -m -O -M %o %1 %a %2'`"
     ]
-  , [ "The `--allow-conflicts` option will skip conflict marking; this is"
-    , "useful when you want to treat a repository as just a bunch of patches,"
-    , "such as using `darcs pull --union` to download of your co-workers"
-    , "patches before going offline."
+  , [ "The `--allow-conflicts` option allows conflicts but does not add"
+    , "conflict markup. This is useful when you want to treat a repository as"
+    , "just a bunch of patches, such as using `darcs pull --union` to download"
+    , "all of your co-workers' patches before going offline. Again, conflict"
+    , "markup can be added at any time later on using `darcs mark-conflicts`."
     ]
-  , [ "This can mess up unrecorded changes in the working tree, forcing you"
-    , "to resolve the conflict immediately.  To simply reject bundles that"
-    , "introduce unresolved conflicts, using the `--dont-allow-conflicts`"
-    , "option.  Making this the default in push-based workflows is strongly"
-    , "recommended."
-    ]
-  , [ "Unlike most Darcs commands, `darcs apply` defaults to `--all`.  Use the"
-    , "`--interactive` option to pick which patches to apply from a bundle."
+  , [ "For more information on conflicts in Darcs and how to resolve them,"
+    , "see the help on `darcs mark-conflicts`."
     ]
   ]
 
@@ -161,7 +171,6 @@ apply = DarcsCommand
       ^ O.dryRunXml
       ^ O.matchSeveral
       ^ O.conflictsNo
-      ^ O.externalMerge
       ^ O.testChanges
       ^ O.repoDir
       ^ O.diffAlgorithm

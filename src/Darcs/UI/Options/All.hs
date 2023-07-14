@@ -71,8 +71,6 @@ module Darcs.UI.Options.All
 
     -- local or remote repo(s)
     , repoDir
-    , RemoteRepos (..) -- re-export
-    , remoteRepos
     , possiblyRemoteRepo
     , newRepo
     , NotInRemote (..)
@@ -155,8 +153,7 @@ module Darcs.UI.Options.All
     , AllowConflicts (..) -- re-export
     , conflictsNo
     , conflictsYes
-    , ExternalMerge (..) -- re-export
-    , externalMerge
+    , ResolveConflicts (..) -- re-export
     , reorder
 
     -- optimizations
@@ -259,13 +256,12 @@ import Darcs.Repository.Flags
     , RunTest (..)
     , SetScriptsExecutable (..)
     , LeaveTestDir (..)
-    , RemoteRepos (..)
     , SetDefault (..)
     , InheritDefault (..)
     , UseIndex (..)
     , CloneKind (..)
-    , ExternalMerge (..)
     , AllowConflicts (..)
+    , ResolveConflicts (..)
     , WantGuiPause (..)
     , WithPatchIndex (..)
     , WithWorkingDir (..)
@@ -580,13 +576,6 @@ possiblyRemoteRepo = singleStrArg [] ["repo"] F.WorkRepoUrl arg "URL"
   where arg (F.WorkRepoUrl s) = Just s
         arg _ = Nothing
 
-remoteRepos :: PrimDarcsOption RemoteRepos
-remoteRepos = (imap . cps) (Iso fw bw) $ multiStrArg [] ["remote-repo"] F.RemoteRepo mkV "URL"
-    "specify the remote repository URL to work with"
-  where mkV fs = [ s | F.RemoteRepo s <- fs ]
-        fw ss = RemoteRepos ss
-        bw (RemoteRepos ss) = ss
-
 notInRemoteFlagName :: String
 notInRemoteFlagName = "not-in-remote"
 
@@ -708,29 +697,17 @@ __rmlogfile = withDefault False
 
 -- * Looking for changes
 
-maybelookforadds :: Bool -> PrimDarcsOption LookForAdds
-maybelookforadds dlfa = imap lfa_iso (lookforadds_ dlfa ^ includeBoring)
-
 lookforadds :: PrimDarcsOption LookForAdds
-lookforadds = imap lfa_iso (lookforadds_ False ^ includeBoring)
+lookforadds = maybelookforadds NoLookForAdds
 
-lfa_iso :: Iso (Bool -> Bool -> p) (LookForAdds -> p)
-lfa_iso = (Iso fw bw)
-  where
-    fw k NoLookForAdds = k False False
-    fw k YesLookForAdds = k True False
-    fw k EvenLookForBoring = k True True
-    bw k False False = k NoLookForAdds
-    bw k False True = k NoLookForAdds -- --boring w/o -l is no-op
-    bw k True False = k YesLookForAdds
-    bw k True True = k EvenLookForBoring
-
-lookforadds_ :: Bool -> PrimDarcsOption Bool
-lookforadds_ def = withDefault def
-  [ RawNoArg [] ["dont-look-for-adds","no-look-for-adds"] F.NoLookForAdds False
-    "don't look for any files that could be added"
-  , RawNoArg ['l'] ["look-for-adds"] F.LookForAdds True
-    "look for (non-boring) files that could be added" ]
+maybelookforadds :: LookForAdds -> PrimDarcsOption LookForAdds
+maybelookforadds def = withDefault def
+  [ RawNoArg [] ["dont-look-for-adds","no-look-for-adds"] F.NoLookForAdds NoLookForAdds
+    "don't look for files that could be added"
+  , RawNoArg ['l'] ["look-for-adds"] F.LookForAdds YesLookForAdds
+    "look for (non-boring) files that could be added"
+  , RawNoArg [] ["boring"] F.Boring EvenLookForBoring
+    "look (even) for boring files" ]
 
 lookforreplaces :: PrimDarcsOption LookForReplaces
 lookforreplaces = withDefault NoLookForReplaces
@@ -995,32 +972,26 @@ verify = withDefault NoVerify
 conflictsNo :: PrimDarcsOption (Maybe AllowConflicts)
 conflictsNo = conflicts NoAllowConflicts
 
--- | pull, rebase pull: default to 'YesAllowConflictsAndMark'
+-- | pull, rebase pull: default to 'YesAllowConflicts' 'MarkConflicts'
 conflictsYes :: PrimDarcsOption (Maybe AllowConflicts)
-conflictsYes = conflicts YesAllowConflictsAndMark
+conflictsYes = conflicts (YesAllowConflicts MarkConflicts)
 
 conflicts :: AllowConflicts -> PrimDarcsOption (Maybe AllowConflicts)
 conflicts def = withDefault (Just def)
   [ RawNoArg [] ["mark-conflicts"]
-      F.MarkConflicts (Just YesAllowConflictsAndMark) "mark conflicts"
+      F.MarkConflicts (Just (YesAllowConflicts MarkConflicts)) "mark conflicts"
   , RawNoArg [] ["allow-conflicts"]
-      F.AllowConflicts (Just YesAllowConflicts) "allow conflicts, but don't mark them"
+      F.AllowConflicts (Just (YesAllowConflicts NoResolveConflicts))
+      "allow conflicts, but don't mark them"
+  , RawStrArg [] ["external-merge"]
+    F.ExternalMerge (\f -> [s | F.ExternalMerge s <- [f]])
+    (Just . YesAllowConflicts . ExternalMerge)
+    (\v -> [s | Just (YesAllowConflicts (ExternalMerge s)) <- [v]])
+    "COMMAND" "use external tool to merge conflicts"
   , RawNoArg [] ["dont-allow-conflicts","no-allow-conflicts","no-resolve-conflicts"]
       F.NoAllowConflicts (Just NoAllowConflicts) "fail if there are patches that would create conflicts"
   , RawNoArg [] ["skip-conflicts"]
       F.SkipConflicts Nothing "filter out any patches that would create conflicts" ]
-
--- Technically not an isomorphism.
-externalMerge :: PrimDarcsOption ExternalMerge
-externalMerge = imap (Iso fw bw) $ singleStrArg [] ["external-merge"] F.ExternalMerge arg
-    "COMMAND" "use external tool to merge conflicts"
-  where
-    arg (F.ExternalMerge s) = Just s
-    arg _ = Nothing
-    bw k (Just s) = k (YesExternalMerge s)
-    bw k Nothing = k NoExternalMerge
-    fw k (YesExternalMerge s) = k (Just s)
-    fw k NoExternalMerge = k Nothing
 
 -- | pull, apply, rebase pull, rebase apply
 reorder :: PrimDarcsOption Reorder

@@ -65,7 +65,7 @@ showContextSeries use fmt = scs Nothing
     scs pold (p :>: ps) = do
         case isHunk p of
             Nothing -> do
-                a <- showContextPatch use p
+                a <- showPatchWithContextAndApply use p
                 b <- scs Nothing ps
                 return $ a $$ b
             Just fh -> case ps of
@@ -137,13 +137,13 @@ instance ( Apply p
          , ObjectId (ObjectIdOfPatch p)
          ) =>
          ShowContextPatch (FL p) where
-    showContextPatch ForDisplay = showContextSeries ForDisplay FileNameFormatDisplay
-    showContextPatch ForStorage = showContextPatchInternal patchListFormat
+    showPatchWithContextAndApply ForDisplay = showContextSeries ForDisplay FileNameFormatDisplay
+    showPatchWithContextAndApply ForStorage = showContextPatchInternal patchListFormat
       where
         showContextPatchInternal :: (ApplyMonad (ApplyState (FL p)) m)
                                  => ListFormat p -> FL p wX wY -> m Doc
         showContextPatchInternal ListFormatV1 (p :>: NilFL) =
-            showContextPatch ForStorage p
+            showPatchWithContextAndApply ForStorage p
         showContextPatchInternal ListFormatV1 NilFL =
             return $ blueText "{" $$ blueText "}"
         showContextPatchInternal ListFormatV1 ps = do
@@ -174,7 +174,7 @@ instance (PatchListFormat p, ShowPatchBasic p) => ShowPatchBasic (RL p) where
 
 instance (ShowContextPatch p, Apply p, IsHunk p, PatchListFormat p, ObjectId (ObjectIdOfPatch p))
         => ShowContextPatch (RL p) where
-    showContextPatch use = showContextPatch use . reverseRL
+    showPatchWithContextAndApply use = showPatchWithContextAndApply use . reverseRL
 
 instance (PatchListFormat p, ShowPatch p) => ShowPatch (RL p) where
     content = content . reverseRL

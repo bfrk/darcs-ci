@@ -46,11 +46,11 @@ instance (Apply Prim, ApplyState Prim ~ Tree, ObjectIdOfPatch Prim ~ AnchoredPat
   showPrim fmt (DP d RmDir)  = showRmDir fmt d
   showPrim fmt (Move f f') = showMove fmt f f'
   showPrim _ (ChangePref p f t) = showChangePref p f t
-  showPrimCtx fmt p@(FP f (Hunk line old new)) = do
+  showPrimWithContextAndApply fmt p@(FP f (Hunk line old new)) = do
     r <- showContextHunk fmt (FileHunk f line old new)
     apply p
     return r
-  showPrimCtx fmt p = do
+  showPrimWithContextAndApply fmt p = do
     apply p
     return $ showPrim fmt p
 

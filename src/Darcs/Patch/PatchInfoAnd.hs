@@ -241,9 +241,9 @@ instance ShowPatchBasic p => ShowPatchBasic (PatchInfoAndG p) where
         Left _ -> showPatchInfo f n
 
 instance ShowContextPatch p => ShowContextPatch (PatchInfoAndG p) where
-  showContextPatch f (PIAP n p) =
+  showPatchWithContextAndApply f (PIAP n p) =
     case hopefully2either p of
-      Right x -> showContextPatch f x
+      Right x -> showPatchWithContextAndApply f x
       Left _ -> return $ showPatchInfo f n
 
 instance (Summary p, PatchListFormat p,

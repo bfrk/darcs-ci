@@ -28,13 +28,14 @@ import Darcs.Prelude
 import Control.Arrow ( (***) )
 import Data.Char ( isAlphaNum, toLower, toUpper )
 import System.Directory ( withCurrentDirectory )
+import System.FilePath.Posix ( (</>) )
 import Data.Either ( partitionEithers )
 import Data.List ( groupBy, intercalate, lookup, nub )
 import System.Exit ( exitSuccess )
 import Version ( version )
 
 import Darcs.Patch.Match ( helpOnMatchers )
-import Darcs.Repository.Prefs ( environmentHelpHome, prefsFilesHelp )
+import Darcs.Repository.Prefs ( environmentHelpHome, prefsDirPath, prefsFilesHelp )
 
 import Darcs.UI.Commands
     ( CommandArgs(..)
@@ -142,7 +143,7 @@ helpCmd _ _ ["preferences"] =
     header = "Preference Files" $$
              "================"
     render (f, h) =
-      let item = "_darcs/prefs/" ++ f in
+      let item = prefsDirPath </> f in
         text item $$ text (replicate (length item) '-') $$ text h
 helpCmd _ _ ("environment":vs_) =
     viewDoc $ vsep (header : map render known) $+$ footer
@@ -353,7 +354,7 @@ manpage = vcat [
 
       prefFiles :: Doc
       prefFiles = vcat $ map go prefsFilesHelp
-        where go (f,h) = ".SS" <+> quoted("_darcs/prefs/" <> f) $$ text h
+        where go (f,h) = ".SS" <+> quoted(prefsDirPath </> f) $$ text h
 
       description = vcat
         [ "Unlike conventional revision control systems, Darcs is based on tracking"
@@ -385,7 +386,7 @@ markdownLines =
  , "", unlines environment ]
    where
       prefFiles = concatMap go prefsFilesHelp
-        where go (f,h) = ["## `_darcs/prefs/" ++ f ++ "`", "", h]
+        where go (f,h) = ["## `" ++ prefsDirPath </> f ++ "`", "", h]
 
       environment :: [String]
       environment = intercalate [""]

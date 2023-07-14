@@ -109,7 +109,7 @@ instance ShowPatch p => ShowPatch (Invertible p) where
   content = withInvertible content
 
 instance ShowContextPatch p => ShowContextPatch (Invertible p) where
-  showContextPatch ForStorage = error "Invertible patches must not be stored"
-  showContextPatch ForDisplay = withInvertible (showContextPatch ForDisplay)
+  showPatchWithContextAndApply ForStorage = error "Invertible patches must not be stored"
+  showPatchWithContextAndApply ForDisplay = withInvertible (showPatchWithContextAndApply ForDisplay)
 
 instance PatchListFormat p => PatchListFormat (Invertible p)

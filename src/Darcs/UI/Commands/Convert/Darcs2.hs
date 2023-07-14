@@ -32,6 +32,7 @@ import Darcs.Patch.Apply ( ApplyState )
 import Darcs.Patch.Info ( isTag, piRename, piTag )
 import Darcs.Patch.Named ( Named(..), getdeps, patch2patchinfo, patchcontents )
 import Darcs.Patch.PatchInfoAnd ( PatchInfoAnd, hopefully, info, n2pia )
+import Darcs.Patch.Permutations ( (=/~\=) )
 import Darcs.Patch.Progress ( progressFL )
 import Darcs.Patch.Set ( inOrderTags, patchSet2FL, patchSet2RL )
 import qualified Darcs.Patch.V1 as V1 ( RepoPatchV1 )
@@ -41,13 +42,14 @@ import qualified Darcs.Patch.V1.Prim as V1 ( Prim(..) )
 import qualified Darcs.Patch.V2.Prim as V2 ( Prim(..) )
 import qualified Darcs.Patch.V2.RepoPatch as V2 ( RepoPatchV2(Normal) )
 import Darcs.Patch.V2.RepoPatch ( mergeUnravelled )
-import Darcs.Patch.Witnesses.Eq ( EqCheck(..), (=/\=) )
+import Darcs.Patch.Witnesses.Eq ( EqCheck(..) )
 import Darcs.Patch.Witnesses.Ordered
     ( FL(..)
     , concatFL
     , foldFL_M
     , mapFL_FL
     , mapRL
+    , reverseFL
     )
 import Darcs.Patch.Witnesses.Sealed ( FlippedSeal(..), mapSeal )
 
@@ -183,7 +185,7 @@ toDarcs2 _ opts' args = do
             let ex = mapFL_FL primV1toV2 (effect x) in
             case mergeUnravelled $ map (mapSeal (mapFL_FL primV1toV2)) $ publicUnravel x of
              Just (FlippedSeal y) ->
-                 case effect y =/\= ex of
+                 case reverseFL (effect y) =/~\= reverseFL ex of
                  IsEq -> y :>: NilFL
                  NotEq ->
                      traceDoc (text "lossy conversion:" $$

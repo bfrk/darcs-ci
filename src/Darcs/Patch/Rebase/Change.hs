@@ -1,10 +1,13 @@
 --  Copyright (C) 2009 Ganesh Sittampalam
 --
 --  BSD3
+{-# LANGUAGE PartialTypeSignatures #-}
+{-# OPTIONS_GHC -Wno-partial-type-signatures #-}
 module Darcs.Patch.Rebase.Change
     ( RebaseChange(..)
     , extractRebaseChange
     , reifyRebaseChange
+    , forceCommuteRebaseChange
     , partitionUnconflicted
     , rcToPia
     , WithDroppedDeps(..)
@@ -194,7 +197,7 @@ instance PrimPatch prim => ShowPatch (RebaseChange prim) where
 
 -- TODO this is a dummy instance that does not actually show context
 instance PrimPatch prim => ShowContextPatch (RebaseChange prim) where
-    showContextPatch f p = apply p >> return (showPatch f p)
+    showPatchWithContextAndApply f p = apply p >> return (showPatch f p)
 
 instance (ReadPatch prim, PatchListFormat prim) => ReadPatch (RebaseChange prim) where
   readPatch' = do
@@ -357,7 +360,7 @@ forceCommuteName (AddName an :> WithDroppedDeps (NamedP pn deps body) ddeps)
       :>
       AddName an
 forceCommuteName (DelName dn :> p@(WithDroppedDeps (NamedP pn deps _body) _ddeps))
-  | dn == pn = error "impossible case"
+  | dn == pn = unsafeCoerceP p :> DelName dn
   | dn `elem` deps = error "impossible case"
   | otherwise = unsafeCoerceP p :> DelName dn
 forceCommuteName (Rename old new :> WithDroppedDeps (NamedP pn deps body) ddeps)
@@ -440,10 +443,59 @@ extractRebaseChange da rcs = go (NilFL :> rcs)
         -- finally force-commute the fixups with this and any other patches we are
         -- unsuspending.
         RC fixups toedit :> fixupsOut2 ->
-          case forceCommutes (fixups :> WithDroppedDeps (fromPrimNamed toedit) []) of
+          case forceCommutes (fixups :> noDroppedDeps (fromPrimNamed toedit)) of
             toedit' :> fixupsOut1 ->
               case go (fixupsOut1 +>+ fixupsOut2 :> rest) of
                 toedits' :> fixupsOut -> toedit' :>: toedits' :> fixupsOut
+
+-- TODO this is slightly incorrect in that we create RebaseChange patches
+-- with fixups that aren't fully pushed through.
+forceCommuteRebaseChange
+  :: forall prim wX wY
+   . PrimPatch prim
+  => (RebaseChange prim :> RebaseChange prim) wX wY
+  -> Maybe ((RebaseChange prim :> RebaseChange prim) wX wY)
+forceCommuteRebaseChange (RC fs1 e1 :> RC fs2 e2@(NamedP n2 ds2 _)) = do
+  fs2' :> NamedP n1 ds1 ps1' <- commuterIdFL commuteNamedFixup (e1 :> fs2)
+  (np2' :: Named (RepoPatchV3 prim) _ _) :> ps1'' <-
+    return $ simpleForceCommutePrims (ps1' :> fromPrimNamed e2)
+  Unwound fs2'' ps2' fs2''' <- return $ fullUnwind np2'
+  let nameFixups2 =
+        if n1 `elem` ds2 then NameFixup (AddName n1) :>: NilFL else NilFL
+  let nameFixups1 =
+        if n1 `elem` ds2 then NameFixup (DelName n1) :>: NilFL else NilFL
+  return $
+    RC
+      (fs1 +>+ fs2' +>+ mapFL_FL PrimFixup fs2'' +>+ nameFixups2)
+      (NamedP n2 ds2 ps2')
+    :>
+    RC
+      (nameFixups1 +>+ mapFL_FL PrimFixup (reverseRL fs2'''))
+      (NamedP n1 ds1 ps1'')
+
+-- | Plural version of 'simpleForceCommutePrim'.
+simpleForceCommutePrims
+  :: RepoPatch p
+  => (FL (PrimOf p) :> Named p) wX wY
+  -> (Named p :> FL (PrimOf p)) wX wY
+simpleForceCommutePrims (NilFL :> nq) = nq :> NilFL
+simpleForceCommutePrims (p :>: ps :> nq) =
+  case simpleForceCommutePrims (ps :> nq) of
+    nq' :> ps' ->
+      case simpleForceCommutePrim (p :> nq') of
+        nq'' :> p' -> nq'' :> (p' +>+ ps')
+
+-- | Like 'forceCommutePrim' but without injecting an inverse pair into the
+-- resulting 'WDDNamed'. This is not needed here, since we immediately turn the
+-- 'WDDNamed' back into a 'RebaseChange' using 'fullUnwind'. Indeed, using
+-- 'forceCommutePrim' here makes 'fullUnwind' run into an "impossible" case.
+simpleForceCommutePrim
+  :: RepoPatch p
+  => (PrimOf p :> Named p) wX wY
+  -> (Named p :> FL (PrimOf p)) wX wY
+simpleForceCommutePrim (p :> wq) =
+  case mergerIdNamed selfMerger (fromAnonymousPrim (invert p) :\/: wq) of
+    wq' :/\: irp' -> wq' :> invert (effect irp')
 
 -- signature to be compatible with extractRebaseChange
 -- | Like 'extractRebaseChange', but any fixups are "reified" into a separate patch.

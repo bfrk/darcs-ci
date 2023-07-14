@@ -13,8 +13,8 @@ import Darcs.Patch.V1.Core ( RepoPatchV1(..) )
 import Darcs.Patch.V1.Show ()
 
 instance PrimPatch prim => ShowContextPatch (RepoPatchV1 prim) where
-    showContextPatch f (PP p) = showContextPatch f p
-    showContextPatch f p = apply p >> return (showPatch f p)
+    showPatchWithContextAndApply f (PP p) = showPatchWithContextAndApply f p
+    showPatchWithContextAndApply f p = apply p >> return (showPatch f p)
 
 instance PrimPatch prim => ShowPatch (RepoPatchV1 prim) where
     summary = plainSummary

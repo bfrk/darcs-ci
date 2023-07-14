@@ -58,10 +58,10 @@ import Darcs.Patch.Permutations
     ( headPermutationsRL
     , simpleHeadPermutationsFL
     , removeFL
+    , nubFL
     )
 import Darcs.Util.Printer ( renderString, text, vcat, ($$) )
 import Darcs.Patch.V1.Show ( showPatch_ )
-import Data.List ( nub )
 import Data.List.Ordered ( nubSort )
 import Darcs.Patch.Summary
     ( Summary(..)
@@ -370,7 +370,7 @@ dropAllInverses (p :>: ps) =
   fromMaybe (p :>: ps') $ removeFL (invert p) ps'
 
 unravel :: PrimPatch prim => RepoPatchV1 prim wX wY -> [Sealed (FL prim wX)]
-unravel p = nub $ map (mapSeal (dropAllInverses . concatFL . mapFL_FL effect)) $
+unravel p = nubFL $ map (mapSeal (dropAllInverses . concatFL . mapFL_FL effect)) $
             getSupers $ map (mapSeal reverseRL) $ unseal (newUr p) $ unwind p
 
 getSupers :: PrimPatch prim

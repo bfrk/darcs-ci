@@ -376,8 +376,8 @@ instance ( Apply p
          , ShowContextPatch p
          ) =>
          ShowContextPatch (Named p) where
-    showContextPatch f (NamedP n d p) =
-        showNamedPrefix f n d <$> showContextPatch f p
+    showPatchWithContextAndApply f (NamedP n d p) =
+        showNamedPrefix f n d <$> showPatchWithContextAndApply f p
 
 data ShowDepsFormat = ShowDepsVerbose | ShowDepsSummary deriving (Eq)
 

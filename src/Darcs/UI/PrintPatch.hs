@@ -27,10 +27,15 @@ module Darcs.UI.PrintPatch
 
 import Darcs.Prelude
 
-import Darcs.Patch ( description, showContextPatch, content, summary )
+import Darcs.Patch ( description, content, summary )
 import Darcs.Patch.Apply ( ApplyState )
-import Darcs.Patch.ApplyMonad ( ApplyMonadTrans, runApplyMonad )
-import Darcs.Patch.Show ( ShowContextPatch, ShowPatch, ShowPatchFor(ForDisplay) )
+import Darcs.Patch.ApplyMonad ( ApplyMonadTrans )
+import Darcs.Patch.Show
+    ( ShowContextPatch
+    , ShowPatch
+    , ShowPatchFor(ForDisplay)
+    , showPatchWithContext
+    )
 import Darcs.UI.External ( viewDocWith )
 import Darcs.UI.Options.All ( Verbosity(..), WithSummary(..) )
 import Darcs.Util.Printer ( Doc, prefix, putDocLnWith, ($$) )
@@ -72,5 +77,4 @@ contextualPrintPatchWithPager
   -> p wX wY
   -> IO ()
 contextualPrintPatchWithPager s p = do
-    (doc, _) <- runApplyMonad (showContextPatch ForDisplay p) s
-    viewDocWith fancyPrinters doc
+    showPatchWithContext ForDisplay s p >>= viewDocWith fancyPrinters

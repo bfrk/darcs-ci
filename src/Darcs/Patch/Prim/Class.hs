@@ -125,7 +125,7 @@ class PrimDetails prim where
 
 class PrimShow prim where
    showPrim :: FileNameFormat -> prim wA wB -> Doc
-   showPrimCtx :: ApplyMonad  (ApplyState prim) m => FileNameFormat -> prim wA wB -> m Doc
+   showPrimWithContextAndApply :: ApplyMonad  (ApplyState prim) m => FileNameFormat -> prim wA wB -> m Doc
 
 class PrimRead prim where
    readPrim :: FileNameFormat -> Parser (Sealed (prim wX))

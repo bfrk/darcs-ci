@@ -131,6 +131,6 @@ instance (StorableId name, PrimDetails p, ShowPatchBasic p) => ShowPatch (PrimWi
   thing _ = "change"
 
 instance (StorableId name, ShowContextPatch p) => ShowContextPatch (PrimWithName name p) where
-  showContextPatch use (PrimWithName name p) = do
-    r <- showContextPatch use p
+  showPatchWithContextAndApply use (PrimWithName name p) = do
+    r <- showPatchWithContextAndApply use p
     return $ showId use name $$ r

@@ -18,10 +18,10 @@ import Darcs.UI.Commands.Apply ( applyCmd )
 import Darcs.UI.Commands.Log ( changelog, logInfoFL )
 import Darcs.UI.Commands.Pull ( pullCmd )
 import Darcs.UI.Commands.Util ( historyEditHelp, preselectPatches )
-import Darcs.UI.Completion ( fileArgs, prefArgs, noArgs )
+import Darcs.UI.Completion ( Pref(Repos), fileArgs, prefArgs, noArgs )
 import Darcs.UI.Flags
     ( DarcsFlag
-    , externalMerge, allowConflicts
+    , allowConflicts
     , diffingOpts
     , reorder, verbosity
     , useCache, wantGuiPause
@@ -48,10 +48,15 @@ import Darcs.Repository
     , tentativelyRemovePatches, readPatches
     , setTentativePending, unrecordedChanges, applyToWorking
     )
-import Darcs.Repository.Flags ( UpdatePending(..), ExternalMerge(..) )
+import Darcs.Repository.Flags
+    ( AllowConflicts(..)
+    , ResolveConflicts(..)
+    , UpdatePending(..)
+    )
 import Darcs.Repository.Merge ( tentativelyMergePatches )
 import Darcs.Repository.Rebase
-    ( readRebase
+    ( checkHasRebase
+    , readRebase
     , readTentativeRebase
     , writeTentativeRebase
     )
@@ -78,11 +83,13 @@ import Darcs.Patch.Rebase.Change
     , partitionUnconflicted
     , WithDroppedDeps(..), WDDNamed, commuterIdWDD
     , simplifyPush, simplifyPushes
+    , forceCommuteRebaseChange
     )
 import Darcs.Patch.Rebase.Fixup
     ( RebaseFixup(..)
     , commuteNamedFixup
     , flToNamesPrims
+    , primNamedToFixups
     )
 import Darcs.Patch.Rebase.Name ( RebaseName(..), commuteNameNamed )
 import Darcs.Patch.Rebase.Suspended ( Suspended(..), addToEditsToSuspended )
@@ -124,7 +131,7 @@ import Darcs.Patch.Witnesses.Ordered
     , (+>>+)
     )
 import Darcs.Patch.Witnesses.Sealed
-    ( Sealed(..), seal, unseal
+    ( Sealed(..), seal, unseal, mapSeal
     , Sealed2(..)
     )
 import Darcs.Patch.Witnesses.Unsafe ( unsafeCoerceP )
@@ -147,7 +154,7 @@ import Darcs.Util.SignalHandler ( withSignalsBlocked )
 import Darcs.Util.Tree ( Tree )
 
 import Control.Exception ( throwIO, try )
-import Control.Monad ( unless, when, void )
+import Control.Monad ( mplus, unless, when, void )
 import Control.Monad.Trans ( liftIO )
 import System.Exit ( ExitCode(ExitSuccess), exitSuccess )
 
@@ -238,9 +245,7 @@ suspend = DarcsCommand
 
 suspendCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 suspendCmd _ opts _args =
-    withRepoLock (useCache ? opts) (umask ? opts) $
-    StartRebaseJob $
-    \_repository -> do
+  withRepoLock (useCache ? opts) (umask ? opts) $ RepoJob $ \_repository -> do
     suspended <- readTentativeRebase _repository
     (_ :> candidates) <- preselectPatches opts _repository
     let direction = if changesReverse ? opts then Last else LastReversed
@@ -323,7 +328,6 @@ unsuspend = DarcsCommand
       ^ O.matchSeveralOrFirst
       ^ O.interactive
       ^ O.withSummary
-      ^ O.externalMerge
       ^ O.author
       ^ O.selectAuthor
       ^ O.patchname
@@ -365,7 +369,8 @@ reify = DarcsCommand
 unsuspendCmd :: String -> Bool -> (AbsolutePath, AbsolutePath)
              -> [DarcsFlag] -> [String] -> IO ()
 unsuspendCmd cmd reifyFixups _ opts _args =
-  withRepoLock (useCache ? opts) (umask ? opts) $ RebaseJob $ \_repository -> do
+  withRepoLock (useCache ? opts) (umask ? opts) $ RepoJob $ \_repository -> do
+    checkHasRebase _repository
     Items suspended <- readTentativeRebase _repository
 
     let matchFlags = O.matchSeveralOrFirst ? opts
@@ -412,16 +417,17 @@ unsuspendCmd cmd reifyFixups _ opts _args =
           reverseFL ps_to_unsuspend
 
     have_conflicts <- announceConflicts cmd (allowConflicts opts) conflicts
+    debugMessage "Working out conflict markup..."
     Sealed resolution <-
-        case (externalMerge ? opts, have_conflicts) of
-            (NoExternalMerge, _) ->
-                case O.conflictsYes ? opts of
-                    Just O.YesAllowConflicts ->
-                      return $ seal NilFL -- i.e. don't mark them
-                    _ -> return $ mangled conflicts
-            (_, False) -> return $ mangled conflicts
-            (YesExternalMerge _, True) ->
-                error $ "external resolution for "++cmd++" not implemented yet"
+      if have_conflicts then
+        case O.conflictsYes ? opts of
+          Just (YesAllowConflicts (ExternalMerge _)) ->
+            error $ "external resolution for "++cmd++" not implemented yet"
+          Just (YesAllowConflicts NoResolveConflicts) -> return $ seal NilFL
+          Just (YesAllowConflicts MarkConflicts) -> return $ mangled conflicts
+          Just NoAllowConflicts -> error "impossible" -- was handled in announceConflicts
+          Nothing -> error "impossible"
+      else return $ seal NilFL
 
     unrec <- unrecordedChanges (diffingOpts opts) _repository Nothing
 
@@ -528,9 +534,9 @@ inject = DarcsCommand
 
 injectCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 injectCmd _ opts _args =
-    withRepoLock (useCache ? opts) (umask ? opts) $
-    RebaseJob $
+  withRepoLock (useCache ? opts) (umask ? opts) $ RepoJob $
     \(_repository :: Repository 'RW p wU wR) -> do
+    checkHasRebase _repository
     Items selects <- readTentativeRebase _repository
 
     -- TODO this selection doesn't need to respect dependencies
@@ -603,7 +609,8 @@ obliterate = DarcsCommand
 
 obliterateCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 obliterateCmd _ opts _args =
-  withRepoLock (useCache ? opts) (umask ? opts) $ RebaseJob $ \_repository -> do
+  withRepoLock (useCache ? opts) (umask ? opts) $ RepoJob $ \_repository -> do
+    checkHasRebase _repository
     Items selects <- readTentativeRebase _repository
 
     -- TODO this selection doesn't need to respect dependencies
@@ -637,12 +644,31 @@ obliterateOne
   -> RebaseChange prim wX wY
   -> Sealed (FL (RebaseChange prim) wY)
   -> Sealed (FL (RebaseChange prim) wX)
-obliterateOne da (RC fs e) =
-  unseal (simplifyPushes da fs) .
-  -- since Named doesn't have any witness context for the
-  -- patch names, the AddName here will be inferred to be wX wX
-  unseal (simplifyPush da (NameFixup (AddName (patch2patchinfo e)))) .
-  unseal (simplifyPushes da (mapFL_FL PrimFixup (patchcontents e)))
+obliterateOne da rc = unseal (simplifyPushes da (rcToFixups rc))
+
+rcToFixups :: RebaseChange prim wX wY -> FL (RebaseFixup prim) wX wY
+rcToFixups (RC fs e) = fs +>+ primNamedToFixups e
+
+forceCommute
+  :: PrimPatch prim
+  => O.DiffAlgorithm
+  -> RebaseChange prim wX wY
+  -> RebaseChange prim wY wZ
+  -> Sealed (FL (RebaseChange prim) wZ)
+  -> Maybe (Sealed (FL (RebaseChange prim) wX))
+forceCommute da rc1 rc2 (Sealed rcs) =
+  do
+    rc2' :> rc1' <- commute (rc1 :> rc2)
+    return $ Sealed (rc2' :>: rc1' :>: rcs)
+  `mplus`
+  do
+    RC fs2' e2' :> RC fs1' e1' <- forceCommuteRebaseChange (rc1 :> rc2)
+    return $
+      unseal (simplifyPushes da fs2') $
+      mapSeal (RC NilFL e2' :>:) $
+      unseal (simplifyPushes da fs1') $
+      mapSeal (RC NilFL e1' :>:) $
+      Sealed rcs
 
 edit :: DarcsCommand
 edit = DarcsCommand
@@ -676,8 +702,8 @@ data Edit prim wX = Edit
 
 editCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 editCmd _ opts _args =
-  withRepoLock (useCache ? opts) (umask ? opts) $
-  RebaseJob $ \_repository -> do
+  withRepoLock (useCache ? opts) (umask ? opts) $ RepoJob $ \_repository -> do
+    checkHasRebase _repository
     Items items <- readTentativeRebase _repository
     let initial_state =
           EditState
@@ -762,8 +788,9 @@ interactiveEdit opts redos s@EditState{..} undos =
               , PromptChoice 'e' True reword "edit name and/or long comment (log)"
               , PromptChoice 's' (index > 0) squash "squash with previous patch"
               , PromptChoice 'i' can_inject inject' "inject fixups"
+              , PromptChoice 'c' (index > 0) comm "(force-)commute with previous patch)"
               -- TODO
-              -- , PromptChoice 'c' True ??? "select individual changes for editing"
+              -- , PromptChoice '???' True ??? "select individual changes for editing"
               ]
             choicesView =
               [ PromptChoice 'v' True view "view this patch in full"
@@ -806,6 +833,19 @@ interactiveEdit opts redos s@EditState{..} undos =
             reword = do
               Sealed todo'' <- rewordOne da p todo'
               edit' "reword" s { patches = Sealed (done :> todo'') }
+            comm = do
+              case done of
+                NilRL -> error "impossible"
+                done' :<: q ->
+                  case forceCommute da q p (Sealed todo') of
+                    Just (Sealed todo'') ->
+                      edit' "commute" s
+                        { patches = Sealed (done' :> todo'')
+                        , index = index - 1
+                        }
+                    Nothing -> do
+                      putStrLn "Failed to commute fixups backward, try inject first."
+                      prompt
             squash =
               case done of
                 NilRL -> error "impossible"
@@ -886,7 +926,7 @@ pull = DarcsCommand
     , commandExtraArgHelp = ["[REPOSITORY]..."]
     , commandCommand = pullCmd RebasePatchApplier
     , commandPrereq = amInHashedRepository
-    , commandCompleteArgs = prefArgs "repos"
+    , commandCompleteArgs = prefArgs Repos
     , commandArgdefaults = defaultRepo
     , commandOptions = pullOpts
     }
@@ -896,7 +936,6 @@ pull = DarcsCommand
       ^ O.reorder
       ^ O.interactive
       ^ O.conflictsYes
-      ^ O.externalMerge
       ^ O.testChanges
       ^ O.dryRunXml
       ^ O.withSummary
@@ -906,7 +945,6 @@ pull = DarcsCommand
       ^ O.diffAlgorithm
     pullAdvancedOpts
       = O.repoCombinator
-      ^ O.remoteRepos
       ^ O.setScriptsExecutable
       ^ O.umask
       ^ O.changesReverse
@@ -955,7 +993,7 @@ apply = DarcsCommand
 data RebasePatchApplier = RebasePatchApplier
 
 instance PatchApplier RebasePatchApplier where
-    repoJob RebasePatchApplier f = StartRebaseJob (f PatchProxy)
+    repoJob RebasePatchApplier f = RepoJob (f PatchProxy)
     applyPatches RebasePatchApplier PatchProxy = applyPatchesForRebaseCmd
 
 applyPatchesForRebaseCmd
@@ -1005,7 +1043,6 @@ applyPatchesForRebaseCmd cmdName opts _repository (Fork common us' to_be_applied
         tentativelyMergePatches
             _repository cmdName
             (allowConflicts opts)
-            (externalMerge ? opts)
             (wantGuiPause opts)
             (reorder ? opts) (diffingOpts opts)
             (Fork common (usOk +>+ usKeep) to_be_applied)
@@ -1057,8 +1094,8 @@ log = DarcsCommand
 
 logCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 logCmd _ opts _files =
-    withRepository (useCache ? opts) $
-    RebaseJob $ \_repository -> do
+    withRepository (useCache ? opts) $ RepoJob $ \_repository -> do
+        checkHasRebase _repository
         Items ps <- readRebase _repository
         let psToShow = mapFL_FL n2pia ps
         if isInteractive False opts
@@ -1098,9 +1135,8 @@ upgrade = DarcsCommand
 
 upgradeCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 upgradeCmd _ opts _args =
-  withRepoLock (useCache ? opts) (umask ? opts) $
-  OldRebaseJob $ \(_repo :: Repository 'RW p wU wR) ->
-    upgradeOldStyleRebase _repo
+  withRepoLock (useCache ? opts) (umask ? opts) $ OldRebaseJob $ \repo ->
+    upgradeOldStyleRebase repo
 
 {-
 TODO:

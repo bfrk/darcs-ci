@@ -44,7 +44,7 @@ echo yny | darcs amend --ask-deps
 # note: the last 'y' here is for the hijack prompt
 echo yyyy | darcs amend --ask-deps
 # unrecord
-echo yd | darcs unrecord -o
+echo yd | darcs unrecord
 # log --context
 darcs log --context > ctx
 # record

@@ -28,6 +28,7 @@ module Darcs.UI.Options.Util
     , parseIndexRangeArg
     , showIntArg
     , showIndexRangeArg
+    , withDashes
     -- * Re-exports
     , AbsolutePath
     , AbsolutePathOrStd
@@ -130,13 +131,17 @@ instance IsoFunctor (RawOptSpec f) where
   imap (Iso fw bw) (RawAbsPathOrStdArg s l mkF unF mkV unV n h) = RawAbsPathOrStdArg s l mkF unF (fw . mkV) (unV . bw) n h
   imap (Iso fw bw) (RawOptAbsPathArg s l mkF unF mkV unV d n h) = RawOptAbsPathArg s l mkF unF (fw . mkV) (unV . bw) d n h
 
--- | Get the long switch names from a raw option. Used to construct error messages.
+-- | Get the short and long switch names from a raw option.
+-- Used to construct error and warning messages.
 switchNames :: RawOptSpec f v -> [String]
-switchNames (RawNoArg _ l _ _ _)                 = l
-switchNames (RawStrArg _ l _ _ _ _ _ _)          = l
-switchNames (RawAbsPathArg _ l _ _ _ _ _ _)      = l
-switchNames (RawAbsPathOrStdArg _ l _ _ _ _ _ _) = l
-switchNames (RawOptAbsPathArg _ l _ _ _ _ _ _ _) = l
+switchNames (RawNoArg s l _ _ _)                 = withDashes s l
+switchNames (RawStrArg s l _ _ _ _ _ _)          = withDashes s l
+switchNames (RawAbsPathArg s l _ _ _ _ _ _)      = withDashes s l
+switchNames (RawAbsPathOrStdArg s l _ _ _ _ _ _) = withDashes s l
+switchNames (RawOptAbsPathArg s l _ _ _ _ _ _ _) = withDashes s l
+
+withDashes :: [Char] -> [String] -> [String]
+withDashes short long = map (\c -> ['-',c]) short ++ map ("--" ++) long
 
 -- | Given a list of 'RawOptSpec', find all flags that match a given value.
 rawUnparse :: Eq v => [RawOptSpec f v] -> v -> [f]
@@ -197,7 +202,11 @@ withDefault dval ropts = OptSpec {..} where
   ocheck fs = case map snd (rawParse ropts fs) of
     [] -> [] -- error "this should not happen"
     [_] -> []
-    ropts' -> ["conflicting options: " ++ intercalate ", " (map (intercalate "/" . switchNames) ropts')]
+    ropts' ->
+      [ OptError $
+        "conflicting options: " ++
+        intercalate ", " (map (intercalate "/" . switchNames) ropts')
+      ]
   odesc = map (addDefaultHelp dval) ropts
 
 -- * Simple primitive scalar valued options
@@ -273,9 +282,14 @@ deprecated :: [String] -> [RawOptSpec Flag v] -> PrimDarcsOption ()
 deprecated comments ropts = OptSpec {..} where
   ounparse k _ = k []
   oparse k _ = k ()
-  ocheck fs = case map snd (rawParse ropts fs) of
-    [] -> []
-    ropts' -> ("deprecated option(s): " ++ intercalate ", " (concatMap switchNames ropts')) : comments
+  ocheck fs =
+    case map snd (rawParse ropts fs) of
+      [] -> []
+      ropts' ->
+        map OptWarning $
+          ( "deprecated option(s): " ++
+            intercalate ", " (concatMap switchNames ropts')
+          ) : comments
   odesc = map noDefaultHelp ropts
   noDefaultHelp (RawNoArg s l f _ h) = noArg s l f h
   noDefaultHelp (RawStrArg s l mkF _ _ _ a h) = strArg s l mkF a h

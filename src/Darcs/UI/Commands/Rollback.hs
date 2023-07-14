@@ -30,7 +30,6 @@ import Darcs.Patch.Set ( emptyPatchSet, patchSet2FL )
 import Darcs.Patch.Split ( reversePrimSplitter )
 import Darcs.Patch.Witnesses.Ordered ( Fork(..), FL(..), (:>)(..), nullFL )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(..) )
-import Darcs.Repository.Flags ( AllowConflicts(..), Reorder(..) )
 import Darcs.Repository ( withRepoLock, RepoJob(..),
                           applyToWorking, readPatches,
                           finalizeRepositoryChanges, addToPending,
@@ -40,7 +39,7 @@ import Darcs.UI.Commands ( DarcsCommand(..), withStdOpts, nodefaults, setEnvDarc
 import Darcs.UI.Commands.Util ( announceFiles, getLastPatches )
 import Darcs.UI.Completion ( knownFileArgs )
 import Darcs.UI.Flags ( DarcsFlag, verbosity, umask, useCache,
-                        externalMerge, wantGuiPause, diffingOpts,
+                        wantGuiPause, diffingOpts,
                         diffAlgorithm, isInteractive, pathSetFromArgs )
 import Darcs.UI.Options ( parseFlags, (?), (^) )
 import qualified Darcs.UI.Options.All as O
@@ -137,9 +136,9 @@ rollbackCmd fps opts args = withRepoLock (useCache ? opts)
         -- only store effects by adding them to pending and working)
         rbp <- n2pia `fmap` anonymous (invert to_undo)
         Sealed pw <- considerMergeToWorking _repo "rollback"
-                         YesAllowConflictsAndMark
-                         (externalMerge ? opts) (wantGuiPause opts)
-                         NoReorder
+                         (O.YesAllowConflicts O.MarkConflicts)
+                         (wantGuiPause opts)
+                         O.NoReorder
                          (diffingOpts opts)
                          (Fork allpatches NilFL (rbp :>: NilFL))
         addToPending _repo (diffingOpts opts) pw

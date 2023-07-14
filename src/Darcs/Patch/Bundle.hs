@@ -43,12 +43,8 @@ import qualified Data.ByteString.Char8 as BC
     , pack
     )
 
-import Darcs.Patch
-    ( RepoPatch
-    , ApplyState
-    , showPatch
-    , showContextPatch
-    )
+import Darcs.Patch.Apply ( ApplyState, ObjectIdOfPatch )
+import Darcs.Patch.ApplyMonad ( ApplyMonadTrans )
 import Darcs.Patch.Bracketed ( Bracketed, unBracketedFL )
 import Darcs.Patch.Commute ( Commute, commuteFL )
 import Darcs.Patch.Depends ( contextPatches, splitOnTag )
@@ -61,6 +57,7 @@ import Darcs.Patch.Info
     , showPatchInfo
     )
 import Darcs.Patch.Named ( Named, fmapFL_Named )
+import Darcs.Patch.Object ( ObjectId )
 import Darcs.Patch.PatchInfoAnd
     ( PatchInfoAnd
     , info
@@ -70,6 +67,8 @@ import Darcs.Patch.PatchInfoAnd
     )
 import Darcs.Patch.Permutations ( genCommuteWhatWeCanRL )
 import Darcs.Patch.Read ( readPatch' )
+import Darcs.Patch.RepoPatch ( RepoPatch )
+import Darcs.Patch.Show ( showPatch, showPatchWithContext )
 import Darcs.Patch.Set
     ( PatchSet(..)
     , SealedPatchSet
@@ -113,8 +112,6 @@ import Darcs.Util.Printer
     , vcat
     , vsep
     )
-import Darcs.Util.Tree( Tree )
-import Darcs.Util.Tree.Monad( virtualTreeIO )
 
 
 -- | A 'Bundle' is a context together with some patches. The context
@@ -142,14 +139,17 @@ hashBundle to_be_sent =
     sha1Show $ sha1PS $ renderPS $
         vcat (mapFL (showPatch ForStorage) to_be_sent) <> newline
 
-makeBundle :: (ApplyState p ~ Tree, RepoPatch p) => Maybe (Tree IO)
-           -> PatchSet p wStart wX -> FL (Named p) wX wY -> IO Doc
-makeBundle state repo to_be_sent
+makeBundle
+  :: (RepoPatch p, ApplyMonadTrans (ApplyState p) IO, ObjectId (ObjectIdOfPatch p))
+  => Maybe (ApplyState p IO)
+  -> PatchSet p wStart wX
+  -> FL (Named p) wX wY
+  -> IO Doc
+makeBundle mstate repo to_be_sent
   | _ :> context <- contextPatches repo =
     format context <$>
-      case state of
-        Just tree ->
-          fst <$> virtualTreeIO (showContextPatch ForStorage to_be_sent) tree
+      case mstate of
+        Just state -> showPatchWithContext ForStorage state to_be_sent
         Nothing -> return (vsep $ mapFL (showPatch ForStorage) to_be_sent)
   where
     format context patches =

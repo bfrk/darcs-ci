@@ -21,13 +21,14 @@ module Darcs.Patch.Show
      , ShowPatchFor(..)
      , ShowPatch(..)
      , ShowContextPatch(..)
+     , showPatchWithContext
      , formatFileName
      ) where
 
 import Darcs.Prelude
 
 import Darcs.Patch.Apply ( ApplyState )
-import Darcs.Patch.ApplyMonad ( ApplyMonad )
+import Darcs.Patch.ApplyMonad ( ApplyMonad, ApplyMonadTrans, evalApplyMonad )
 import Darcs.Patch.Object ( formatFileName )
 import Darcs.Patch.Witnesses.Ordered ( FL, mapFL )
 
@@ -42,6 +43,17 @@ displayPatch p = showPatch ForDisplay p
 class ShowPatchBasic p where
     showPatch :: ShowPatchFor -> p wX wY -> Doc
 
+-- | Like 'showPatchWithContextAndApply' but without applying the patch
+-- in the monad @m@.
+showPatchWithContext
+    :: (ApplyMonadTrans (ApplyState p) m, ShowContextPatch p)
+    => ShowPatchFor
+    -> ApplyState p m
+    -> p wX wY
+    -> m Doc
+showPatchWithContext f st p =
+    evalApplyMonad (showPatchWithContextAndApply f p) st
+
 class ShowPatchBasic p => ShowContextPatch p where
     -- | Show a patch with context lines added, as diff -u does. Thus, it
     -- differs from showPatch only for hunks. It is used for instance before
@@ -51,8 +63,11 @@ class ShowPatchBasic p => ShowContextPatch p where
     -- Note that this applies the patch in the 'ApplyMonad' given by the
     -- context. This is done in order to simplify showing multiple patches in a
     -- series, since each patch may change the context lines for later changes.
-    showContextPatch :: (ApplyMonad (ApplyState p) m)
-                     => ShowPatchFor -> p wX wY -> m Doc
+    --
+    -- For a version that does not apply the patch see 'showPatchWithContext'.
+    showPatchWithContextAndApply
+        :: (ApplyMonad (ApplyState p) m)
+        => ShowPatchFor -> p wX wY -> m Doc
 
 -- | This class is used only for user interaction, not for storage. The default
 -- implementations for 'description' and 'content' are suitable only for

@@ -75,7 +75,7 @@ instance ShowPatchBasic Prim where
   showPatch fmt = showPrim (fileNameFormat fmt) . unPrim
 
 instance ShowContextPatch Prim where
-  showContextPatch fmt = showPrimCtx (fileNameFormat fmt) . unPrim
+  showPatchWithContextAndApply fmt = showPrimWithContextAndApply (fileNameFormat fmt) . unPrim
 
 instance ShowPatch Prim where
   summary = plainSummaryPrim . unPrim

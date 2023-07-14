@@ -37,7 +37,7 @@ import Darcs.Repository
     )
 import Darcs.Repository.Flags
     ( AllowConflicts(..)
-    , ExternalMerge(..)
+    , ResolveConflicts(..)
     , Reorder(..)
     , WantGuiPause(..)
     )
@@ -124,8 +124,8 @@ unrevertCmd _ opts [] =
   Sealed them <- readUnrevert us
   unrecorded <- unrecordedChanges (diffingOpts opts) _repository Nothing
   Sealed pw <- considerMergeToWorking _repository "unrevert"
-                      YesAllowConflictsAndMark
-                      NoExternalMerge NoWantGuiPause
+                      (YesAllowConflicts MarkConflicts)
+                      NoWantGuiPause
                       NoReorder
                       (diffingOpts opts)
                       (findCommon us them)

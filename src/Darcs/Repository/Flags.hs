@@ -15,13 +15,12 @@ module Darcs.Repository.Flags
     , RunTest (..)
     , SetScriptsExecutable (..)
     , LeaveTestDir (..)
-    , RemoteRepos (..)
     , SetDefault (..)
     , InheritDefault (..)
     , UseIndex (..)
     , CloneKind (..)
     , AllowConflicts (..)
-    , ExternalMerge (..)
+    , ResolveConflicts (..)
     , WorkRepo (..)
     , WantGuiPause (..)
     , WithPatchIndex (..)
@@ -92,9 +91,6 @@ data SetScriptsExecutable = YesSetScriptsExecutable | NoSetScriptsExecutable
 data LeaveTestDir = YesLeaveTestDir | NoLeaveTestDir
     deriving ( Eq, Show )
 
-data RemoteRepos = RemoteRepos [String]
-    deriving ( Eq, Show )
-
 data SetDefault = YesSetDefault Bool | NoSetDefault Bool
     deriving ( Eq, Show )
 
@@ -109,10 +105,10 @@ data CloneKind = LazyClone       -- ^Just copy pristine and inventories
                | CompleteClone   -- ^Same as Normal but omit telling user they can interrumpt
     deriving ( Eq, Show )
 
-data AllowConflicts = NoAllowConflicts | YesAllowConflicts | YesAllowConflictsAndMark
+data AllowConflicts = NoAllowConflicts | YesAllowConflicts ResolveConflicts
     deriving ( Eq, Show )
 
-data ExternalMerge = YesExternalMerge String | NoExternalMerge
+data ResolveConflicts = NoResolveConflicts | MarkConflicts | ExternalMerge String
     deriving ( Eq, Show )
 
 data WorkRepo = WorkRepoDir String | WorkRepoPossibleURL String | WorkRepoCurrentDir

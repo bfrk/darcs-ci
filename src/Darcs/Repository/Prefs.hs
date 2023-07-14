@@ -16,19 +16,23 @@
 --  Boston, MA 02110-1301, USA.
 
 module Darcs.Repository.Prefs
-    ( addToPreflist
+    ( Pref(..)
+    , addToPreflist
     , deleteSources
     , getPreflist
     , setPreflist
     , getGlobal
+
     , environmentHelpHome
-    , defaultrepo
     , getDefaultRepo
     , addRepoSource
+
+    -- these are for the setpref command i.e. contents of _darcs/prefs/prefs
     , getPrefval
     , setPrefval
     , changePrefval
     , defPrefval
+
     , writeDefaultPrefs
     , isBoring
     , FileType(..)
@@ -40,7 +44,7 @@ module Darcs.Repository.Prefs
     , getMotd
     , showMotd
     , prefsUrl
-    , prefsDirPath
+    , prefsDirPath --re-export
     , prefsFilePath
     , getPrefLines -- exported for darcsden, don't remove
     -- * documentation of prefs files
@@ -51,7 +55,7 @@ import Darcs.Prelude
 
 import Control.Exception ( catch )
 import Control.Monad ( unless, when, liftM )
-import Data.Char ( toUpper )
+import Data.Char ( toLower, toUpper )
 import Data.List ( isPrefixOf, union, lookup )
 import Data.Maybe
     ( catMaybes
@@ -84,6 +88,7 @@ import Darcs.Util.Cache
     , CacheType(..)
     , WritableOrNot(..)
     , mkCache
+    , parseCacheLoc
     )
 import Darcs.Util.File ( Cachable(..), fetchFilePS, gzFetchFilePS )
 import Darcs.Repository.Flags
@@ -91,17 +96,15 @@ import Darcs.Repository.Flags
     , DryRun (..)
     , SetDefault (..)
     , InheritDefault (..)
-    , RemoteRepos (..)
     , WithPrefsTemplates(..)
     )
+import Darcs.Repository.Paths ( prefsDirPath )
 import Darcs.Util.Lock( readTextFile, writeTextFile )
-import Darcs.Util.Exception ( catchall )
+import Darcs.Util.Exception ( catchall, ifIOError )
 import Darcs.Util.Global ( darcsdir, debugMessage )
 import Darcs.Util.Path
     ( AbsoluteOrRemotePath
-    , AbsolutePath
     , getCurrentDirectory
-    , ioAbsolute
     , toFilePath
     , toPath
     )
@@ -116,9 +119,9 @@ osx     = os == "darwin"
 
 writeDefaultPrefs :: WithPrefsTemplates -> IO ()
 writeDefaultPrefs withPrefsTemplates = do
-    setPreflist "boring" $ defaultBoring withPrefsTemplates
-    setPreflist "binaries" $ defaultBinaries withPrefsTemplates
-    setPreflist "motd" []
+    setPreflist Boring $ defaultBoring withPrefsTemplates
+    setPreflist Binaries $ defaultBinaries withPrefsTemplates
+    setPreflist Motd []
 
 defaultBoring :: WithPrefsTemplates -> [String]
 defaultBoring withPrefsTemplates =
@@ -264,11 +267,11 @@ environmentHelpHome =
       ]
     )
 
-getGlobal :: String -> IO [String]
+getGlobal :: Pref -> IO [String]
 getGlobal f = do
     dir <- globalPrefsDir
     case dir of
-        (Just d) -> getPreffile $ d </> f
+        (Just d) -> getPreffile $ d </> formatPref f
         Nothing -> return []
 
 -- |osxCacheDir assumes @~/Library/Caches/@ exists.
@@ -320,8 +323,9 @@ tryMakeBoringRegexp input = regex `C.catch` handleBadRegex
 boringRegexps :: IO [Regex]
 boringRegexps = do
     borefile <- maybeToList <$> getPrefval "boringfile"
-    localBores <- concat <$> safeGetPrefLines `mapM` (borefile ++ [darcsdir ++ "/prefs/boring"])
-    globalBores <- getGlobal "boring"
+    localBores <-
+      concat <$> safeGetPrefLines `mapM` (borefile ++ [prefsFile Boring])
+    globalBores <- getGlobal Boring
     liftM catMaybes $ mapM tryMakeBoringRegexp $ localBores ++ globalBores
   where
     safeGetPrefLines fileName = getPrefLines fileName `catchall` return []
@@ -421,8 +425,9 @@ binariesFileInternalHelp =
 filetypeFunction :: IO (FilePath -> FileType)
 filetypeFunction = do
     binsfile <- maybeToList <$> getPrefval "binariesfile"
-    bins <- concat <$> safeGetPrefLines `mapM` (binsfile ++ [darcsdir ++ "/prefs/binaries"])
-    gbs <- getGlobal "binaries"
+    bins <-
+      concat <$> safeGetPrefLines `mapM` (binsfile ++ [prefsFile Binaries])
+    gbs <- getGlobal Binaries
     let binaryRegexes = map mkRegex (bins ++ gbs)
         isBinary f = any (\r -> isJust $ matchRegex r f) binaryRegexes
         ftf f = if isBinary $ doNormalise f then BinaryFile else TextFile
@@ -437,40 +442,59 @@ findPrefsDirectory :: IO (Maybe String)
 findPrefsDirectory = do
     inDarcsRepo <- doesDirectoryExist darcsdir
     return $ if inDarcsRepo
-                 then Just $ darcsdir ++ "/prefs/"
+                 then Just prefsDirPath
                  else Nothing
 
 withPrefsDirectory :: (String -> IO ()) -> IO ()
 withPrefsDirectory job = findPrefsDirectory >>= maybe (return ()) job
 
-addToPreflist :: String -> String -> IO ()
-addToPreflist pref value = withPrefsDirectory $ \prefs -> do
-    hasprefs <- doesDirectoryExist prefs
-    unless hasprefs $ createDirectory prefs
-    pl <- getPreflist pref
-    writeTextFile (prefs ++ pref) . unlines $ union [value] pl
+data Pref
+  = Author
+  | Binaries
+  | Boring
+  | Defaultrepo
+  | Defaults
+  | Email
+  | Motd
+  | Post
+  | Prefs
+  | Repos
+  | Sources
+  deriving (Eq, Ord, Read, Show)
 
-getPreflist :: String -> IO [String]
-getPreflist p = findPrefsDirectory >>=
-                maybe (return []) (\prefs -> getPreffile $ prefs ++ p)
+formatPref :: Pref -> String
+formatPref = map toLower . show
+
+addToPreflist :: Pref -> String -> IO ()
+addToPreflist pref value =
+  withPrefsDirectory $ \prefs_dir -> do
+    hasprefs <- doesDirectoryExist prefs_dir
+    unless hasprefs $ createDirectory prefs_dir
+    pl <- getPreflist pref
+    writeTextFile (prefs_dir </> formatPref pref) . unlines $ union [value] pl
+
+getPreflist :: Pref -> IO [String]
+getPreflist pref =
+  findPrefsDirectory >>=
+  maybe (return []) (\prefs_dir -> getPreffile $ prefs_dir </> formatPref pref)
 
 getPreffile :: FilePath -> IO [String]
 getPreffile f = do
     hasprefs <- doesFileExist f
     if hasprefs then getPrefLines f else return []
 
-setPreflist :: String -> [String] -> IO ()
-setPreflist p ls = withPrefsDirectory $ \prefs -> do
-    haspref <- doesDirectoryExist prefs
+setPreflist :: Pref -> [String] -> IO ()
+setPreflist p ls = withPrefsDirectory $ \prefs_dir -> do
+    haspref <- doesDirectoryExist prefs_dir
     when haspref $
-        writeTextFile (prefs ++ p) (unlines ls)
+        writeTextFile (prefs_dir </> formatPref p) (unlines ls)
 
 defPrefval :: String -> String -> IO String
 defPrefval p d = fromMaybe d `fmap` getPrefval p
 
 getPrefval :: String -> IO (Maybe String)
 getPrefval p = do
-    pl <- getPreflist prefsDir
+    pl <- getPreflist Prefs
     return $ case map snd $ filter ((== p) . fst) $ map (break (== ' ')) pl of
                  [val] -> case words val of
                     [] -> Nothing
@@ -479,8 +503,8 @@ getPrefval p = do
 
 setPrefval :: String -> String -> IO ()
 setPrefval p v = do
-    pl <- getPreflist prefsDir
-    setPreflist prefsDir $ updatePrefVal pl p v
+    pl <- getPreflist Prefs
+    setPreflist Prefs $ updatePrefVal pl p v
 
 updatePrefVal :: [String] -> String -> String -> [String]
 updatePrefVal prefList p newVal =
@@ -488,65 +512,35 @@ updatePrefVal prefList p newVal =
 
 changePrefval :: String -> String -> String -> IO ()
 changePrefval p f t = do
-    pl <- getPreflist prefsDir
+    pl <- getPreflist Prefs
     ov <- getPrefval p
     let newval = maybe t (\old -> if old == f then t else old) ov
-    setPreflist prefsDir $ updatePrefVal pl p newval
-
-fixRepoPath :: String -> IO FilePath
-fixRepoPath p
-    | isValidLocalPath p = toFilePath `fmap` ioAbsolute p
-    | otherwise = return p
-
-defaultrepo :: RemoteRepos -> AbsolutePath -> [String] -> IO [String]
-defaultrepo (RemoteRepos rrepos) _ [] =
-  do case rrepos of
-       [] -> maybeToList `fmap` getDefaultRepo
-       rs -> mapM fixRepoPath rs
-defaultrepo _ _ r = return r
+    setPreflist Prefs $ updatePrefVal pl p newval
 
 getDefaultRepo :: IO (Maybe String)
-getDefaultRepo = listToMaybe <$> getPreflist defaultRepoPref
-
-defaultRepoPref :: String
-defaultRepoPref = "defaultrepo"
+getDefaultRepo = listToMaybe <$> getPreflist Defaultrepo
 
 -- | addRepoSource adds a new entry to _darcs/prefs/repos and sets it as default
 --   in _darcs/prefs/defaultrepo, unless --no-set-default or --dry-run is passed,
 --   or it is the same repository as the current one.
 addRepoSource :: String
               -> DryRun
-              -> RemoteRepos
               -> SetDefault
               -> InheritDefault
-              -> Bool
               -> IO ()
-addRepoSource r isDryRun (RemoteRepos rrepos) setDefault inheritDefault isInteractive = (do
+addRepoSource r isDryRun setDefault inheritDefault =
+  ifIOError () $ do
     olddef <- getDefaultRepo
     newdef <- newDefaultRepo
-    let shouldDoIt = null noSetDefault && greenLight
-        greenLight = shouldAct && not rIsTmp && olddef /= Just newdef
-    -- the nuance here is that we should only notify when the reason we're not
-    -- setting default is the --no-set-default flag, not the various automatic
-    -- show stoppers
-    if shouldDoIt
-       then setPreflist defaultRepoPref [newdef]
-       else when (True `notElem` noSetDefault && greenLight && inheritDefault == NoInheritDefault) $
-                putStr . unlines $ setDefaultMsg
-    addToPreflist "repos" newdef) `catchall` return ()
+    let shouldDoIt =
+          noSetDefault && isDryRun == NoDryRun && olddef /= Just newdef
+    when shouldDoIt $ setPreflist Defaultrepo [newdef]
+    addToPreflist Repos newdef
   where
-    shouldAct = isDryRun == NoDryRun
-    rIsTmp = r `elem` rrepos
-    noSetDefault = case setDefault of
-                       NoSetDefault x -> [x]
-                       _ -> []
-    setDefaultMsg =
-        [ "By the way, to change the default remote repository to"
-        , "      " ++ r ++ ","
-        , "you can " ++
-          (if isInteractive then "quit now and " else "") ++
-          "issue the same command with the --set-default flag."
-        ]
+    noSetDefault =
+      case setDefault of
+        NoSetDefault _ -> False
+        _ -> True
     newDefaultRepo :: IO String
     newDefaultRepo = case inheritDefault of
       YesInheritDefault -> getRemoteDefaultRepo
@@ -562,7 +556,7 @@ addRepoSource r isDryRun (RemoteRepos rrepos) setDefault inheritDefault isIntera
           sameOwner r "." >>= \case
             True -> do
               defs <-
-                getPreffile (r </> darcsdir </> "prefs/defaultrepo")
+                getPreffile (prefsUrl r Defaultrepo)
                 `catchIOError`
                 const (return [r])
               case defs of
@@ -581,20 +575,20 @@ addRepoSource r isDryRun (RemoteRepos rrepos) setDefault inheritDefault isIntera
 --   Used when cloning to a ssh destination.
 --   Assume the current working dir is the repository.
 deleteSources :: IO ()
-deleteSources = do let prefsdir = darcsdir ++ "/prefs/"
-                   removeFileMayNotExist (prefsdir ++ "sources")
-                   removeFileMayNotExist (prefsdir ++ "repos")
+deleteSources = do
+  removeFileMayNotExist (prefsFile Sources)
+  removeFileMayNotExist (prefsFile Repos)
 
 getCaches :: UseCache -> Maybe AbsoluteOrRemotePath -> IO Cache
 getCaches useCache from = do
-    here <- parsehs `fmap` getPreffile sourcesFile
+    here <- parsehs `fmap` getPreflist Sources
     globalcachedir <- globalCacheDir
     let globalcache = if nocache
                           then []
                           else case globalcachedir of
                               Nothing -> []
                               Just d -> [Cache Directory Writable d]
-    globalsources <- parsehs `fmap` getGlobal "sources"
+    globalsources <- parsehs `fmap` getGlobal Sources
     thisdir <- getCurrentDirectory
     let thisrepo = [Cache Repo Writable $ toFilePath thisdir]
     from_cache <-
@@ -603,7 +597,7 @@ getCaches useCache from = do
         Just repoloc -> do
           there <- (parsehs . lines . BC.unpack)
                  `fmap`
-                 (gzFetchFilePS (toPath repoloc </> sourcesFile) Cachable
+                 (gzFetchFilePS (prefsUrl (toPath repoloc) Sources) Cachable
                   `catchall` return B.empty)
           let thatrepo = [Cache Repo NotWritable (toPath repoloc)]
               externalSources =
@@ -613,25 +607,17 @@ getCaches useCache from = do
           return (thatrepo ++ externalSources)
     return $ mkCache (thisrepo ++ here ++ globalcache ++ globalsources ++ from_cache)
   where
-    sourcesFile = darcsdir ++ "/prefs/sources"
-
-    parsehs = mapMaybe readln . noncomments
-
-    readln l
-        | "repo:" `isPrefixOf` l = Just (Cache Repo NotWritable (drop 5 l))
-        | nocache = Nothing
-        | "cache:" `isPrefixOf` l = Just (Cache Directory Writable (drop 6 l))
-        | "readonly:" `isPrefixOf` l =
-            Just (Cache Directory NotWritable (drop 9 l))
-        | otherwise = Nothing
-
+    parsehs = filter by . mapMaybe parseCacheLoc . noncomments
+    by (Cache Directory _ _) = not nocache
+    by (Cache Repo Writable _) = False -- ignore thisrepo: entries
+    by _ = True
     nocache = useCache == NoUseCache
 
 -- | Fetch and return the message of the day for a given repository.
 getMotd :: String -> IO B.ByteString
 getMotd repo = fetchFilePS motdPath (MaxAge 600) `catchall` return B.empty
   where
-    motdPath = repo ++ "/" ++ darcsdir ++ "/prefs/motd"
+    motdPath = prefsUrl repo Motd
 
 -- | Display the message of the day for a given repository,
 showMotd :: String -> IO ()
@@ -641,17 +627,14 @@ showMotd repo = do
         B.hPut stdout motd
         putStrLn $ replicate 22 '*'
 
-prefsUrl :: FilePath -> String
-prefsUrl r = r ++ "/"++darcsdir++"/prefs"
+prefsUrl :: String -> Pref -> String
+prefsUrl repourl pref = repourl </> prefsDirPath </> formatPref pref
 
-prefsDir :: FilePath
-prefsDir = "prefs"
-
-prefsDirPath :: FilePath
-prefsDirPath = darcsdir </> prefsDir
+prefsFile :: Pref -> FilePath
+prefsFile pref = prefsDirPath </> formatPref pref
 
 prefsFilePath :: FilePath
-prefsFilePath = prefsDirPath </> "prefs"
+prefsFilePath = prefsFile Prefs
 
 prefsFilesHelp :: [(String,String)]
 prefsFilesHelp  =

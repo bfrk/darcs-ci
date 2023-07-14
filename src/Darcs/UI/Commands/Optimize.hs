@@ -36,7 +36,7 @@ import Darcs.UI.Commands ( DarcsCommand(..), nodefaults
                          , amInHashedRepository, amInRepository, putInfo
                          , normalCommand, withStdOpts )
 import Darcs.UI.Completion ( noArgs )
-import Darcs.Repository.Prefs ( getPreflist, globalCacheDir )
+import Darcs.Repository.Prefs ( Pref(Defaultrepo), getPreflist, globalCacheDir )
 import Darcs.Repository
     ( Repository
     , AccessType(RW)
@@ -112,7 +112,7 @@ import Darcs.Util.Cache ( allHashedDirs, bucketFolder, cleanCaches, mkDirCache )
 import Darcs.Repository.Format
     ( identifyRepoFormat
     , createRepoFormat
-    , writeRepoFormat
+    , unsafeWriteRepoFormat
     , formatHas
     , RepoProperty ( HashedInventory )
     )
@@ -421,7 +421,7 @@ optimizeHelpRelink =
 doRelink :: [DarcsFlag] -> IO ()
 doRelink opts =
     do let some_siblings = O.siblings ? opts
-       defrepolist <- getPreflist "defaultrepo"
+       defrepolist <- getPreflist Defaultrepo
        let siblings = map toFilePath some_siblings ++ defrepolist
        if null siblings
           then putInfo opts "No siblings -- no relinking done."
@@ -477,7 +477,7 @@ actuallyUpgradeFormat _opts _repository = do
   applyToTentativePristine (unsafeCoerceR _repository) (mkInvertible patchesToApply)
   -- now make it official
   finalizeTentativeChanges _repository
-  writeRepoFormat (createRepoFormat PatchFormat1 WithWorkingDir) formatPath
+  unsafeWriteRepoFormat (createRepoFormat PatchFormat1 WithWorkingDir) formatPath
   -- clean out old-fashioned junk
   debugMessage "Cleaning out old-fashioned repository files..."
   removeFileMayNotExist oldInventoryPath
