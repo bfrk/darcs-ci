@@ -41,14 +41,15 @@ import Darcs.Patch
     , effect
     , listConflictedFiles )
 import Darcs.Patch.Apply ( ApplyState )
+import Darcs.Patch.Depends ( slightlyOptimizePatchset )
 import Darcs.Patch.Invertible ( mkInvertible )
 import Darcs.Patch.Named ( patchcontents, anonymous )
 import Darcs.Patch.PatchInfoAnd ( PatchInfoAnd, n2pia, hopefully )
 import Darcs.Patch.Progress( progressFL, progressRL )
-import Darcs.Patch.Set ( PatchSet, Origin, patchSet2RL )
+import Darcs.Patch.Set ( PatchSet, Origin, appendPSFL, patchSet2RL )
 import Darcs.Patch.Witnesses.Ordered
     ( FL(..), RL(..), Fork(..), (:\/:)(..), (:/\:)(..), (+>+), (+<<+)
-    , mapFL_FL, concatFL, reverseFL )
+    , lengthFL, mapFL_FL, concatFL, reverseFL )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(Sealed), seal )
 
 import Darcs.Repository.Flags
@@ -70,10 +71,11 @@ import Darcs.Repository.Pristine
 import Darcs.Repository.InternalTypes ( AccessType(RW), Repository, repoLocation )
 import Darcs.Repository.Pending ( setTentativePending )
 import Darcs.Repository.Resolution
-    ( externalResolution
-    , standardResolution
-    , StandardResolution(..)
+    ( StandardResolution(..)
     , announceConflicts
+    , externalResolution
+    , patchsetConflictResolutions
+    , standardResolution
     )
 import Darcs.Repository.State ( unrecordedChanges, readUnrecorded )
 
@@ -242,10 +244,21 @@ tentativelyMergePatches_ mc _repo cmd allowConflicts wantGuiPause
     anonpw <- n2pia `fmap` anonymous pw
     pw' :/\: them'' <- return $ merge (them' :\/: anonpw :>: NilFL)
     let them''content = concatFL $ mapFL_FL (patchcontents . hopefully) them''
+        no_conflicts_in_them =
+          null $ conflictedPaths $ patchsetConflictResolutions $
+          slightlyOptimizePatchset (appendPSFL context them)
         conflicts =
-          standardResolution
-            (patchSet2RL context +<<+ us :<: anonpw)
-            (progressRL "Examining patches for conflicts" $ reverseFL them'')
+          let us'' = us' +>+ pw' in
+          -- This optimization is valid only if @them@ didn't have
+          -- (unresolved) conflicts in the first place
+          if lengthFL us'' < lengthFL them'' && no_conflicts_in_them then
+            standardResolution
+              (patchSet2RL context +<<+ them)
+              (progressRL "Examining patches for conflicts" $ reverseFL us'')
+          else
+            standardResolution
+              (patchSet2RL context +<<+ us :<: anonpw)
+              (progressRL "Examining patches for conflicts" $ reverseFL them'')
 
     debugMessage "Checking for conflicts..."
     when (allowConflicts == YesAllowConflicts MarkConflicts) $

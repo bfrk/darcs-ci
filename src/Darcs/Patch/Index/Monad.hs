@@ -73,6 +73,7 @@ withPatchMods (FMM m) fps =
 -- These instances are defined to be used only with
 -- apply.
 instance ApplyMonad Tree FileModMonad where
+    type ApplyMonadBase FileModMonad = FileModMonad
     readFilePS = error "readFilePS FileModMonad"
 
 instance ApplyMonadTree FileModMonad where

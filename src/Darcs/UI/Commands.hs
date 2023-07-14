@@ -53,6 +53,7 @@ module Darcs.UI.Commands
 
 import Control.Monad ( when, unless )
 import Data.List ( sort, isPrefixOf )
+import Data.Maybe ( maybeToList )
 import System.Console.GetOpt ( OptDescr )
 import System.IO ( stderr )
 import System.IO.Error ( catchIOError )
@@ -70,15 +71,15 @@ import Darcs.Patch.Witnesses.Ordered ( FL, mapFL )
 import qualified Darcs.Repository as R ( amInHashedRepository, amInRepository
                                        , amNotInRepository, findRepository )
 import Darcs.Repository.Flags ( WorkRepo(..) )
-import Darcs.Repository.Prefs ( defaultrepo )
+import Darcs.Repository.Prefs ( getDefaultRepo )
 
 import Darcs.UI.Options
     ( DarcsOptDescr
     , DarcsOption
+    , OptMsg
     , defaultFlags
     , ocheck
     , odesc
-    , oempty
     , optDescr
     , parseFlags
     , (?)
@@ -89,7 +90,7 @@ import Darcs.UI.Options.All
     , Verbosity(..), DryRun(..), dryRun, newRepo, verbosity, UseIndex, useIndex, yes
     )
 
-import Darcs.UI.Flags ( DarcsFlag, remoteRepos, workRepo, quiet, verbose )
+import Darcs.UI.Flags ( DarcsFlag, workRepo, quiet, verbose )
 import Darcs.UI.External ( viewDoc )
 import Darcs.UI.PrintPatch ( showWithSummary )
 
@@ -161,7 +162,7 @@ data CommandOptions = CommandOptions
   { coBasicOptions :: [DarcsOptDescr DarcsFlag]
   , coAdvancedOptions :: [DarcsOptDescr DarcsFlag]
   , coDefaults :: [DarcsFlag]
-  , coCheckOptions :: [DarcsFlag] -> [String]
+  , coCheckOptions :: [DarcsFlag] -> [OptMsg]
   }
 
 -- | Construct 'CommandOptions' from the command specific basic and advanced
@@ -185,15 +186,15 @@ withStdOpts bopts aopts =
 
 -- | For the given 'DarcsCommand' check the given 'DarcsFlag's for
 -- consistency
-commandCheckOptions :: DarcsCommand -> [DarcsFlag] -> [String]
+commandCheckOptions :: DarcsCommand -> [DarcsFlag] -> [OptMsg]
 commandCheckOptions DarcsCommand {commandOptions=co} = coCheckOptions co
-commandCheckOptions SuperCommand {} = ocheck (stdCmdActions ^ oempty)
+commandCheckOptions SuperCommand {} = ocheck stdCmdActions
 
 -- | Built-in default values for all 'DarcsFlag's supported by the given
 -- command
 commandDefaults :: DarcsCommand -> [DarcsFlag]
 commandDefaults DarcsCommand {commandOptions=co} = coDefaults co
-commandDefaults SuperCommand {} = defaultFlags (stdCmdActions ^ oempty)
+commandDefaults SuperCommand {} = defaultFlags stdCmdActions
 
 -- | Option descriptions split into basic and advanced options
 commandAlloptions :: DarcsCommand
@@ -342,8 +343,10 @@ setEnvCautiously e v
     toobig _ [] = False
     toobig n (_ : xs) = toobig (n - 1) xs
 
+-- | To use for commandArgdefaults field.
 defaultRepo :: [DarcsFlag] -> AbsolutePath -> [String] -> IO [String]
-defaultRepo fs = defaultrepo (remoteRepos ? fs)
+defaultRepo _ _ [] = maybeToList <$> getDefaultRepo
+defaultRepo _ _ args = return args
 
 amInHashedRepository :: [DarcsFlag] -> IO (Either String ())
 amInHashedRepository fs = R.amInHashedRepository (workRepo fs)

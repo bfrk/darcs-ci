@@ -18,6 +18,8 @@ module Darcs.Util.Cache
     , speculateFilesUsingCache
     , writeFileUsingCache
     , peekInCache
+    , parseCacheLoc
+    , showCacheLoc
     , writable
     , isThisRepo
     , hashedFilePath
@@ -47,6 +49,7 @@ import System.IO ( hPutStrLn, stderr )
 import System.IO.Error ( isAlreadyExistsError )
 import System.IO.Unsafe ( unsafePerformIO )
 import System.Posix.Files ( createLink, getSymbolicLinkStatus, linkCount )
+import Text.Regex.Applicative ( anySym, many, match, string, (<|>) )
 
 import Darcs.Prelude
 
@@ -123,14 +126,24 @@ cacheEntries (Ca entries) = entries
 instance Eq CacheLoc where
     (Cache aTy _ aSrc) == (Cache bTy _ bSrc) = aTy == bTy && aSrc == bSrc
 
-instance Show CacheLoc where
-    show (Cache Repo Writable a) = "thisrepo:" ++ a
-    show (Cache Repo NotWritable a) = "repo:" ++ a
-    show (Cache Directory Writable a) = "cache:" ++ a
-    show (Cache Directory NotWritable a) = "readonly:" ++ a
+showCacheLoc :: CacheLoc -> String
+showCacheLoc (Cache Repo Writable a) = "thisrepo:" ++ a
+showCacheLoc (Cache Repo NotWritable a) = "repo:" ++ a
+showCacheLoc (Cache Directory Writable a) = "cache:" ++ a
+showCacheLoc (Cache Directory NotWritable a) = "readonly:" ++ a
 
 instance Show Cache where
-    show (Ca cs) = intercalate "\n" $ map show cs
+    show (Ca cs) = intercalate "\n" $ map showCacheLoc cs
+
+parseCacheLoc :: String -> Maybe CacheLoc
+parseCacheLoc = match reCacheLoc
+  where
+    reCacheLoc =
+      Cache Repo Writable <$> (string "thisrepo:" *> rest) <|>
+      Cache Repo NotWritable <$> (string "repo:" *> rest) <|>
+      Cache Directory Writable <$> (string "cache:" *> rest) <|>
+      Cache Directory NotWritable <$> (string "readonly:" *> rest)
+    rest = many anySym
 
 -- | Filter caches for remote repos. This affects only entries that are locally
 -- valid paths (i.e. not network URLs): they are removed if non-existent, or

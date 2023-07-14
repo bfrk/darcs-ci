@@ -60,6 +60,7 @@ newtype DefaultIO a = DefaultIO { runDefaultIO :: IO a }
     deriving (Functor, Applicative, Monad, MonadThrow)
 
 instance ApplyMonad Tree DefaultIO where
+    type ApplyMonadBase DefaultIO = IO
 
 instance ApplyMonadTree DefaultIO where
     mDoesDirectoryExist = DefaultIO . doesDirectoryExist . realPath
@@ -127,6 +128,7 @@ runDefault action =
       "\npatches in your repo, and perhaps 'darcs repair' to fix them."
 
 instance TolerantMonad m => ApplyMonad Tree (TolerantWrapper m) where
+    type ApplyMonadBase (TolerantWrapper m) = IO
 
 instance TolerantMonad m => ApplyMonadTree (TolerantWrapper m) where
     mDoesDirectoryExist d = runTM $ runDefaultIO $ mDoesDirectoryExist d

@@ -102,37 +102,51 @@ withUMask umask job =
            (reset_umask rc)
            job
 
--- |A @RepoJob@ wraps up an action to be performed with a repository. Because repositories
--- can contain different types of patches, such actions typically need to be polymorphic
--- in the kind of patch they work on. @RepoJob@ is used to wrap up the polymorphism,
--- and the various functions that act on a @RepoJob@ are responsible for instantiating
--- the underlying action with the appropriate patch type.
+type Job rt p wR wU a = Repository rt p wU wR -> IO a
+
+type TreePatch p = (RepoPatch p, ApplyState p ~ Tree)
+type V1Patch p = p ~ RepoPatchV1 V1.Prim
+type V2Patch p = p ~ RepoPatchV2 V2.Prim
+type PrimV1Patch p = (TreePatch p, IsPrimV1 (PrimOf p))
+
+type TreePatchJob rt a = forall p wR wU . TreePatch p => Job rt p wR wU a
+type V1PatchJob rt a = forall p wR wU . V1Patch p => Job rt p wR wU a
+type V2PatchJob rt a = forall p wR wU . V2Patch p => Job rt p wR wU a
+type PrimV1PatchJob rt a = forall p wR wU . PrimV1Patch p => Job rt p wR wU a
+
+-- |A @RepoJob@ wraps up an action to be performed with a repository. Because
+-- repositories can contain different types of patches, such actions typically
+-- need to be polymorphic in the kind of patch they work on. @RepoJob@ is used
+-- to wrap up the polymorphism, and the various functions that act on a
+-- @RepoJob@ are responsible for instantiating the underlying action with the
+-- appropriate patch type.
 data RepoJob rt a
-    -- = RepoJob (forall p wR wU . RepoPatch p => Repository p wU wR -> IO a)
     -- TODO: Unbind Tree from RepoJob, possibly renaming existing RepoJob
-    =
-    -- |The most common @RepoJob@; the underlying action can accept any patch type that
-    -- a darcs repository may use.
-      RepoJob (forall p wR wU . (RepoPatch p, ApplyState p ~ Tree) => Repository rt p wU wR -> IO a)
+
+    -- |The most common 'RepoJob'; the underlying action can accept any patch
+    -- whose 'ApplyState' is 'Tree'.
+    = RepoJob (TreePatchJob rt a)
     -- |A job that only works on darcs 1 patches
-    | V1Job (forall wR wU . Repository rt (RepoPatchV1 V1.Prim) wU wR -> IO a)
+    | V1Job (V1PatchJob rt a)
     -- |A job that only works on darcs 2 patches
-    | V2Job (forall wR wU . Repository rt (RepoPatchV2 V2.Prim) wU wR -> IO a)
-    -- |A job that works on any repository where the patch type @p@ has 'PrimOf' @p@ = 'Prim'.
-    --
-    -- This was added to support darcsden, which inspects the internals of V1 prim patches.
-    --
-    -- In future this should be replaced with a more abstract inspection API as part of 'PrimPatch'.
-    | PrimV1Job (forall p wR wU . (RepoPatch p, ApplyState p ~ Tree, IsPrimV1 (PrimOf p))
-               => Repository rt p wU wR -> IO a)
-    -- A job that works on normal darcs repositories, but will want access to the rebase patch if it exists.
-    | RebaseAwareJob (forall p wR wU . (RepoPatch p, ApplyState p ~ Tree) => Repository rt p wU wR -> IO a)
-    | RebaseJob (forall p wR wU . (RepoPatch p, ApplyState p ~ Tree) => Repository rt p wU wR -> IO a)
-    | OldRebaseJob (forall p wR wU . (RepoPatch p, ApplyState p ~ Tree) => Repository rt p wU wR -> IO a)
-    | StartRebaseJob (forall p wR wU . (RepoPatch p, ApplyState p ~ Tree) => Repository rt p wU wR -> IO a)
+    | V2Job (V2PatchJob rt a)
+    -- |A job that works on any repository where the patch type @p@ has
+    -- 'PrimOf' @p@ = 'Prim'. This was added to support darcsden, which
+    -- inspects the internals of V1 prim patches. In future it should be
+    -- replaced with a more abstract inspection API as part of 'PrimPatch'.
+    | PrimV1Job (PrimV1PatchJob rt a)
+    -- A job that works on normal darcs repositories, but will want access to
+    -- the rebase patch if it exists.
+    | RebaseAwareJob (TreePatchJob rt a)
+    -- A job that requires a rebase patch to exist.
+    | RebaseJob (TreePatchJob rt a)
+    -- A job that works only if there is an old-style rebase patch.
+    | OldRebaseJob (TreePatchJob rt a)
+    -- A job that may start a rebase.
+    | StartRebaseJob (TreePatchJob rt a)
 
 onRepoJob :: RepoJob rt1 a -- original repojob passed to withXxx
-          -> (forall p wR wU . (RepoPatch p, ApplyState p ~ Tree) =>
+          -> (forall p wR wU . TreePatch p =>
               (Repository rt1 p wU wR -> IO a)
               -> Repository rt2 p wU wR -> IO a)
           -> RepoJob rt2 a -- result job takes a Repo rt2

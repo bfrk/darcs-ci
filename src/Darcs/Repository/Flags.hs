@@ -15,7 +15,6 @@ module Darcs.Repository.Flags
     , RunTest (..)
     , SetScriptsExecutable (..)
     , LeaveTestDir (..)
-    , RemoteRepos (..)
     , SetDefault (..)
     , InheritDefault (..)
     , UseIndex (..)
@@ -90,9 +89,6 @@ data SetScriptsExecutable = YesSetScriptsExecutable | NoSetScriptsExecutable
     deriving ( Eq, Show )
 
 data LeaveTestDir = YesLeaveTestDir | NoLeaveTestDir
-    deriving ( Eq, Show )
-
-data RemoteRepos = RemoteRepos [String]
     deriving ( Eq, Show )
 
 data SetDefault = YesSetDefault Bool | NoSetDefault Bool

@@ -38,8 +38,8 @@ jobs:
           - os: windows-2019
             ghc: 8.2.2
     env:
-      builddocs: ${{ matrix.ghc == '9.4.4' }}
-      runtests: ${{ matrix.ghc == '8.4.4' || matrix.ghc == '9.4.4' }}
+      builddocs: ${{ matrix.ghc == '9.4.5' }}
+      runtests: ${{ matrix.ghc == '8.4.4' || matrix.ghc == '9.4.5' }}
       # for some reason this test randomly fails with darcs.net server
       # timeouts or similar errors; works fine on my machine
       tests-to-run: -t='!network/log'

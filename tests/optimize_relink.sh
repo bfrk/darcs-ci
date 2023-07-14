@@ -5,13 +5,6 @@
 
 . ./lib
 
-## We don't support hard links on Windows.
-
-if echo $OS | grep -i windows; then
-    echo darcs does not support hard links on Windows
-    exit 0
-fi
-
 ## compare succeeds if there are hard links
 compare () {
   echo 'use File::Basename; $res=0; while ($fn=<'$1'/*>) { $fn2="'$2'/" . basename($fn); @fd1=lstat($fn); @fd2=lstat($fn2); $res += ($fd1[1] != $fd2[1]);}; exit($res);' | perl

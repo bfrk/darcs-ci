@@ -36,7 +36,7 @@ import Darcs.UI.Commands ( DarcsCommand(..), nodefaults
                          , amInHashedRepository, amInRepository, putInfo
                          , normalCommand, withStdOpts )
 import Darcs.UI.Completion ( noArgs )
-import Darcs.Repository.Prefs ( getPreflist, globalCacheDir )
+import Darcs.Repository.Prefs ( Pref(Defaultrepo), getPreflist, globalCacheDir )
 import Darcs.Repository
     ( Repository
     , AccessType(RW)
@@ -421,7 +421,7 @@ optimizeHelpRelink =
 doRelink :: [DarcsFlag] -> IO ()
 doRelink opts =
     do let some_siblings = O.siblings ? opts
-       defrepolist <- getPreflist "defaultrepo"
+       defrepolist <- getPreflist Defaultrepo
        let siblings = map toFilePath some_siblings ++ defrepolist
        if null siblings
           then putInfo opts "No siblings -- no relinking done."

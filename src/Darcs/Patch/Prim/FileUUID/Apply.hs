@@ -109,6 +109,7 @@ class ApplyMonadObjectMap m where
 type instance ApplyMonadOperations ObjectMap = ApplyMonadObjectMap
 
 instance MonadThrow m => ApplyMonad ObjectMap (StateT (ObjectMap m) m) where
+  type ApplyMonadBase (StateT (ObjectMap m) m) = m
   readFilePS i = do
     load <- gets getObject
     mobj <- lift $ load i
