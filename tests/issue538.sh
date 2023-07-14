@@ -4,11 +4,6 @@
 
 . ./lib
 
-if echo $OS | grep -i windows; then
-    echo I do not know how to run a test program under windows
-    exit 0
-fi
-
 function make_repo_with_test {
     mkdir temp1 ; cd temp1 ; darcs init
     echo "#!/bin/sh" > test.sh

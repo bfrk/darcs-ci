@@ -5,8 +5,6 @@
 
 . lib
 
-abort_windows
-
 rm -rf temp1 temp2
 mkdir temp1
 cd temp1

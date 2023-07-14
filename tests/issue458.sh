@@ -3,13 +3,6 @@
 ### darcs get --set-scripts-executable ignores umask
 . ./lib
 
-## Windows doesn't support proper permissions.
-
-if echo $OS | grep -i windows; then
-    echo Windows does not support posix permissions
-    exit 0
-fi
-
 rm -rf temp
 mkdir temp
 cd temp

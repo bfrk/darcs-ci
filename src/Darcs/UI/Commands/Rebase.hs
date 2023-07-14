@@ -55,7 +55,8 @@ import Darcs.Repository.Flags
     )
 import Darcs.Repository.Merge ( tentativelyMergePatches )
 import Darcs.Repository.Rebase
-    ( readRebase
+    ( checkHasRebase
+    , readRebase
     , readTentativeRebase
     , writeTentativeRebase
     )
@@ -244,9 +245,7 @@ suspend = DarcsCommand
 
 suspendCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 suspendCmd _ opts _args =
-    withRepoLock (useCache ? opts) (umask ? opts) $
-    StartRebaseJob $
-    \_repository -> do
+  withRepoLock (useCache ? opts) (umask ? opts) $ RepoJob $ \_repository -> do
     suspended <- readTentativeRebase _repository
     (_ :> candidates) <- preselectPatches opts _repository
     let direction = if changesReverse ? opts then Last else LastReversed
@@ -370,7 +369,8 @@ reify = DarcsCommand
 unsuspendCmd :: String -> Bool -> (AbsolutePath, AbsolutePath)
              -> [DarcsFlag] -> [String] -> IO ()
 unsuspendCmd cmd reifyFixups _ opts _args =
-  withRepoLock (useCache ? opts) (umask ? opts) $ RebaseJob $ \_repository -> do
+  withRepoLock (useCache ? opts) (umask ? opts) $ RepoJob $ \_repository -> do
+    checkHasRebase _repository
     Items suspended <- readTentativeRebase _repository
 
     let matchFlags = O.matchSeveralOrFirst ? opts
@@ -534,9 +534,9 @@ inject = DarcsCommand
 
 injectCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 injectCmd _ opts _args =
-    withRepoLock (useCache ? opts) (umask ? opts) $
-    RebaseJob $
+  withRepoLock (useCache ? opts) (umask ? opts) $ RepoJob $
     \(_repository :: Repository 'RW p wU wR) -> do
+    checkHasRebase _repository
     Items selects <- readTentativeRebase _repository
 
     -- TODO this selection doesn't need to respect dependencies
@@ -609,7 +609,8 @@ obliterate = DarcsCommand
 
 obliterateCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 obliterateCmd _ opts _args =
-  withRepoLock (useCache ? opts) (umask ? opts) $ RebaseJob $ \_repository -> do
+  withRepoLock (useCache ? opts) (umask ? opts) $ RepoJob $ \_repository -> do
+    checkHasRebase _repository
     Items selects <- readTentativeRebase _repository
 
     -- TODO this selection doesn't need to respect dependencies
@@ -701,8 +702,8 @@ data Edit prim wX = Edit
 
 editCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 editCmd _ opts _args =
-  withRepoLock (useCache ? opts) (umask ? opts) $
-  RebaseJob $ \_repository -> do
+  withRepoLock (useCache ? opts) (umask ? opts) $ RepoJob $ \_repository -> do
+    checkHasRebase _repository
     Items items <- readTentativeRebase _repository
     let initial_state =
           EditState
@@ -992,7 +993,7 @@ apply = DarcsCommand
 data RebasePatchApplier = RebasePatchApplier
 
 instance PatchApplier RebasePatchApplier where
-    repoJob RebasePatchApplier f = StartRebaseJob (f PatchProxy)
+    repoJob RebasePatchApplier f = RepoJob (f PatchProxy)
     applyPatches RebasePatchApplier PatchProxy = applyPatchesForRebaseCmd
 
 applyPatchesForRebaseCmd
@@ -1093,8 +1094,8 @@ log = DarcsCommand
 
 logCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 logCmd _ opts _files =
-    withRepository (useCache ? opts) $
-    RebaseJob $ \_repository -> do
+    withRepository (useCache ? opts) $ RepoJob $ \_repository -> do
+        checkHasRebase _repository
         Items ps <- readRebase _repository
         let psToShow = mapFL_FL n2pia ps
         if isInteractive False opts
@@ -1134,9 +1135,8 @@ upgrade = DarcsCommand
 
 upgradeCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 upgradeCmd _ opts _args =
-  withRepoLock (useCache ? opts) (umask ? opts) $
-  OldRebaseJob $ \(_repo :: Repository 'RW p wU wR) ->
-    upgradeOldStyleRebase _repo
+  withRepoLock (useCache ? opts) (umask ? opts) $ OldRebaseJob $ \repo ->
+    upgradeOldStyleRebase repo
 
 {-
 TODO:

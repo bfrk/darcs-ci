@@ -12,15 +12,10 @@ darcs init
 # issue308 - no patches and no deps for record should abort
 darcs record -am foo --ask-deps | grep -i "Ok, if you don't want to record anything, that's fine!"
 
-# RT#476 - --ask-deps works when there are no patches
-if echo $OS | grep -i windows; then
-  echo This test does not work on Windows
-else
-  touch t.f
-  darcs add t.f
-  darcs record  -am add
-  echo a | darcs record  -am foo --ask-deps | grep -i 'finished recording'
-fi
+touch t.f
+darcs add t.f
+darcs record  -am add
+echo a | darcs record  -am foo --ask-deps | grep -i 'finished recording'
 
 # RT#231 - special message is given for nonexistent directories
 not darcs record -am foo not_there.txt > log 2>&1

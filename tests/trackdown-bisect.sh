@@ -7,11 +7,6 @@
 
 . ./lib
 
-if echo $OS | grep -i windows; then
-    echo I do not know how to run a test program under windows
-    exit 0
-fi
-
 cp $TESTBIN/trackdown-bisect-helper.hs .
 ghc -o trackdown-bisect-helper trackdown-bisect-helper.hs
 

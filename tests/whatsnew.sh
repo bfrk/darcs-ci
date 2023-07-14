@@ -21,6 +21,9 @@ darcs record -a -m "remove foo"
 touch look_summary.txt
 darcs whatsnew -l | grep -i "a ./look_summary.txt"
 
+# remark by bf: this is stupid; we should not support such file paths
+# even on *nix.
+
 # whatsnew works with uncommon file names and does NOT display
 # the internal "white space encoded" filename
 if echo $OS | grep -i windows; then

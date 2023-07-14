@@ -23,20 +23,15 @@ cd ..
 # local vs remote filepaths
 # ----------------------------------------------------------------------
 
-# trick: OS-detection (if needed)
-if echo $OS | grep -i windows; then
-  echo This test does not work on Windows
-else
-  darcs get temp1 temp2
-  cd temp2
-  mkdir -p dir
-  darcs add dir
-  cd dir
-  touch foo:bar
-  darcs add --reserved-ok foo:bar
-  cd ../..
-  rm -rf temp2
-fi
+darcs get temp1 temp2
+cd temp2
+mkdir -p dir
+darcs add dir
+cd dir
+touch foo:bar
+darcs add --reserved-ok foo:bar
+cd ../..
+rm -rf temp2
 
 # ----------------------------------------------------------------------
 # repodir stuff

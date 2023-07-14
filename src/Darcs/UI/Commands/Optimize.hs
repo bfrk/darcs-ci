@@ -112,7 +112,7 @@ import Darcs.Util.Cache ( allHashedDirs, bucketFolder, cleanCaches, mkDirCache )
 import Darcs.Repository.Format
     ( identifyRepoFormat
     , createRepoFormat
-    , writeRepoFormat
+    , unsafeWriteRepoFormat
     , formatHas
     , RepoProperty ( HashedInventory )
     )
@@ -477,7 +477,7 @@ actuallyUpgradeFormat _opts _repository = do
   applyToTentativePristine (unsafeCoerceR _repository) (mkInvertible patchesToApply)
   -- now make it official
   finalizeTentativeChanges _repository
-  writeRepoFormat (createRepoFormat PatchFormat1 WithWorkingDir) formatPath
+  unsafeWriteRepoFormat (createRepoFormat PatchFormat1 WithWorkingDir) formatPath
   -- clean out old-fashioned junk
   debugMessage "Cleaning out old-fashioned repository files..."
   removeFileMayNotExist oldInventoryPath

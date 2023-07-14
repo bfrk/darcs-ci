@@ -7,15 +7,9 @@
 rm -rf temp1
 rm -f fakessh
 
-# make our ssh command one word only
-if os_is_windows; then
-  fakessh=fakessh.bat
-  echo 'echo hello > touchedby_fakessh' > $fakessh
-else
-  fakessh=./fakessh
-  echo '#!/bin/sh' > $fakessh
-  echo 'echo hello > touchedby_fakessh' >> $fakessh
-fi
+fakessh=./fakessh
+echo '#!/bin/sh' > $fakessh
+echo 'echo hello > touchedby_fakessh' >> $fakessh
 chmod u+x $fakessh
 
 export DARCS_SSH=$fakessh

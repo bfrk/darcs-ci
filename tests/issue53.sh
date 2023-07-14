@@ -3,11 +3,6 @@
 
 . lib
 
-if echo $OS | grep -i windows; then
-    echo This test does not work under Windows
-    exit 0
-fi
-
 # pull from not empty repo to empty repo
 rm -rf temp1
 mkdir temp1

@@ -23,15 +23,6 @@ rm posthook-ran
 cd ..
 rm -rf temp1
 
-# POSIX-only section
-# ----------------------------------------------------------------------
-# Things below this section do not appear to work on Windows.
-# Pending further investigation at http://bugs.darcs.net/issue1813
-
-if echo $OS | grep -i windows; then
-  exit 0
-fi
-
 # Check that DARCS_PATCHES_XML works
 rm -rf R S                      # another script may have left a mess
 darcs init      --repo R        # Create our test repos.

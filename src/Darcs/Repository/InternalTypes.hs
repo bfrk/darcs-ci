@@ -22,6 +22,7 @@ module Darcs.Repository.InternalTypes
     , repoCache
     , modifyCache
     , repoFormat
+    , modifyRepoFormat
     , repoLocation
     , withRepoDir
     , repoPristineType
@@ -37,7 +38,8 @@ module Darcs.Repository.InternalTypes
 import Darcs.Prelude
 
 import Darcs.Util.Cache ( Cache )
-import Darcs.Repository.Format ( RepoFormat )
+import Darcs.Repository.Format ( RepoFormat, unsafeWriteRepoFormat )
+import Darcs.Repository.Paths ( formatPath )
 import Darcs.Util.Path ( AbsoluteOrRemotePath, toPath )
 import System.Directory ( withCurrentDirectory )
 import Unsafe.Coerce ( unsafeCoerce )
@@ -123,3 +125,12 @@ unsafeEndTransaction (Repo l f p c SRW) = Repo l f p c SRO
 
 mkRepo :: AbsoluteOrRemotePath -> RepoFormat -> PristineType -> Cache -> Repository 'RO p wU wR
 mkRepo p f pr c = Repo (toPath p) f pr c SRO
+
+modifyRepoFormat
+  :: (RepoFormat -> RepoFormat)
+  -> Repository 'RW p wU wR
+  -> IO (Repository 'RW p wU wR)
+modifyRepoFormat f (Repo l fmt p c a) = do
+  let fmt' = f fmt
+  unsafeWriteRepoFormat fmt' formatPath
+  return $ Repo l fmt' p c a

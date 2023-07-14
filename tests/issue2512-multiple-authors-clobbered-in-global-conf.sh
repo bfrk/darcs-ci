@@ -2,7 +2,6 @@
 ## Test for issue2512 - Multiple authors in global config get overwritten
 
 . lib
-abort_windows  # different directory names on Windows
 
 # helper
 function fail {

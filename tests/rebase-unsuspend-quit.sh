@@ -1,8 +1,8 @@
-#!/usr/bin/env bash
-## Darcs should refuse to add an unreadable file, because unreadable
-## files aren't recordable.
+#!/bin/sh -e
 ##
-## Copyright (C) 2005  Mark Stosberg
+## Test rebase unsuspend, with quit
+##
+## Copyright (C) 2011 Ganesh Sittampalam
 ##
 ## Permission is hereby granted, free of charge, to any person
 ## obtaining a copy of this software and associated documentation
@@ -26,16 +26,20 @@
 
 . lib
 
-trap "chmod a+r $PWD/temp1/unreadable $PWD/temp1/d" EXIT
+rm -rf R
+mkdir R
+cd R
+darcs init
+touch foo
+darcs rec -lam 'add foo'
 
-mkdir temp1
-cd temp1
-darcs initialize
-touch unreadable
-chmod a-r unreadable      # Make the file unreadable.
-not darcs add unreadable 2> log
-fgrep -i 'permission denied' log
-mkdir d
-chmod a-r d
-not darcs add --debug --verbose d
-fgrep -i 'permission denied' log
+touch bar
+darcs rec -lam 'add bar'
+
+touch baz
+darcs rec -lam 'add baz'
+
+echo 'yyyy' | darcs rebase suspend
+
+echo yyq | darcs rebase unsuspend 2> log
+grep "3 suspended patches" log

@@ -26,14 +26,6 @@
 
 . lib                           # Load some portability helpers.
 
-# passing environment variables to posthooks isn't supported at
-# all in Windows
-abort_windows
-
-# even though the test doesn't work on Windows at the moment,
-# might as well future proof it by using a Haskell program instead
-# of a script for the post hook.
-
 cat <<FAKE > echo_darcs_patches.hs # create a posthoook that echos $DARCS_PATCHES
 import System.Environment
 main = do
