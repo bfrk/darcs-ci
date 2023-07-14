@@ -40,11 +40,7 @@ import Darcs.Repository
     , readPatches )
 import Darcs.Repository.Hashed( repoXor )
 import Darcs.Repository.PatchIndex ( isPatchIndexDisabled, doesPatchIndexExist )
-import Darcs.Repository.Prefs
-    ( Pref(Author, Defaultrepo, Prefs)
-    , getMotd
-    , getPreflist
-    )
+import Darcs.Repository.Prefs ( getPreflist, getMotd )
 import Darcs.Patch ( RepoPatch )
 import Darcs.Patch.Set ( patchSet2RL )
 import Darcs.Patch.Witnesses.Ordered ( lengthRL )
@@ -168,9 +164,9 @@ showInOneLine = intercalate ", " . lines . show
 
 showRepoPrefs :: PutInfo -> IO ()
 showRepoPrefs out = do
-    getPreflist Prefs >>= mapM_ prefOut
-    getPreflist Author >>= out "Author" . unlines
-    getPreflist Defaultrepo >>= out "Default Remote" . unlines
+    getPreflist "prefs" >>= mapM_ prefOut
+    getPreflist "author" >>= out "Author" . unlines
+    getPreflist "defaultrepo" >>= out "Default Remote" . unlines
   where prefOut = uncurry out . (\(p,v) -> (p++" Pref", dropWhile isSpace v)) . break isSpace
 
 showRepoMOTD :: PutInfo -> Repository rt p wU wR -> IO ()

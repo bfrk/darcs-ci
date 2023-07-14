@@ -43,7 +43,7 @@ import Darcs.UI.Commands.Clone ( otherHelpInheritDefault )
 import Darcs.UI.Commands.Util ( printDryRunMessageAndExit, checkUnrelatedRepos )
 import Darcs.UI.Flags
     ( DarcsFlag
-    , willRemoveLogFile, changesReverse, dryRun, useCache, setDefault
+    , willRemoveLogFile, changesReverse, dryRun, useCache, remoteRepos, setDefault
     , fixUrl
     , getCc
     , getAuthor
@@ -89,11 +89,7 @@ import Darcs.Patch.Bundle
     , minContext
     , readContextFile
     )
-import Darcs.Repository.Prefs
-    ( Pref(Defaultrepo, Email, Post, Repos)
-    , addRepoSource
-    , getPreflist
-    )
+import Darcs.Repository.Prefs ( addRepoSource, getPreflist )
 import Darcs.Repository.Flags ( DryRun(..) )
 import Darcs.Util.File ( fetchFilePS, Cachable(..) )
 import Darcs.UI.External
@@ -155,7 +151,7 @@ send = DarcsCommand
     , commandExtraArgHelp = ["[REPOSITORY]"]
     , commandCommand = sendCmd
     , commandPrereq = amInHashedRepository
-    , commandCompleteArgs = prefArgs Repos
+    , commandCompleteArgs = prefArgs "repos"
     , commandArgdefaults = defaultRepo
     , commandOptions = sendOpts
     }
@@ -181,6 +177,7 @@ send = DarcsCommand
       ^ O.allowUnrelatedRepos
     sendAdvancedOpts
       = O.logfile
+      ^ O.remoteRepos
       ^ O.sendToContext 
       ^ O.changesReverse
       ^ O.remoteDarcs
@@ -209,13 +206,13 @@ sendCmd (_,o) opts [unfixedrepodir] =
         here <- getCurrentDirectory
         when (repodir == toFilePath here) $
            fail cannotSendToSelf
-        old_default <- getPreflist Defaultrepo
+        old_default <- getPreflist "defaultrepo"
         when (old_default == [repodir]) $
             putInfo opts (creatingPatch repodir)
         repo <- identifyRepositoryFor Reading repository (useCache ? opts) repodir
         them <- readPatches repo
-        addRepoSource repodir (dryRun ? opts) (setDefault False opts)
-          (O.inheritDefault ? opts)
+        addRepoSource repodir (dryRun ? opts) (remoteRepos ? opts)
+            (setDefault False opts) (O.inheritDefault ? opts) (isInteractive True opts)
         wtds <- decideOnBehavior opts (Just repo)
         sendToThem repository opts wtds repodir them
 sendCmd _ _ _ = error "impossible case"
@@ -261,7 +258,7 @@ sendToThem repo opts wtds their_name them = do
   let outname = case getOutput opts fname of
                     Just f  -> Just f
                     Nothing | O.mail ? opts -> Nothing
-                            | not $ null [ p | PostHttp p <- wtds] -> Nothing
+                            | not $ null [ p | Post p <- wtds] -> Nothing
                             | otherwise        -> Just (makeAbsoluteOrStd here fname)
   case outname of
     Just fname' -> writeBundleToFile opts to_be_sent bundle fname' wtds their_name
@@ -352,7 +349,7 @@ sendBundle opts to_be_sent bundle fname wtds their_name = do
             putInfo opts (success to (getCc opts)))
         `onException`
         warnMailBody
-  when (null [p | PostHttp p <- thetargets]) sendmail
+  when (null [p | Post p <- thetargets]) sendmail
   nbody <-
     withOpenTemp $ \(fh, fn) -> do
       let to = generateEmailToString thetargets
@@ -360,7 +357,7 @@ sendBundle opts to_be_sent bundle fname wtds their_name = do
       hClose fh
       mmapFilePS fn
   forM_
-    [p | PostHttp p <- thetargets]
+    [p | Post p <- thetargets]
     (\url -> do
        putInfo opts $ postingPatch url
        postUrl url nbody "message/rfc822") `catch`
@@ -392,7 +389,7 @@ writeBundleToFile opts to_be_sent bundle fname wtds their_name =
        cleanup opts f
 
 data WhatToDo
-    = PostHttp String    -- ^ POST the patch via HTTP
+    = Post String        -- ^ POST the patch via HTTP
     | SendMail String    -- ^ send patch via email
 
 decideOnBehavior :: [DarcsFlag] -> Maybe (Repository rt p wU wR) -> IO [WhatToDo]
@@ -408,22 +405,22 @@ decideOnBehavior opts remote_repo =
     where the_targets = collectTargets opts
           check_post the_remote_repo =
                        do p <- ((readPost . BC.unpack) `fmap`
-                                fetchFilePS (prefsUrl (repoLocation the_remote_repo) Post)
+                                fetchFilePS (prefsUrl (repoLocation the_remote_repo) ++ "/post")
                                 (MaxAge 600)) `catchall` return []
                           emails <- who_to_email the_remote_repo
                           return (p++emails)
           readPost = map parseLine . lines where
-              parseLine t = maybe (PostHttp t) SendMail $ stripPrefix "mailto:" t
+              parseLine t = maybe (Post t) SendMail $ stripPrefix "mailto:" t
           who_to_email repo =
               do email <- (BC.unpack `fmap`
-                           fetchFilePS (prefsUrl (repoLocation repo) Email)
+                           fetchFilePS (prefsUrl (repoLocation repo) ++ "/email")
                                        (MaxAge 600))
                           `catchall` return ""
                  if '@' `elem` email then return . map SendMail $ lines email
                                      else return []
           announce_recipients emails =
             let pn (SendMail s) = s
-                pn (PostHttp p) = p
+                pn (Post p) = p
                 msg = willSendTo (dryRun ? opts) (map pn emails)
             in case dryRun ? opts of
                 O.YesDryRun -> putInfo opts msg
@@ -436,7 +433,7 @@ getTargets wtds = return wtds
 
 collectTargets :: [DarcsFlag] -> [WhatToDo]
 collectTargets flags = [ f t | t <- O._to (O.headerFields ? flags) ] where
-    f url | "http:" `isPrefixOf` url = PostHttp url
+    f url | "http:" `isPrefixOf` url = Post url
     f em = SendMail em
 
 getDescription :: RepoPatch p

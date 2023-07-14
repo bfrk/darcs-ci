@@ -44,7 +44,7 @@ import Darcs.UI.Flags
     ( DarcsFlag
     , fixUrl, getOutput
     , changesReverse, verbosity,  dryRun, umask, useCache, selectDeps
-    , reorder, setDefault
+    , remoteRepos, reorder, setDefault
     , hasXmlOutput
     , isInteractive, quiet
     )
@@ -77,13 +77,7 @@ import Darcs.Patch.Witnesses.Ordered
     ( (:>)(..), FL(..), Fork(..)
     , mapFL, nullFL, mapFL_FL )
 import Darcs.Patch.Permutations ( partitionFL )
-import Darcs.Repository.Prefs
-    ( Pref(Defaultrepo, Repos)
-    , addRepoSource
-    , addToPreflist
-    , getPreflist
-    , showMotd
-    )
+import Darcs.Repository.Prefs ( addToPreflist, addRepoSource, getPreflist, showMotd )
 import Darcs.Patch.Depends
     ( findCommon
     , findCommonWithThem
@@ -172,7 +166,7 @@ fetch = DarcsCommand
     , commandExtraArgHelp = ["[REPOSITORY]..."]
     , commandCommand = fetchCmd
     , commandPrereq = amInHashedRepository
-    , commandCompleteArgs = prefArgs Repos
+    , commandCompleteArgs = prefArgs "repos"
     , commandArgdefaults = defaultRepo
     , commandOptions = allOpts
     }
@@ -191,6 +185,7 @@ fetch = DarcsCommand
       ^ O.diffAlgorithm
     advancedOpts
       = O.repoCombinator
+      ^ O.remoteRepos
       ^ O.remoteDarcs
     allOpts = basicOpts `withStdOpts` advancedOpts
 
@@ -204,7 +199,7 @@ pull = DarcsCommand
     , commandExtraArgHelp = ["[REPOSITORY]..."]
     , commandCommand = pullCmd StandardPatchApplier
     , commandPrereq = amInHashedRepository
-    , commandCompleteArgs = prefArgs Repos
+    , commandCompleteArgs = prefArgs "repos"
     , commandArgdefaults = defaultRepo
     , commandOptions = allOpts
     }
@@ -225,6 +220,7 @@ pull = DarcsCommand
       ^ O.diffAlgorithm
     advancedOpts
       = O.repoCombinator
+      ^ O.remoteRepos
       ^ O.setScriptsExecutable
       ^ O.umask
       ^ O.changesReverse
@@ -266,16 +262,16 @@ fetchPatches o opts unfixedrepourls@(_:_) jobname repository = do
   -- Test to make sure we aren't trying to pull from the current repo
   when (null repourls) $
         fail "Can't pull from current repository!"
-  old_default <- getPreflist Defaultrepo
+  old_default <- getPreflist "defaultrepo"
   when (old_default == repourls && not (hasXmlOutput opts)) $
       let pulling = case dryRun ? opts of
                       O.YesDryRun -> "Would pull"
                       O.NoDryRun -> "Pulling"
       in  putInfo opts $ text pulling <+> "from" <+> hsep (map quoted repourls) <> "..."
   (Sealed them, Sealed compl) <- readRepos repository opts repourls
-  addRepoSource (head repourls) (dryRun ? opts)
-      (setDefault False opts) (O.inheritDefault ? opts)
-  mapM_ (addToPreflist Repos) repourls
+  addRepoSource (head repourls) (dryRun ? opts) (remoteRepos ? opts)
+      (setDefault False opts) (O.inheritDefault ? opts) (isInteractive True opts)
+  mapM_ (addToPreflist "repos") repourls
   unless (quiet opts || hasXmlOutput opts) $ mapM_ showMotd repourls
   us <- readPatches repository
   checkUnrelatedRepos (parseFlags O.allowUnrelatedRepos opts) us them

@@ -46,6 +46,7 @@ import Darcs.UI.Flags
     , fixUrl
     , patchIndexNo
     , quiet
+    , remoteRepos
     , setDefault
     , setScriptsExecutable
     , umask
@@ -207,7 +208,7 @@ cloneCmd (_,o) opts [inrepodir] = do
          cloneRepository repodir mysimplename (verbosity ? opts) (useCache ? opts)
                          CompleteClone (umask ? opts) (O.remoteDarcs ? opts)
                          (setScriptsExecutable ? opts)
-                         (NoSetDefault True)
+                         (remoteRepos ? opts) (NoSetDefault True)
                          O.NoInheritDefault -- never inherit defaultrepo when cloning to ssh
                          (map convertUpToToOne (O.matchOneContext ? opts))
                          rfsource
@@ -232,7 +233,7 @@ cloneCmd (_,o) opts [inrepodir] = do
       cloneRepository repodir mysimplename (verbosity ? opts) (useCache ? opts)
                   (cloneKind ? opts) (umask ? opts) (O.remoteDarcs ? opts)
                   (setScriptsExecutable ? opts)
-                  (setDefault True opts)
+                  (remoteRepos ? opts) (setDefault True opts)
                   (O.inheritDefault ? opts)
                   (map convertUpToToOne (O.matchOneContext ? opts))
                   rfsource

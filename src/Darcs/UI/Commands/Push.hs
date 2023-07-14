@@ -40,7 +40,7 @@ import Darcs.UI.Flags
     ( DarcsFlag
     , isInteractive, verbosity
     , xmlOutput, selectDeps, applyAs
-    , changesReverse, dryRun, useCache, setDefault, fixUrl )
+    , changesReverse, dryRun, useCache, remoteRepos, setDefault, fixUrl )
 import Darcs.UI.Options ( parseFlags, (?), (^) )
 import qualified Darcs.UI.Options.All as O
 import Darcs.Repository.Flags ( DryRun (..) )
@@ -59,11 +59,7 @@ import Darcs.Patch.Apply( ApplyState )
 import Darcs.Patch.Witnesses.Ordered
     ( (:>)(..), RL, FL, nullRL,
     nullFL, reverseFL, mapFL_FL, mapRL )
-import Darcs.Repository.Prefs
-    ( Pref(Defaultrepo, Repos)
-    , addRepoSource
-    , getPreflist
-    )
+import Darcs.Repository.Prefs ( addRepoSource, getPreflist )
 import Darcs.UI.External ( signString, darcsProgram
                          , pipeDoc, pipeDocSSH )
 import Darcs.Util.Exception ( die )
@@ -135,7 +131,7 @@ push = DarcsCommand
     , commandExtraArgHelp = ["[REPOSITORY]"]
     , commandCommand = pushCmd
     , commandPrereq = amInHashedRepository
-    , commandCompleteArgs = prefArgs Repos
+    , commandCompleteArgs = prefArgs "repos"
     , commandArgdefaults = defaultRepo
     , commandOptions = pushOpts
     }
@@ -153,6 +149,7 @@ push = DarcsCommand
       ^ O.allowUnrelatedRepos
     pushAdvancedOpts
       = O.applyAs
+      ^ O.remoteRepos
       ^ O.changesReverse
       ^ O.compress
       ^ O.remoteDarcs
@@ -184,13 +181,13 @@ pushCmd _ _ _ = die "Cannot push to more than one repo."
 prepareBundle :: (RepoPatch p, ApplyState p ~ Tree)
               => [DarcsFlag] -> String -> Repository rt p wU wR -> IO Doc
 prepareBundle opts repodir repository = do
-  old_default <- getPreflist Defaultrepo
+  old_default <- getPreflist "defaultrepo"
   when (old_default == [repodir]) $
        let pushing = if dryRun ? opts == YesDryRun then "Would push" else "Pushing"
        in  putInfo opts $ text pushing <+> "to" <+> quoted repodir <> "..."
   them <- identifyRepositoryFor Writing repository (useCache ? opts) repodir >>= readPatches
-  addRepoSource repodir (dryRun ? opts) (setDefault False opts)
-      (O.inheritDefault ? opts)
+  addRepoSource repodir (dryRun ? opts) (remoteRepos ? opts)
+      (setDefault False opts) (O.inheritDefault ? opts) (isInteractive True opts)
   us <- readPatches repository
   common :> only_us <- return $ findCommonWithThem us them
   prePushChatter opts us (reverseFL only_us) them

@@ -131,22 +131,17 @@ mangleConflicts conflicts =
       nubSort $
       concatMap (unseal listTouchedFiles) (concatMap conflictParts conflicts)
 
-warnUnmangled
-  :: PrimPatch prim => Maybe [AnchoredPath] -> StandardResolution prim wX -> IO ()
-warnUnmangled mpaths StandardResolution {..}
+warnUnmangled :: PrimPatch prim => StandardResolution prim wX -> IO ()
+warnUnmangled StandardResolution {..}
   | null unmangled = return ()
-  | otherwise = ePutDocLn $ showUnmangled mpaths unmangled
+  | otherwise = ePutDocLn $ showUnmangled unmangled
 
-showUnmangled
-  :: PrimPatch prim => Maybe [AnchoredPath] -> [Unravelled prim wX] -> Doc
-showUnmangled mpaths = vcat . map showUnmangledConflict . filter (affected mpaths)
+showUnmangled :: PrimPatch prim => [Unravelled prim wX] -> Doc
+showUnmangled = vcat . map showUnmangledConflict
   where
     showUnmangledConflict unravelled =
       redText "Cannot mark these conflicting patches:" $$
       showUnravelled (redText "versus") unravelled
-    affected Nothing _ = True
-    affected (Just paths) unravelled =
-      any (`elem` paths) $ concatMap (unseal listTouchedFiles) unravelled
 
 showUnravelled :: PrimPatch prim => Doc -> Unravelled prim wX -> Doc
 showUnravelled sep =
@@ -173,7 +168,7 @@ announceConflicts cmd allowConflicts conflicts =
           " "++cmd++" mark-conflicts\n"++
           "to "++darcsdir++"/prefs/defaults in the target repo. "
         YesAllowConflicts MarkConflicts -> do
-          warnUnmangled Nothing conflicts
+          warnUnmangled conflicts
           return True
         _ -> return True
 

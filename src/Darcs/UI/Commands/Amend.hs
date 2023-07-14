@@ -194,7 +194,7 @@ amendrecord = commandAlias "amend-record" Nothing amend
 doAmend :: Config -> Maybe [AnchoredPath] -> IO ()
 doAmend cfg files =
   withRepoLock (O.useCache ? cfg) (O.umask ? cfg) $
-      RepoJob $ \(repository :: Repository 'RW p wU wR) -> do
+      RebaseAwareJob $ \(repository :: Repository 'RW p wU wR) -> do
     patchSet <- readPatches repository
     _ :> candidates <- filterNotInRemote cfg repository patchSet
     withSelectedPatchFromList "amend" candidates (patchSelOpts cfg) $

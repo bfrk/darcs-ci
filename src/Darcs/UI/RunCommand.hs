@@ -26,7 +26,6 @@ module Darcs.UI.RunCommand
 import Darcs.Prelude
 
 import Control.Monad ( unless, when )
-import Data.List ( intercalate )
 import System.Console.GetOpt( ArgOrder( Permute, RequireOrder ),
                               OptDescr( Option ),
                               getOpt )
@@ -40,7 +39,7 @@ import Darcs.UI.Options.All
 
 import Darcs.UI.Defaults ( applyDefaults )
 import Darcs.UI.External ( viewDoc )
-import Darcs.UI.Flags ( DarcsFlag, matchAny, withNewRepo )
+import Darcs.UI.Flags ( DarcsFlag, matchAny, fixRemoteRepos, withNewRepo )
 import Darcs.UI.Commands
     ( CommandArgs( CommandOnly, SuperCommandOnly, SuperCommandSub )
     , CommandControl
@@ -69,7 +68,7 @@ import Darcs.UI.Usage
     )
 
 import Darcs.Patch.Match ( checkMatchSyntax )
-import Darcs.Repository.Prefs ( Pref(Defaults), getGlobal, getPreflist )
+import Darcs.Repository.Prefs ( getGlobal, getPreflist )
 import Darcs.Util.AtExit ( atexit )
 import Darcs.Util.Exception ( die )
 import Darcs.Util.Global ( setDebugMode, setTimingsMode )
@@ -105,9 +104,9 @@ runCommand msuper cmd args = do
       prereq_errors <- commandPrereq cmd cmdline_flags
       -- we must get the cwd again because commandPrereq has the side-effect of changing it.
       new_wd <- getCurrentDirectory
-      user_defs <- getGlobal Defaults
-      repo_defs <- getPreflist Defaults
-      let (flags, (flag_warnings, flag_errors)) =
+      user_defs <- getGlobal   "defaults"
+      repo_defs <- getPreflist "defaults"
+      let (flags,flag_errors) =
             applyDefaults (fmap commandName msuper) cmd old_wd user_defs repo_defs cmdline_flags
       case parseFlags stdCmdActions flags of
         Just Help -> viewDoc $ getCommandHelp msuper cmd
@@ -122,14 +121,11 @@ runCommand msuper cmd args = do
             "Unable to '" ++ "darcs " ++ superName msuper ++ commandName cmd ++
             "' here:\n" ++ complaint
           Right () -> do
-            ePutDocLn $ vcat $ map text $ flag_warnings
-            case getopt_errs ++ flag_errors of
-              [] -> do
-                extra <- commandArgdefaults cmd flags old_wd orig_extra
-                case extraArgumentsError extra cmd msuper of
-                  Nothing     -> runWithHooks cmd (new_wd, old_wd) flags extra
-                  Just msg    -> die msg
-              errors -> fail $ intercalate "\n" errors
+            ePutDocLn $ vcat $ map text $ getopt_errs ++ flag_errors
+            extra <- commandArgdefaults cmd flags old_wd orig_extra
+            case extraArgumentsError extra cmd msuper of
+              Nothing     -> runWithHooks cmd (new_wd, old_wd) flags extra
+              Just msg    -> die msg
 
 fixupMsgs :: (a, b, [String]) -> (a, b, [String])
 fixupMsgs (fs,as,es) = (fs,as,map (("command line: "++).chompTrailingNewline) es)
@@ -150,8 +146,9 @@ runWithHooks cmd (new_wd, old_wd) flags extra = do
    preHookExitCode <- runPrehook (pre hooksCfg) verb new_wd
    if preHookExitCode /= ExitSuccess
       then exitWith preHookExitCode
-      else do phDir <- getPosthookDir new_wd cmd flags extra
-              commandCommand cmd (new_wd, old_wd) flags extra
+      else do fixedFlags <- fixRemoteRepos old_wd flags
+              phDir <- getPosthookDir new_wd cmd fixedFlags extra
+              commandCommand cmd (new_wd, old_wd) fixedFlags extra
               postHookExitCode <- runPosthook (post hooksCfg) verb phDir
               exitWith postHookExitCode
 
