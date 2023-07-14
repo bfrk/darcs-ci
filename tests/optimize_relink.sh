@@ -5,9 +5,11 @@
 
 . ./lib
 
-## compare succeeds if there are hard links
+## compare succeeds if all files in $1 are also in $2 and are hard links
 compare () {
-  echo 'use File::Basename; $res=0; while ($fn=<'$1'/*>) { $fn2="'$2'/" . basename($fn); @fd1=lstat($fn); @fd2=lstat($fn2); $res += ($fd1[1] != $fd2[1]);}; exit($res);' | perl
+  ls -1 $1 | while read fn; do
+    test "$(stat -c %i $1/$fn)" = "$(stat -c %i $2/$fn)"
+  done
 }
 
 rm -rf temp
@@ -28,25 +30,18 @@ echo "hi" > z1/foo
 mkdir z2
 if ! ln z1/foo z2/foo ; then
   echo No ln command for `pwd` - assuming no hard links.
-  exit 0
+  exit 200
 fi
 if ! compare z1 z2 ; then
   echo Filesystem for `pwd` does not support hard links.
-  exit 0
+  exit 200
 fi
-# workaround for SunOS cp which does not support `-a' option but also
-# doesn't fail when it is encountered.
 cp -r x y
 
 ## Now try relinking using darcs.
 rm -rf z
 darcs optimize relink --verbose --repodir x --sibling y
 rm -rf x/_darcs/patches/pend* y/_darcs/patches/pend*
-if compare x/_darcs/patches y/_darcs/patches
-then echo darcs optimize relink is working, hard links were done.
-else echo darcs optimize relink is not working, it did not make any hard links.
-     exit 2
-fi
+compare x/_darcs/patches y/_darcs/patches
 
 cd ..
-rm -rf temp

@@ -10,7 +10,7 @@ function make_repo_with_test {
     echo "echo 'hello world'" >> test.sh
     darcs add test.sh
     darcs record --author=test@test -am test
-    darcs setpref test './test.sh'
+    darcs setpref test "$(pwd)/test.sh"
 }
 
 # test record with --set-scripts-executable

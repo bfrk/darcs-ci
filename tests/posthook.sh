@@ -34,7 +34,7 @@ darcs record -lam 'hook'
 chmod u+x hook
 cat > _darcs/prefs/defaults << END
 apply run-posthook
-apply posthook ./hook
+apply posthook $(pwd)/hook
 END
 cd ..
 
