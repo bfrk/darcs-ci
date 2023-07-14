@@ -32,7 +32,7 @@ cd R
 hook=$(pwd)/hook
 cat >$hook.hs <<EOF
 import System.Environment
-main = getEnv "DARCS_PATCHES_XML" >>= writeFile "hook"
+main = getEnv "DARCS_PATCHES_XML" >>= putStrLn
 EOF
 ghc $hook.hs
 darcs record -lam 'hook'
