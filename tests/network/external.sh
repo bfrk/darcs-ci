@@ -8,7 +8,7 @@ rm -rf temp1
 rm -f fakessh
 
 fakessh=$(pwd)/fakessh
-cat >$fakessh.hs <EOF
+cat >$fakessh.hs <<EOF
 main = writeFile "touchedby_fakessh" "hello"
 EOF
 ghc --make $fakessh.hs

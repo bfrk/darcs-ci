@@ -29,9 +29,13 @@ darcs init      --repo R        # Create our test repos.
 darcs init      --repo S        # Create our test repos.
 
 cd R
-echo 'echo $DARCS_PATCHES_XML' > hook
+hook=$(pwd)/hook
+cat >$hook.hs <<EOF
+import System.Environment
+main = getEnv "DARCS_PATCHES_XML" >>= writeFile "hook"
+EOF
+ghc $hook.hs
 darcs record -lam 'hook'
-chmod u+x hook
 cat > _darcs/prefs/defaults << END
 apply run-posthook
 apply posthook $(pwd)/hook

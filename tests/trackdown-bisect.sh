@@ -7,6 +7,11 @@
 
 . ./lib
 
+if echo $OS | grep -i windows; then
+    echo I do not know how to run a test program under windows
+    exit 0
+fi
+
 cp $TESTBIN/trackdown-bisect-helper.hs .
 ghc -o trackdown-bisect-helper trackdown-bisect-helper.hs
 
@@ -42,7 +47,7 @@ function is_found_good_patch  {
 
 # Test command - Success condition is that file 'j' have one inside (1)
 # That means if it has zero (0) it is failing test. 
-test_cmd='bash -c "grep -q 1 j"'
+test_cmd='grep -q 1 j'
 
 #############################################################################
 # Section with test-cases

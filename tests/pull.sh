@@ -31,13 +31,15 @@ darcs add --repodir ./temp2 one/date.t
 darcs record --repodir ./temp2 -a -m foo
 
 # set up client repo for failure
-chmod a-rwx ./temp1/one # remove all permissions
-# this fails only with --ignore-times because otherwise the index
-# will be used
-not darcs pull --repodir ./temp1 -a --ignore-times 2> err
-chmod u+rwx temp1/one # restore permission
-grep 'permission denied' err
-rm -rf temp1/one
+if !os_is_windows; then
+    chmod a-rwx ./temp1/one # remove all permissions
+    # this fails only with --ignore-times because otherwise the index
+    # will be used
+    not darcs pull --repodir ./temp1 -a --ignore-times 2> err
+    chmod u+rwx temp1/one # restore permission
+    grep 'permission denied' err
+    rm -rf temp1/one
+fi
 
 cd temp1
 
