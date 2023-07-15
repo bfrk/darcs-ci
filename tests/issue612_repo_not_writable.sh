@@ -22,5 +22,5 @@ darcs get temp1 temp2
 cd temp2
 echo new >> t.t
 darcs record -am "new patch"
-not darcs push -a ../temp1
+not darcs push -a ../temp1 --debug
 cd ..
