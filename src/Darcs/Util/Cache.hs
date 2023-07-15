@@ -46,7 +46,7 @@ import System.Directory
     , withCurrentDirectory
     )
 import qualified System.Directory as SD ( writable )
-import System.FilePath.Posix ( dropFileName, joinPath, takeFileName, (</>) )
+import System.FilePath.Posix ( dropFileName, joinPath, (</>) )
 import System.IO ( hPutStrLn, stderr )
 import System.IO.Error ( isAlreadyExistsError )
 import System.IO.Unsafe ( unsafePerformIO )
@@ -467,13 +467,8 @@ fetchFileUsingCachePrivate fromWhere (Ca cache) hash = do
 -- @source@ file path (which is supposed to be an existing regular file) to the
 -- target location (the path of @filename@ in @subdir@ of the @cacheloc@), if
 -- the @cacheloc@ is writable and unless the target file already exists.
---
--- Precondition: @'takeFileName' source /= filename@
 tryLinking :: FilePath -> FilePath -> HashedDir -> CacheLoc -> IO ()
-tryLinking source filename subdir c = do
-  -- sanity check
-  when (takeFileName source /= filename) $
-    error "precondition of tryLinking"
+tryLinking source filename subdir c =
   when (writable c) $ do
     createCache c subdir filename
     let target = hashedFilePath c subdir filename
@@ -483,10 +478,7 @@ tryLinking source filename subdir c = do
 -- | Like 'tryLinking', but if the target file exists and is not
 -- the same file as the source, replace it.
 tryRelinking :: FilePath -> FilePath -> HashedDir -> CacheLoc -> IO ()
-tryRelinking source filename subdir c = do
-  -- sanity check
-  when (takeFileName source /= filename) $
-    error "precondition of tryLinking"
+tryRelinking source filename subdir c =
   when (writable c) $ do
     createCache c subdir filename
     let target = hashedFilePath c subdir filename

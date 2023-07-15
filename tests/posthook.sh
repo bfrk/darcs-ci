@@ -29,20 +29,13 @@ darcs init      --repo R        # Create our test repos.
 darcs init      --repo S        # Create our test repos.
 
 cd R
-hook=$(pwd)/hook
-cat >$hook.hs <<EOF
-import System.Environment
-main = getEnv "DARCS_PATCHES_XML" >>= putStrLn
-EOF
-ghc $hook.hs
-darcs record -lam 'hook'
 cat > _darcs/prefs/defaults << END
-apply posthook $hook
+apply posthook printenv DARCS_PATCHES_XML
 END
 cd ..
 
 cd S
 echo 'Example content.' > f
 darcs record -lam 'Add f'
-darcs push -a ../R | grep 'patch author'
+darcs push -a ../R | grep 'patch author' >&2
 cd ..
