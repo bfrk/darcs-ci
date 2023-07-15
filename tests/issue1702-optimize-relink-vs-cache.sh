@@ -26,7 +26,7 @@
 
 . lib
 
-if grep no-cache $DARCS_TESTING_PREFS_DIR/defaults; then
+if grep no-cache $HOME/.darcs/defaults; then
   echo this test makes no sense with --no-cache
   exit 200
 fi

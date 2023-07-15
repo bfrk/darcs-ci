@@ -75,7 +75,7 @@ import System.Directory
     , getAppUserDataDirectory
     , getHomeDirectory
     )
-import System.Environment ( getEnvironment )
+import System.Environment ( getEnvironment, lookupEnv )
 import System.FilePath.Posix ( normalise, dropTrailingPathSeparator, (</>) )
 import System.IO.Error ( isDoesNotExistError, catchIOError )
 import System.IO ( stdout, stderr )
@@ -300,9 +300,13 @@ xdgCacheDir = do
     `catchall` return Nothing
 
 globalCacheDir :: IO (Maybe FilePath)
-globalCacheDir | windows   = ((</> "cache2") `fmap`) `fmap` globalPrefsDir
-               | osx       = ((</> "darcs") `fmap`) `fmap` osxCacheDir
-               | otherwise = ((</> "darcs") `fmap`) `fmap` xdgCacheDir
+globalCacheDir =
+  lookupEnv "DARCS_TESTING_CACHE_DIR" >>= \case
+    Just dir -> return (Just dir)
+    Nothing
+      | windows   -> ((</> "cache2") `fmap`) `fmap` globalPrefsDir
+      | osx       -> ((</> "darcs") `fmap`) `fmap` osxCacheDir
+      | otherwise -> ((</> "darcs") `fmap`) `fmap` xdgCacheDir
 
 -- |tryMakeBoringRegexp attempts to create a Regex from a given String. The
 -- evaluation is forced, to ensure any malformed exceptions are thrown here,

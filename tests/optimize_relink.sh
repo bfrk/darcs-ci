@@ -49,17 +49,11 @@ else
   testing_with_cache="yes"
 fi
 
-if os_is_windows; then
-  cachedir=$DARCS_TESTING_PREFS_DIR/cache2
-else
-  cachedir=$HOME/.cache/darcs
-fi
-
 check () {
   for d in $hashed_dirs; do
     compare x/_darcs/$d y/_darcs/$d
     if $testing_with_cache; then
-      compare x/_darcs/$d $cachedir/$d
+      compare x/_darcs/$d $HOME/.cache/darcs/$d
     fi
   done
 }
@@ -70,7 +64,7 @@ check () {
 for d in $hashed_dirs; do
   ! compare x/_darcs/$d y/_darcs/$d
   if test "$testing_with_cache" = "yes"; then
-    ! test -d $cachedir/$d
+    ! test -d $HOME/.cache/darcs/$d
   fi
 done
 
@@ -84,7 +78,7 @@ rm -rf x/_darcs/patches/pend*
 for d in $hashed_dirs; do
   compare x/_darcs/$d y/_darcs/$d
   if test "$testing_with_cache" = "yes"; then
-    compare x/_darcs/$d $cachedir/$d
+    compare x/_darcs/$d $HOME/.cache/darcs/$d
   fi
 done
 
