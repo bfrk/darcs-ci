@@ -37,7 +37,6 @@ module Darcs.Util.Lock
     , gzWriteAtomicFilePSs
     , gzWriteDocFile
     , removeFileMayNotExist
-    , maybeRelink
     , tempdirLoc
     , environmentHelpTmpdir
     , environmentHelpKeepTmpdir
@@ -106,8 +105,7 @@ import Darcs.Util.Printer ( Doc, hPutDoc, packedString, empty, renderPSs )
 import Darcs.Util.AtExit ( atexit )
 import Darcs.Util.Global ( darcsdir )
 import Darcs.Util.Compat
-    ( maybeRelink
-    , atomicCreate
+    ( atomicCreate
     , sloppyAtomicCreate
     )
 import Darcs.Util.Progress ( debugMessage )

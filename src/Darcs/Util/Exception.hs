@@ -28,23 +28,21 @@ import Data.Maybe ( isJust )
 import System.Exit ( exitFailure )
 import System.IO ( stderr, hPutStrLn )
 import System.IO.Error
-    ( ioeGetErrorString
+    ( catchIOError
+    , ioeGetErrorString
     , ioeGetFileName
     , isDoesNotExistError
     , isUserError
     )
 
 import Darcs.Util.Global ( debugMessage )
-import Darcs.Util.SignalHandler ( catchNonSignal )
 
+-- | This handles /all/ 'IOException's
 catchall :: IO a -> IO a -> IO a
-a `catchall` b = a `catchNonSignal` (\e -> debugMessage ("catchall: "++show e) >> b)
+a `catchall` b = a `catchIOError` (\e -> debugMessage ("catchall: "++show e) >> b)
 
--- | The firstJustM returns the first Just entry in a list of monadic
--- operations. This is close to `listToMaybe `fmap` sequence`, but the sequence
--- operator evaluates all monadic members of the list before passing it along
--- (i.e. sequence is strict). The firstJustM is lazy in that list member monads
--- are only evaluated up to the point where the first Just entry is obtained.
+-- | Run the elements of a list of monadic actions until a 'Just' result is
+-- obtained. Return that result or 'Nothing' if all actions do.
 firstJustM :: Monad m
            => [m (Maybe a)]
            -> m (Maybe a)

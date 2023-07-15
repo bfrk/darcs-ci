@@ -5,10 +5,12 @@
 
 . ./lib
 
-## compare succeeds if all files in $1 are also in $2 and are hard links
+## compare succeeds if all files in $1 are also found under $2 and are hard links
 compare () {
   ls -1 $1 | while read fn; do
-    test "$(stat -c %i $1/$fn)" = "$(stat -c %i $2/$fn)"
+    test -d $2
+    fn2=$(find $2 -name $fn)
+    test "$(stat -c %i $1/$fn)" = "$(stat -c %i $fn2)"
   done
 }
 
@@ -21,7 +23,8 @@ darcs init --repodir x
 cd x
 date > foo
 darcs add foo
-darcs record -a -A me -m 'addfoo'
+# use --no-cache so that the cache does not (yet) have a copy/link
+darcs record -a -A me -m 'addfoo' --no-cache
 cd ..
 
 ## Does the filesystem support hard linking at all?
@@ -38,10 +41,45 @@ if ! compare z1 z2 ; then
 fi
 cp -r x y
 
+hashed_dirs="patches inventories pristine.hashed"
+
+if grep no-cache $HOME/.darcs/defaults; then
+  testing_with_cache="no"
+else
+  testing_with_cache="yes"
+fi
+
+check () {
+  for d in $hashed_dirs; do
+    compare x/_darcs/$d y/_darcs/$d
+    if $testing_with_cache; then
+      compare x/_darcs/$d $HOME/.cache/darcs/$d
+    fi
+  done
+}
+
 ## Now try relinking using darcs.
-rm -rf z
-darcs optimize relink --verbose --repodir x --sibling y
-rm -rf x/_darcs/patches/pend* y/_darcs/patches/pend*
-compare x/_darcs/patches y/_darcs/patches
+
+# first: sanity check
+for d in $hashed_dirs; do
+  ! compare x/_darcs/$d y/_darcs/$d
+  if test "$testing_with_cache" = "yes"; then
+    ! test -d $HOME/.cache/darcs/$d
+  fi
+done
+
+# now do it
+darcs optimize relink --verbose --repodir x --sibling y --debug
+
+# get unhashed files out of the way
+rm -rf x/_darcs/patches/pend*
+
+# test that it did what it should
+for d in $hashed_dirs; do
+  compare x/_darcs/$d y/_darcs/$d
+  if test "$testing_with_cache" = "yes"; then
+    compare x/_darcs/$d $HOME/.cache/darcs/$d
+  fi
+done
 
 cd ..

@@ -24,7 +24,7 @@ cd ..
 # ----------------------------------------------------------------------
 
 # Windows does not allow ':' in file names
-if !os_is_windows; then
+if ! os_is_windows; then
   darcs get temp1 temp2
   cd temp2
   mkdir -p dir

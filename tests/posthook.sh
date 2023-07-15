@@ -37,8 +37,7 @@ EOF
 ghc $hook.hs
 darcs record -lam 'hook'
 cat > _darcs/prefs/defaults << END
-apply run-posthook
-apply posthook $(pwd)/hook
+apply posthook $hook
 END
 cd ..
 

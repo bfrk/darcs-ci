@@ -22,7 +22,7 @@ module Darcs.UI.Commands.Optimize ( optimize ) where
 
 import Darcs.Prelude
 
-import Control.Monad ( when, unless, forM_ )
+import Control.Monad ( when, forM_ )
 import System.Directory
     ( listDirectory
     , doesDirectoryExist
@@ -36,7 +36,7 @@ import Darcs.UI.Commands ( DarcsCommand(..), nodefaults
                          , amInHashedRepository, amInRepository, putInfo
                          , normalCommand, withStdOpts )
 import Darcs.UI.Completion ( noArgs )
-import Darcs.Repository.Prefs ( Pref(Defaultrepo), getPreflist, globalCacheDir )
+import Darcs.Repository.Prefs ( globalCacheDir )
 import Darcs.Repository
     ( Repository
     , AccessType(RW)
@@ -75,10 +75,21 @@ import Darcs.Patch.Set
     )
 import Darcs.Patch.Apply( ApplyState )
 import Darcs.Util.ByteString ( gzReadFilePS )
+import Darcs.Util.Cache
+    ( CacheLoc(..)
+    , CacheType(Repo)
+    , WritableOrNot(NotWritable)
+    , allHashedDirs
+    , bucketFolder
+    , cacheEntries
+    , cleanCaches
+    , mkCache
+    , mkDirCache
+    , relinkCaches
+    )
 import Darcs.Util.Printer ( Doc, formatWords, wrapText, ($+$) )
 import Darcs.Util.Lock
-    ( maybeRelink
-    , gzWriteAtomicFilePS
+    ( gzWriteAtomicFilePS
     , writeAtomicFilePS
     , removeFileMayNotExist
     , writeBinFile
@@ -108,7 +119,6 @@ import Darcs.Repository.Flags
     , WithWorkingDir(WithWorkingDir)
     )
 import Darcs.Patch.Progress ( progressFL )
-import Darcs.Util.Cache ( allHashedDirs, bucketFolder, cleanCaches, mkDirCache )
 import Darcs.Repository.Format
     ( identifyRepoFormat
     , createRepoFormat
@@ -126,15 +136,8 @@ import Darcs.Repository.Pristine
     ( applyToTentativePristine
     )
 
-import Darcs.Util.Tree
-    ( Tree
-    , TreeItem(..)
-    , list
-    , expand
-    , emptyTree
-    )
-import Darcs.Util.Path ( AbsolutePath, realPath, toFilePath )
-import Darcs.Util.Tree.Plain( readPlainTree )
+import Darcs.Util.Tree ( Tree, emptyTree )
+import Darcs.Util.Path ( AbsolutePath, toFilePath )
 import Darcs.Util.Tree.Hashed ( writeDarcsHashed )
 
 optimizeDescription :: String
@@ -367,11 +370,14 @@ optimizeRelink = common
 
 optimizeRelinkCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 optimizeRelinkCmd _ opts _ =
-    withRepoLock (useCache ? opts) (umask ? opts) $
-    RepoJob $ \repository -> do
-      cleanRepository repository
-      doRelink opts
-      putInfo opts "Done relinking!"
+  withRepoLock (useCache ? opts) (umask ? opts) $ RepoJob $ \repo -> do
+    cleanRepository repo
+    let siblings = map toFilePath (O.siblings ? opts)
+        orig_entries = cacheEntries (repoCache repo)
+        new_cache =
+          mkCache $ orig_entries ++ map (Cache Repo NotWritable) siblings
+    mapM_ (relinkCaches new_cache) allHashedDirs
+    putInfo opts "Done relinking!"
 
 optimizeHelpHttp :: Doc
 optimizeHelpHttp = formatWords
@@ -417,30 +423,6 @@ optimizeHelpRelink =
   , "repository, or if you pulled the same patch from a remote repository"
   , "into multiple local repositories."
   ]
-
-doRelink :: [DarcsFlag] -> IO ()
-doRelink opts =
-    do let some_siblings = O.siblings ? opts
-       defrepolist <- getPreflist Defaultrepo
-       let siblings = map toFilePath some_siblings ++ defrepolist
-       if null siblings
-          then putInfo opts "No siblings -- no relinking done."
-          else do debugMessage "Relinking patches..."
-                  patch_tree <- expand =<< readPlainTree patchesDirPath
-                  let patches = [ realPath p | (p, File _) <- list patch_tree ]
-                  maybeRelinkFiles siblings patches patchesDirPath
-                  debugMessage "Done relinking."
-
-maybeRelinkFiles :: [String] -> [String] -> String -> IO ()
-maybeRelinkFiles src dst dir =
-    mapM_ (maybeRelinkFile src . ((dir ++ "/") ++)) dst
-
-maybeRelinkFile :: [String] -> String -> IO ()
-maybeRelinkFile [] _ = return ()
-maybeRelinkFile (h:t) f =
-    do done <- maybeRelink (h ++ "/" ++ f) f
-       unless done $
-           maybeRelinkFile t f
 
 -- Only 'optimize' commands that works on old-fashionned repositories
 optimizeUpgradeCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
