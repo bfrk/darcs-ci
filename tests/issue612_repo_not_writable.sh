@@ -5,7 +5,7 @@
 
 . lib
 
-abort_windows
+#abort_windows
 
 rm -rf temp1 temp2
 mkdir temp1
@@ -15,11 +15,11 @@ touch t.t
 darcs add t.t
 darcs record -am "initial add"
 if [ -e _darcs/inventories ]; then
-  chmod 0555 _darcs/inventories/*
-  chmod 0555 _darcs/inventories
+  chmod a-w _darcs/inventories/*
+  chmod a-w _darcs/inventories
 fi
 if [ -e _darcs/inventory ]; then
-  chmod 0555 _darcs/inventory
+  chmod a-w _darcs/inventory
 fi
 cd ..
 
@@ -27,7 +27,7 @@ darcs get temp1 temp2
 cd temp2
 # this block may fail so we'd better make sure we clean up after
 # ourselves to avoid a permissions mess for other tests
-trap "cd ..; chmod -R 0755 temp1; rm -rf temp1 temp2" EXIT
+trap "cd ..; chmod -R +w temp1" EXIT
 echo new >> t.t
 darcs record -am "new patch"
 not darcs push -a ../temp1 2> log
