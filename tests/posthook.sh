@@ -37,5 +37,5 @@ cd ..
 cd S
 echo 'Example content.' > f
 darcs record -lam 'Add f'
-darcs push -a ../R | grep 'patch author' >&2
+darcs push -a ../R | grep 'patch author'
 cd ..

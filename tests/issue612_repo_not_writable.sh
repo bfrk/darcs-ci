@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 
-# Test that darcs fails appropriately when the target repo inventory file is not writable.
-# See issue612
+# Test that darcs fails appropriately when the target repo inventory file is
+# not writable. See issue612
 
 . lib
 
-#abort_windows
+# We can set and clear permission bits with bash on Windows but that
+# has not the expected effect on programs.
+abort_windows
 
 rm -rf temp1 temp2
 mkdir temp1
@@ -22,5 +24,5 @@ darcs get temp1 temp2
 cd temp2
 echo new >> t.t
 darcs record -am "new patch"
-not darcs push -a ../temp1 --debug
+not darcs push -a ../temp1
 cd ..

@@ -3,6 +3,11 @@
 ### darcs get --set-scripts-executable ignores umask
 . ./lib
 
+# We can set and clear permission bits with bash on Windows but that
+# has not the expected effect on programs. So even though this test
+# actually succeeds on Windows, it makes no sense to run it.
+abort_windows
+
 rm -rf temp
 mkdir temp
 cd temp
@@ -19,4 +24,3 @@ echo -rwx------ > desired-mode
 diff -u desired-mode mode
 
 cd ..
-rm -rf temp
