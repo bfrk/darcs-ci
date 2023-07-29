@@ -1,6 +1,5 @@
-#!/bin/sh -e
-##
-## Test rebase unsuspend, with quit
+#!/usr/bin/env bash
+## Test that set-default hint messages are produced at the right times
 ##
 ## Copyright (C) 2011 Ganesh Sittampalam
 ##
@@ -24,22 +23,32 @@
 ## CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 ## SOFTWARE.
 
-. lib
+. lib                           # Load some portability helpers.
+rm -rf R1 R2 R3                 # Another script may have left a mess.
 
-rm -rf R
-mkdir R
-cd R
-darcs init
-touch foo
-darcs rec -lam 'add foo'
+darcs init      --repo R1
+darcs get R1 R2
+darcs get R1 R3
 
-touch bar
-darcs rec -lam 'add bar'
+HINTSTRING="issue the same command with the --set-default flag"
 
-touch baz
-darcs rec -lam 'add baz'
+cd R3
+for command in pull push send
+do
+   opt=
+   test "$command" = "send" && opt=-O
 
-echo 'yyyy' | darcs rebase suspend
+   # R1 should be the default for R3
+   darcs $command $opt ../R1 | not grep "$HINTSTRING"
+   darcs $command $opt ../R2 | grep "$HINTSTRING"
 
-echo yyq | darcs rebase unsuspend 2> log
-grep "3 suspended patches" log
+   # can disable message on the command-line
+   darcs $command $opt --no-set-default ../R2 | not grep "$HINTSTRING"
+
+   # or using defaults
+   echo "$command no-set-default" >> ../.darcs/defaults
+   darcs $command $opt ../R2 | not grep "$HINTSTRING"
+
+   darcs $command $opt --set-default ../R2 | not grep "$HINTSTRING"
+   darcs $command $opt --set-default ../R1 | not grep "$HINTSTRING"
+done

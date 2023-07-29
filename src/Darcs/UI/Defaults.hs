@@ -3,8 +3,7 @@ module Darcs.UI.Defaults ( applyDefaults ) where
 import Darcs.Prelude
 
 import Control.Monad.Writer
-import Data.Char ( isLetter, isSpace )
-import Data.Either ( partitionEithers )
+import Data.Char ( isSpace )
 import Data.Functor.Compose ( Compose(..) )
 import Data.List ( nub )
 import Data.Maybe ( catMaybes )
@@ -12,11 +11,11 @@ import qualified Data.Map as M
 import System.Console.GetOpt
 import Text.Regex.Applicative
     ( (<|>)
-    , match, many, some, sym
+    , match, many, some
     , psym, anySym, string )
 
 import Darcs.UI.Flags ( DarcsFlag )
-import Darcs.UI.Options ( DarcsOptDescr, OptMsg(..), withDashes )
+import Darcs.UI.Options ( DarcsOptDescr )
 
 import Darcs.UI.Commands
     ( DarcsCommand
@@ -56,17 +55,15 @@ import Darcs.Util.Path ( AbsolutePath )
 -- Errors encountered during processing of command line or defaults flags
 -- are formatted and added as (separate) strings to the list of error messages
 -- that are returned together with the resulting flag list.
-applyDefaults
-  :: Maybe String -- ^ maybe name of super command
-  -> DarcsCommand -- ^ the darcs command
-  -> AbsolutePath -- ^ the original working directory, i.e.
-                  --   the one from which darcs was invoked
-  -> [String]     -- ^ lines from user defaults
-  -> [String]     -- ^ lines from repo defaults
-  -> [DarcsFlag]  -- ^ flags from command line
-  -> ([DarcsFlag], ([String], [String])) -- new flags, warnings, errors
-applyDefaults msuper cmd cwd user repo flags =
-  splitMessages $ runWriter $ do
+applyDefaults :: Maybe String -- ^ maybe name of super command
+              -> DarcsCommand -- ^ the darcs command
+              -> AbsolutePath -- ^ the original working directory, i.e.
+                              --   the one from which darcs was invoked
+              -> [String]     -- ^ lines from user defaults
+              -> [String]     -- ^ lines from repo defaults
+              -> [DarcsFlag]  -- ^ flags from command line
+              -> ([DarcsFlag], [String]) -- new flags and errors
+applyDefaults msuper cmd cwd user repo flags = runWriter $ do
     cl_flags  <- runChecks "Command line" check_opts flags
     user_defs <- get_flags "User defaults" user
     repo_defs <- get_flags "Repo defaults" repo
@@ -77,7 +74,6 @@ applyDefaults msuper cmd cwd user repo flags =
     check_opts = commandCheckOptions cmd
     opts = uncurry (++) $ commandAlloptions cmd
     get_flags source = parseDefaults source cwd cmd_name opts check_opts
-    splitMessages (r,ms) = (r,partitionOptMsgs ms)
 
 -- | Name of a normal command, or name of super and sub command.
 data CmdName = NormalCmd String | SuperCmd String String
@@ -92,19 +88,10 @@ showCmdName :: CmdName -> String
 showCmdName (SuperCmd super sub) = unwords [super,sub]
 showCmdName (NormalCmd name) = name
 
-runChecks :: String -> ([DarcsFlag] -> [OptMsg]) -> [DarcsFlag] -> Writer [OptMsg] [DarcsFlag]
+runChecks :: String -> ([DarcsFlag] -> [String]) -> [DarcsFlag] -> Writer [String] [DarcsFlag]
 runChecks source check fs = do
-  tell $ map (mapOptMsg ((source++": ")++)) $ check fs
+  tell $ map ((source++": ")++) $ check fs
   return fs
-
-mapOptMsg :: (String -> String) -> OptMsg -> OptMsg
-mapOptMsg f (OptWarning s) = OptWarning (f s)
-mapOptMsg f (OptError s) = OptError (f s)
-
-partitionOptMsgs :: [OptMsg] -> ([String], [String])
-partitionOptMsgs = partitionEithers . map toEither where
-  toEither (OptWarning s) = Left s
-  toEither (OptError s) = Right s
 
 -- | Parse a list of lines from a defaults file, returning a list of 'DarcsFlag',
 -- given the current working directory, the command name, and a list of 'DarcsOption'
@@ -125,9 +112,9 @@ parseDefaults :: String
               -> AbsolutePath
               -> CmdName
               -> [DarcsOptDescr DarcsFlag]
-              -> ([DarcsFlag] -> [OptMsg])
+              -> ([DarcsFlag] -> [String])
               -> [String]
-              -> Writer [OptMsg] [DarcsFlag]
+              -> Writer [String] [DarcsFlag]
 parseDefaults source cwd cmd opts check_opts def_lines = do
     cmd_flags <- flags_for (M.keys opt_map) cmd_defs >>=
       runChecks (source++" for command '"++showCmdName cmd++"'") check_opts
@@ -140,11 +127,11 @@ parseDefaults source cwd cmd opts check_opts def_lines = do
     all_defs = parseDefaultsLines (NormalCmd "ALL") def_lines
     to_flag all_switches (switch,arg) =
       if switch `notElem` all_switches then do
-        tell [ OptWarning $ source++": command '"++showCmdName cmd
+        tell [source++": command '"++showCmdName cmd
              ++"' has no option '"++switch++"'."]
         return Nothing
       else
-        mapErrors ((OptWarning $ source++" for command '"++showCmdName cmd++"':"):)
+        mapErrors ((source++" for command '"++showCmdName cmd++"':"):)
           $ defaultToFlag cwd opt_map (switch,arg)
     -- the catMaybes filters out options that are not defined
     -- for this command
@@ -172,16 +159,32 @@ type Default = (String, String)
 parseDefaultsLines :: CmdName -> [String] -> [Default]
 parseDefaultsLines cmd = catMaybes . map matchLine
   where
-    matchLine = match $ (,) <$> (match_cmd cmd *> spaces *> option) <*> rest
+    matchLine = match $ (,) <$> (match_cmd cmd *> spaces *> opt_dashes *> word) <*> rest
     match_cmd (NormalCmd name) = string name
     match_cmd (SuperCmd super sub) = string super *> spaces *> string sub
-    option = short <|> long
-    short = (\c1 c2 -> [c1,c2]) <$> sym '-' <*> psym isLetter
-    long = (++) <$> opt_dashes <*> word
-    opt_dashes = string "--" <|> pure "--"
-    word = (:) <$> psym isLetter <*> many (psym (not.isSpace))
+    opt_dashes = string "--" <|> pure ""
+    word = some $ psym (not.isSpace)
     spaces = some $ psym isSpace
     rest = spaces *> many anySym <|> pure ""
+
+{- $note
+This definition is a bit simpler, and doesn't need Text.Regex.Applicative,
+but it has two disadvantages over the one above:
+
+ * Flag arguments are split and joined again with words/unwords, which means
+   that whitespace inside an argument is not preserved literally.
+
+ * It is less easily extendable with new syntax.
+
+> parseDefaultsLines :: CmdName -> [String] -> [(String, String)]
+> parseDefaultsLines name entries = case name of
+>     SuperCmd super sub -> [ mk_def d as | (s:c:d:as) <- map words entries, s == super, c == sub ]
+>     NormalCmd cmd ->      [ mk_def d as | (c:d:as) <- map words entries, c == cmd ]
+>   where
+>     mk_def d as = (drop_dashes d, unwords as)
+>     drop_dashes ('-':'-':switch) = switch
+>     drop_dashes switch = switch
+-}
 
 -- | Search an option list for a switch. If found, apply the flag constructor
 -- from the option to the arg, if any. The first parameter is the current working
@@ -192,7 +195,7 @@ parseDefaultsLines cmd = catMaybes . map matchLine
 defaultToFlag :: AbsolutePath
               -> OptionMap
               -> Default
-              -> Writer [OptMsg] (Maybe DarcsFlag)
+              -> Writer [String] (Maybe DarcsFlag)
 defaultToFlag cwd opts (switch, arg) = case M.lookup switch opts of
     -- This case is not impossible! A default flag defined for ALL commands
     -- is not necessarily defined for the concrete command in question.
@@ -202,9 +205,7 @@ defaultToFlag cwd opts (switch, arg) = case M.lookup switch opts of
     getArgDescr (Option _ _ a _) = a
     flag_from (NoArg mkFlag) = do
       if not (null arg) then do
-        tell
-          [ OptWarning $
-            "'"++switch++"' takes no argument, but '"++arg++"' argument given." ]
+        tell ["'"++switch++"' takes no argument, but '"++arg++"' argument given."]
         return Nothing
       else
         return $ Just $ mkFlag cwd
@@ -212,28 +213,27 @@ defaultToFlag cwd opts (switch, arg) = case M.lookup switch opts of
       return $ Just $ mkFlag (if null arg then Nothing else Just arg) cwd
     flag_from (ReqArg mkFlag _) = do
       if null arg then do
-        tell
-          [ OptError $
-            "'"++switch++"' requires an argument, but no argument given." ]
+        tell ["'"++switch++"' requires an argument, but no "++"argument given."]
         return Nothing
       else
         return $ Just $ mkFlag arg cwd
 
--- | Get all the flag names from an options
-optionSwitches :: DarcsOptDescr DarcsFlag -> [String]
-optionSwitches (Compose (Option short long _ _)) = withDashes short long
+-- | Get all the longSwitches from a list of options.
+optionSwitches :: [DarcsOptDescr DarcsFlag] -> [String]
+optionSwitches = concatMap sel where
+  sel (Compose (Option _ switches _ _)) = switches
 
--- | A finite map from flag names to 'DarcsOptDescr's.
+-- | A finite map from long switches to 'DarcsOptDescr's.
 type OptionMap = M.Map String (DarcsOptDescr DarcsFlag)
 
 -- | Build an 'OptionMap' from a list of 'DarcsOption's.
 optionMap :: [DarcsOptDescr DarcsFlag] -> OptionMap
 optionMap = M.fromList . concatMap sel where
   add_option opt switch = (switch, opt)
-  sel o = map (add_option o) (optionSwitches o)
+  sel o@(Compose (Option _ switches _ _)) = map (add_option o) switches
 
 -- | List of option switches of all commands (except help but that has no options).
 allOptionSwitches :: [String]
-allOptionSwitches = nub $ concatMap optionSwitches $
+allOptionSwitches = nub $ optionSwitches $
   concatMap (uncurry (++) . commandAlloptions) $
             extractAllCommands commandControlList

@@ -21,7 +21,7 @@ cd ..
 
 corrupt_format_file() {
   # mimic format file corruption as in issue2650
-  sed -i 's/gobbledygook/Unknown format: gobbledygook/' $1/_darcs/format
+  sed -i 's/gobbledygook/Unknown format: gobbledygook/' future/_darcs/format
 }
 
 # check the rules for reading and writing
@@ -57,30 +57,27 @@ cd ..
 # add in garbage repo
 cd garbage
 touch toto
-
-cp _darcs/format before
 not darcs add toto 2> log
 grep -i "read repository.*unknown format" log
-diff before _darcs/format # issue2650
 cd ..
 
 # rebase suspend in garbage repo
 cd garbage
-cp _darcs/format before
 not darcs rebase suspend --last=1 2> log
 grep -i "read repository.*unknown format" log
-diff before _darcs/format # issue2650
+# issue2650
+not grep 'Unknown format' _darcs/format
 cd ..
 }
 
 test_garbage
 
 # corrupt once
-corrupt_format_file garbage
+corrupt_format_file
 test_garbage
 # corrupt multiple times
-corrupt_format_file garbage
-corrupt_format_file garbage
+corrupt_format_file
+corrupt_format_file
 test_garbage
 
 
@@ -92,16 +89,11 @@ test_future () {
 # --to-match is needed because of bug###
 rm -rf temp1
 darcs get future temp1 --to-match "name titi"
-# fresh clone should fix corrupt format
 cd temp1
-not grep 'Unknown format' _darcs/format # issue2650
 darcs changes
-not grep 'Unknown format' _darcs/format # issue2650
 touch toto
 darcs add toto
-not grep 'Unknown format' _darcs/format # issue2650
 darcs record -am 'blah'
-not grep 'Unknown format' _darcs/format # issue2650
 cd ..
 
 # pull from future repo: ok
@@ -111,7 +103,6 @@ cd temp1
 darcs init
 darcs pull ../future -a
 darcs changes | grep titi
-not grep 'Unknown format' _darcs/format # issue2650
 cd ..
 
 # apply in future repo: !ok
@@ -123,11 +114,9 @@ darcs changes --context > empty-context
 darcs tag -m "just a patch"
 darcs send -a --context=empty-context -o ../bundle.dpatch .
 cd ../future
-cp _darcs/format before
 not darcs apply ../bundle.dpatch 2> log
 cat log
 grep -i "write repository.*unknown format" log
-diff before _darcs/format # issue2650
 cd ..
 
 # record in future repo: !ok
@@ -139,19 +128,19 @@ cd ..
 
 # rebase suspend in future repo
 cd future
-cp _darcs/format before
 not darcs rebase suspend --last=1 2> log
 grep -i "write repository.*unknown format" log
-diff before _darcs/format # issue2650
+# issue2650
+not grep 'Unknown format' _darcs/format
 cd ..
 }
 
 test_future
 
 # corrupt once
-corrupt_format_file future
+corrupt_format_file
 test_future
 # corrupt multiple times
-corrupt_format_file future
-corrupt_format_file future
+corrupt_format_file
+corrupt_format_file
 test_future

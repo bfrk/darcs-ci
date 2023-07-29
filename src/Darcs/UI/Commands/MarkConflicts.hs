@@ -25,11 +25,12 @@ import System.Exit ( exitSuccess )
 import Data.List.Ordered ( nubSort, isect )
 import Control.Monad ( when, unless, void )
 
+import Darcs.Util.Prompt ( promptYorn )
 import Darcs.Util.SignalHandler ( withSignalsBlocked )
 import Darcs.Util.Path ( AbsolutePath, AnchoredPath, anchorPath )
 import Darcs.Util.Printer
-    ( Doc, formatWords, pathlist, text, debugDocLn
-    , vcat, vsep, (<+>), ($$) )
+    ( Doc, pathlist, putDocLnWith, text, redText, debugDocLn, vsep, (<+>), ($$) )
+import Darcs.Util.Printer.Color ( fancyPrinters )
 
 import Darcs.UI.Commands
     ( DarcsCommand(..)
@@ -59,16 +60,13 @@ import Darcs.Repository
 import Darcs.Patch ( invert, listTouchedFiles, effectOnPaths )
 import Darcs.Patch.Show
 import Darcs.Patch.TouchesFiles ( chooseTouching )
-import Darcs.Patch.Witnesses.Ordered ( mapFL )
+import Darcs.Patch.Witnesses.Ordered ( (+>+), mapFL, nullFL )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(Sealed) )
 import Darcs.Repository.Resolution
     ( StandardResolution(..)
     , patchsetConflictResolutions
     , warnUnmangled
     )
-import Darcs.Patch.Named ( anonymous )
-import Darcs.Patch.PatchInfoAnd ( n2pia )
-import Darcs.Patch.Set ( patchSetSnoc )
 
 -- * The mark-conflicts command
 
@@ -77,49 +75,29 @@ markconflictsDescription =
  "Mark unresolved conflicts in working tree, for manual resolution."
 
 markconflictsHelp :: Doc
-markconflictsHelp = vsep $
-  [ formatWords
-    [ "Darcs requires human guidance to reconcile independent changes to the same"
-    , "part of a file.  When a conflict first occurs, darcs will add the"
-    , "initial state and all conflicting choices to the working tree, delimited"
-    , " by the markers `v v v`, `=====`,  `* * *` and `^ ^ ^`, as follows:"
-    ]
-  , vcat $ map text
-    [ "    v v v v v v v"
-    , "    initial state"
-    , "    ============="
-    , "    first choice"
-    , "    *************"
-    , "    ...more choices..."
-    , "    *************"
-    , "    last choice"
-    , "    ^ ^ ^ ^ ^ ^ ^"
-    ]
-  ] ++ map formatWords
-  [ [ "If you happened to revert or manually delete this conflict markup without"
-    , "actually resolving the conflict, `darcs mark-conflicts` can be used to"
-    , "re-create it; and similarly if you have used `darcs apply` or `darcs pull`"
-    , "with `--allow-conflicts`, where conflicts aren't marked initially."
-    ]
-  , [ "In Darcs, a conflict counts as resolved when all of the changes"
-    , "involved in the conflict (which can be more than two) are depended on by"
-    , "one or more later patches. If you record a resolution for a particular"
-    , "conflict, `darcs mark-conflicts` will no longer mark it, indicating that"
-    , "it is resolved. If you have unrecorded changes, these count as (potential)"
-    , "conflict resolutions, too, just as if you had already recorded them."
-    ]
-  , [ "This principle extends to explicit \"semantic\" dependencies. For instance,"
-    , "recording a tag will automatically mark all conflicts as resolved."
-    ]
-  , [ "In the above schematic example the \"initial state\" corresponds to the"
-    , "recorded state of the file in your repository. That is to say, the"
-    , "recorded effect of a conflict is to apply none of the conflicting changes."
-    , "This is usually not a state you would regard as a successful resolution"
-    , "of the conflict; but there are exceptional situations where this may be"
-    , "exactly what you want. In order to tell Darcs that you want this conflict"
-    , "to be regarded as resolved, use `record record --ask-deps` to record a"
-    , "patch that explicitly depends on all patches involved in the conflict."
-    ]
+markconflictsHelp = text $ unlines
+ ["Darcs requires human guidance to unify changes to the same part of a"
+ ,"source file.  When a conflict first occurs, darcs will add the"
+ ,"initial state and both choices to the working tree, delimited by the"
+ ,"markers `v v v`, `=====`,  `* * *` and `^ ^ ^`, as follows:"
+ ,""
+ ,"    v v v v v v v"
+ ,"    Initial state."
+ ,"    ============="
+ ,"    First choice."
+ ,"    *************"
+ ,"    Second choice."
+ ,"    ^ ^ ^ ^ ^ ^ ^"
+ ,""
+ ,"However, you might revert or manually delete these markers without"
+ ,"actually resolving the conflict.  In this case, `darcs mark-conflicts`"
+ ,"is useful to show where are the unresolved conflicts.  It is also"
+ ,"useful if `darcs apply` or `darcs pull` is called with"
+ ,"`--allow-conflicts`, where conflicts aren't marked initially."
+ ,""
+ ,"Unless you use the `--dry-run` flag, any unrecorded changes to the"
+ ,"affected files WILL be lost forever when you run this command!"
+ ,"You will be prompted for confirmation before this takes place."
  ]
 
 markconflicts :: DarcsCommand
@@ -159,7 +137,15 @@ markconflictsCmd fps opts args = do
     * read conflict resolutions that touch pre-pending argument paths
     * affected paths = intersection of paths touched by resolutions
                        and pre-pending argument paths
-    * apply the conflict resolutions for affected paths
+    * for these paths, revert pending changes
+    * apply the (filtered, see above) conflict resolutions
+
+    Technical side-note:
+    Ghc can't handle pattern bindings for existentials. So 'let' is out,
+    one has to use 'case expr of var ->' or 'do var <- return expr'.
+    Case is clearer but do-notation does not increase indentation depth.
+    So we use case for small-scope bindings and <-/return when the scope
+    is a long do block.
 -}
 
     classified_paths <-
@@ -169,7 +155,6 @@ markconflictsCmd fps opts args = do
 
     unrecorded <-
       unrecordedChanges (diffingOpts opts) _repository (fromOnly Everything)
-    anonpw <- n2pia `fmap` anonymous unrecorded
 
     let forward_renames = effectOnPaths unrecorded
         backward_renames = effectOnPaths (invert unrecorded)
@@ -178,9 +163,7 @@ markconflictsCmd fps opts args = do
     debugDocLn $ "::: pre_pending_paths =" <+> (text . show) pre_pending_paths
 
     r <- readPatches _repository
-    -- by including anonpw in the patch set, we regard unrecorded changes
-    -- as potential conflict resolutions "under construction"
-    Sealed res <- case patchsetConflictResolutions $ patchSetSnoc r anonpw of
+    Sealed res <- case patchsetConflictResolutions r of
       conflicts -> do
         warnUnmangled (fromOnly pre_pending_paths) conflicts
         Sealed mangled_res <- return $ mangled conflicts
@@ -197,19 +180,43 @@ markconflictsCmd fps opts args = do
       putInfo opts "No conflicts to mark."
       exitSuccess
 
+    to_revert <-
+      unrecordedChanges (diffingOpts opts) _repository (fromOnly affected_paths)
+
     let post_pending_affected_paths = forward_renames <$> affected_paths
     putInfo opts $ "Marking conflicts in:" <+> showPathSet post_pending_affected_paths <> "."
 
+    debugDocLn $ "::: to_revert =" $$ vsep (mapFL displayPatch to_revert)
     debugDocLn $ "::: res = " $$ vsep (mapFL displayPatch res)
     when (O.yes (dryRun ? opts)) $ do
         putInfo opts $ "Conflicts will not be marked: this is a dry run."
         exitSuccess
 
-    addToPending _repository (diffingOpts opts) res
+    unless (nullFL to_revert) $ do
+        -- TODO:
+        -- (1) create backups for all files where we revert changes
+        -- (2) try to add the reverted stuff to the unrevert bundle
+        -- after (1) and (2) is done we can soften the warning below
+        putDocLnWith fancyPrinters $
+          "Warning: This will revert all unrecorded changes in:"
+          <+> showPathSet post_pending_affected_paths <> "."
+          $$ redText "These changes will be LOST."
+        confirmed <- promptYorn "Are you sure? "
+        unless confirmed exitSuccess
+
+{-      -- copied from Revert.hs, see comment (2) above
+        debugMessage "About to write the unrevert file."
+        case commute (norevert:>p) of
+          Just (p':>_) -> writeUnrevert repository p' recorded NilFL
+          Nothing -> writeUnrevert repository (norevert+>+p) recorded NilFL
+        debugMessage "About to apply to the working tree."
+-}
+    to_add <- return $ invert to_revert +>+ res
+    addToPending _repository (diffingOpts opts) to_add
     withSignalsBlocked $ do
       _repository <- finalizeRepositoryChanges _repository (O.dryRun ? opts)
       unless (O.yes (O.dryRun ? opts)) $
-        void $ applyToWorking _repository (verbosity ? opts) res
+        void $ applyToWorking _repository (verbosity ? opts) to_add
     putFinished opts "marking conflicts"
 
 -- * Generic 'PathSet' support

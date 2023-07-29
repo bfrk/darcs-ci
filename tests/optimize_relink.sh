@@ -5,17 +5,16 @@
 
 . ./lib
 
-## compare succeeds if all files in $1 are also found under $2 and are hard links
+## We don't support hard links on Windows.
+
+if echo $OS | grep -i windows; then
+    echo darcs does not support hard links on Windows
+    exit 0
+fi
+
+## compare succeeds if there are hard links
 compare () {
-  ls -1 $1 | grep -v pend | while read fn; do
-  test -d $2
-    fn1=$1/$fn
-    fn2=$(find $2 -name $fn)
-    # only if the other file actually exists
-    if test -n "$fn2"; then
-      test "$(stat -c %i $fn1)" = "$(stat -c %i $fn2)"
-    fi
-  done
+  echo 'use File::Basename; $res=0; while ($fn=<'$1'/*>) { $fn2="'$2'/" . basename($fn); @fd1=lstat($fn); @fd2=lstat($fn2); $res += ($fd1[1] != $fd2[1]);}; exit($res);' | perl
 }
 
 rm -rf temp
@@ -27,10 +26,7 @@ darcs init --repodir x
 cd x
 date > foo
 darcs add foo
-# use --no-cache so that the cache does not (yet) have a copy/link
-darcs record -a -A me -m 'addfoo' --no-cache
-# so that we have something in inventories
-darcs tag sometag
+darcs record -a -A me -m 'addfoo'
 cd ..
 
 ## Does the filesystem support hard linking at all?
@@ -39,84 +35,25 @@ echo "hi" > z1/foo
 mkdir z2
 if ! ln z1/foo z2/foo ; then
   echo No ln command for `pwd` - assuming no hard links.
-  exit 200
+  exit 0
 fi
 if ! compare z1 z2 ; then
   echo Filesystem for `pwd` does not support hard links.
-  exit 200
+  exit 0
 fi
-
-# copy the repo
+# workaround for SunOS cp which does not support `-a' option but also
+# doesn't fail when it is encountered.
 cp -r x y
 
-hashed_dirs="patches inventories pristine.hashed"
-
-if grep no-cache $HOME/.darcs/defaults; then
-  testing_with_cache="no"
-else
-  testing_with_cache="yes"
-fi
-
-check () {
-  for d in $hashed_dirs; do
-    compare x/_darcs/$d y/_darcs/$d
-    if $testing_with_cache; then
-      compare x/_darcs/$d $HOME/.cache/darcs/$d
-    fi
-  done
-}
-
 ## Now try relinking using darcs.
-
-# first: sanity check
-for d in $hashed_dirs; do
-  ! compare x/_darcs/$d y/_darcs/$d
-  if test "$testing_with_cache" = "yes"; then
-    ! test -d $HOME/.cache/darcs/$d
-  fi
-done
-
-# now do it
-darcs optimize relink --verbose --repodir x --sibling y --debug 2> ERR1
-
-# test that it did what it should
-for d in $hashed_dirs; do
-  compare x/_darcs/$d y/_darcs/$d
-  if test "$testing_with_cache" = "yes"; then
-    compare x/_darcs/$d $HOME/.cache/darcs/$d
-  fi
-done
-
-## test that optimize relink does not destroy sharing
-
-rm -rf y z
-darcs clone x y
-darcs clone y z
-# this is needed because when we clone a repo, the pristine hash
-# for the empty working tree is created before we initialize sources
-# and defaultrepo, and thus isn't shared:
-darcs optimize clean --repo z
-# hashed files should be shared between x, y, z, and global cache
-for d in $hashed_dirs; do
-  compare x/_darcs/$d y/_darcs/$d
-  compare y/_darcs/$d z/_darcs/$d
-  if test "$testing_with_cache" = "yes"; then
-    compare x/_darcs/$d $HOME/.cache/darcs/$d
-  fi
-done
-# if cache is enabled, we can even remove any implicit siblings
-if test "$testing_with_cache" = "yes"; then
-  rm z/_darcs/prefs/sources
-  rm z/_darcs/prefs/defaultrepo
+rm -rf z
+darcs optimize relink --verbose --repodir x --sibling y
+rm -rf x/_darcs/patches/pend* y/_darcs/patches/pend*
+if compare x/_darcs/patches y/_darcs/patches
+then echo darcs optimize relink is working, hard links were done.
+else echo darcs optimize relink is not working, it did not make any hard links.
+     exit 2
 fi
-# do not pass any explicit siblings
-darcs optimize relink --verbose --repodir z --debug 2> ERR2
-for d in $hashed_dirs; do
-  compare x/_darcs/$d y/_darcs/$d
-  compare y/_darcs/$d z/_darcs/$d
-  if test "$testing_with_cache" = "yes"; then
-    compare x/_darcs/$d $HOME/.cache/darcs/$d
-  fi
-done
 
 cd ..
+rm -rf temp

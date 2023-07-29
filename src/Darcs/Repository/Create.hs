@@ -33,7 +33,7 @@ import Darcs.Util.Cache ( Cache )
 import Darcs.Repository.Format
     ( RepoFormat
     , createRepoFormat
-    , unsafeWriteRepoFormat
+    , writeRepoFormat
     )
 import Darcs.Repository.Flags
     ( PatchFormat(..)
@@ -86,7 +86,7 @@ createRepositoryFiles patchfmt withWorkingDir withPrefsTemplates = do
   createDirectory prefsDirPath
   writeDefaultPrefs withPrefsTemplates
   let repo_format = createRepoFormat patchfmt withWorkingDir
-  unsafeWriteRepoFormat repo_format formatPath
+  writeRepoFormat repo_format formatPath
   -- note: all repos we create nowadays are hashed
   writeBinFile hashedInventoryPath B.empty
   return repo_format

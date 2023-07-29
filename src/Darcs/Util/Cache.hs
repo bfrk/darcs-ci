@@ -13,14 +13,11 @@ module Darcs.Util.Cache
     , filterRemoteCaches
     , cleanCaches
     , cleanCachesWithHint
-    , relinkCaches
     , fetchFileUsingCache
     , speculateFileUsingCache
     , speculateFilesUsingCache
     , writeFileUsingCache
     , peekInCache
-    , parseCacheLoc
-    , showCacheLoc
     , writable
     , isThisRepo
     , hashedFilePath
@@ -33,16 +30,15 @@ module Darcs.Util.Cache
 import Control.Concurrent.MVar ( MVar, modifyMVar_, newMVar, readMVar )
 import Control.Monad ( filterM, forM_, liftM, mplus, unless, when )
 import qualified Data.ByteString as B ( ByteString )
-import Data.List ( intercalate, nub, partition, sortBy )
+import Data.List ( intercalate, nub, sortBy )
 import Data.Maybe ( catMaybes, fromMaybe, listToMaybe )
 import System.Directory
     ( createDirectoryIfMissing
     , doesDirectoryExist
     , doesFileExist
-    , listDirectory
+    , getDirectoryContents
     , getPermissions
     , removeFile
-    , renameFile
     , withCurrentDirectory
     )
 import qualified System.Directory as SD ( writable )
@@ -50,8 +46,7 @@ import System.FilePath.Posix ( dropFileName, joinPath, (</>) )
 import System.IO ( hPutStrLn, stderr )
 import System.IO.Error ( isAlreadyExistsError )
 import System.IO.Unsafe ( unsafePerformIO )
-import System.Posix.Files ( createLink, fileID, getSymbolicLinkStatus, linkCount )
-import Text.Regex.Applicative ( anySym, many, match, string, (<|>) )
+import System.Posix.Files ( createLink, getSymbolicLinkStatus, linkCount )
 
 import Darcs.Prelude
 
@@ -128,24 +123,14 @@ cacheEntries (Ca entries) = entries
 instance Eq CacheLoc where
     (Cache aTy _ aSrc) == (Cache bTy _ bSrc) = aTy == bTy && aSrc == bSrc
 
-showCacheLoc :: CacheLoc -> String
-showCacheLoc (Cache Repo Writable a) = "thisrepo:" ++ a
-showCacheLoc (Cache Repo NotWritable a) = "repo:" ++ a
-showCacheLoc (Cache Directory Writable a) = "cache:" ++ a
-showCacheLoc (Cache Directory NotWritable a) = "readonly:" ++ a
+instance Show CacheLoc where
+    show (Cache Repo Writable a) = "thisrepo:" ++ a
+    show (Cache Repo NotWritable a) = "repo:" ++ a
+    show (Cache Directory Writable a) = "cache:" ++ a
+    show (Cache Directory NotWritable a) = "readonly:" ++ a
 
 instance Show Cache where
-    show (Ca cs) = intercalate "\n" $ map showCacheLoc cs
-
-parseCacheLoc :: String -> Maybe CacheLoc
-parseCacheLoc = match reCacheLoc
-  where
-    reCacheLoc =
-      Cache Repo Writable <$> (string "thisrepo:" *> rest) <|>
-      Cache Repo NotWritable <$> (string "repo:" *> rest) <|>
-      Cache Directory Writable <$> (string "cache:" *> rest) <|>
-      Cache Directory NotWritable <$> (string "readonly:" *> rest)
-    rest = many anySym
+    show (Ca cs) = intercalate "\n" $ map show cs
 
 -- | Filter caches for remote repos. This affects only entries that are locally
 -- valid paths (i.e. not network URLs): they are removed if non-existent, or
@@ -463,10 +448,6 @@ fetchFileUsingCachePrivate fromWhere (Ca cache) hash = do
                              then "\nRun `darcs repair` to fix this problem."
                              else "")
 
--- | @tryLinking source filename subdir cacheloc@ creates a hard link from the
--- @source@ file path (which is supposed to be an existing regular file) to the
--- target location (the path of @filename@ in @subdir@ of the @cacheloc@), if
--- the @cacheloc@ is writable and unless the target file already exists.
 tryLinking :: FilePath -> FilePath -> HashedDir -> CacheLoc -> IO ()
 tryLinking source filename subdir c =
   when (writable c) $ do
@@ -474,26 +455,6 @@ tryLinking source filename subdir c =
     let target = hashedFilePath c subdir filename
     debugMessage $ "Linking " ++ source ++ " to " ++ target
     handleOnly isAlreadyExistsError (return ()) $ createLink source target
-
--- | Like 'tryLinking', but if the target file exists and is not
--- the same file as the source, replace it.
-tryRelinking :: FilePath -> FilePath -> HashedDir -> CacheLoc -> IO ()
-tryRelinking source filename subdir c =
-  when (writable c) $ do
-    createCache c subdir filename
-    let target = hashedFilePath c subdir filename
-    debugMessage $ "Relinking " ++ source ++ " to " ++ target
-    let handleExists = do
-          debugMessage $ "Relinking: " ++ target ++ " already exists"
-          unless (source == target) $ do
-            st_source <- getSymbolicLinkStatus target
-            st_target <- getSymbolicLinkStatus source
-            when (fileID st_source /= fileID st_target) $ do
-              let target_tmp = target ++ ".tmp"
-              debugMessage $ "Relinking: " ++ target_tmp
-              createLink source target_tmp
-              renameFile target_tmp target
-    handleOnly isAlreadyExistsError handleExists $ createLink source target
 
 createCache :: CacheLoc -> HashedDir -> FilePath -> IO ()
 createCache (Cache Directory _ d) subdir filename =
@@ -503,7 +464,8 @@ createCache _ _ _ = return ()
 -- | Write file content, except if it is already in the cache, in
 -- which case merely create a hard link to that file. The returned value
 -- is the size and hash of the content.
-writeFileUsingCache :: ValidHash h => Cache -> B.ByteString -> IO h
+writeFileUsingCache
+  :: ValidHash h => Cache -> B.ByteString -> IO h
 writeFileUsingCache (Ca cache) content = do
     debugMessage $ "writeFileUsingCache "++filename
     (fn, _) <- fetchFileUsingCachePrivate LocalOnly (Ca cache) hash
@@ -543,7 +505,7 @@ cleanCachesWithHint' (Ca cs) subdir hint = mapM_ cleanCache cs
   where
     cleanCache (Cache Directory Writable d) =
         withCurrentDirectory (d </> hashedDir subdir) (do
-            fs' <- listDirectory "."
+            fs' <- getDirectoryContents "."
             let fs = filter okayHash $ fromMaybe fs' hint
                 cleanMsg = "Cleaning cache " ++ d </> hashedDir subdir
             mapM_ clean $ progressList cleanMsg fs)
@@ -555,29 +517,6 @@ cleanCachesWithHint' (Ca cs) subdir hint = mapM_ cleanCache cs
         when (lc < 2) $ removeFile f
         `catchall`
         return ()
-
-relinkCaches :: Cache -> HashedDir -> IO ()
-relinkCaches (Ca locations) subdir =
-  case partition isThisRepo locations of
-    (Cache _ _ repodir : _, rest) -> do
-      let repo_hashed_dir = repodir </> darcsdir </> hashedDir subdir
-      filenames <- filter okayHash <$> listDirectory repo_hashed_dir
-      forM_ filenames $ \fn -> do
-        -- search first in non-writable locations to achieve maximal sharing
-        let candidates = uncurry (++) $ partition (not . writable) rest
-        maybe_source <- findInCache fn candidates
-        case maybe_source of
-          Just source -> mapM_ (tryRelinking source fn subdir) locations
-          Nothing -> return ()
-    _ -> return ()
-  where
-    findInCache _ [] = return Nothing
-    findInCache fn (c:cs)
-      | isValidLocalPath (cacheSource c) = do
-        let path = hashedFilePath c subdir fn
-        ex <- doesFileExist path
-        if ex then return (Just path) else findInCache fn cs
-      | otherwise = findInCache fn cs
 
 -- | Prints an error message with a list of bad caches.
 reportBadSources :: IO ()
