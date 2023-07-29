@@ -10,7 +10,7 @@ data to disk and forgetting it.
 The implementation is configured by passing a procedure of type 'DumpItem'
 to 'runTreeMonad'.
 
-This module provides the readily configured 'virtualTreeIO' that never
+This module provides the pre-configured 'virtualTreeIO' that never
 writes any changes, but may trigger filesystem reads as appropriate. -}
 
 module Darcs.Util.Tree.Monad
@@ -150,8 +150,8 @@ replaceItem :: Monad m
 replaceItem path item = do
   modify $ \st -> st { tree = modifyTree (tree st) path (Just item) }
 
--- | Flush a single item to disk. This is the only procedure that uses the
--- Reader part of the environment (the procedure of type @'DumpItem' m@).
+-- | Flush a single item to disk. This is the only procedure that (directly)
+-- uses the Reader part of the environment (the procedure of type @'DumpItem' m@).
 flushItem :: forall m . Monad m => AnchoredPath -> TreeMonad m ()
 flushItem path = do
   current <- gets tree

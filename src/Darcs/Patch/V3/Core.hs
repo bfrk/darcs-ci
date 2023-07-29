@@ -8,14 +8,84 @@ Similar to the camp paper, but with a few differences:
 
 * minor details of merge and commute due to bug fixes
 
-The proofs in this module assume that whenever we create a conflictor we
-maintain the following invariants:
+Some terminology we use in the invariants and proofs:
+
+Recall that q is said to depend on p if commute(p:>q) fails. Permutivity
+implies that this relation extends unambiguously to any pair of patches that
+can be brought (using commutation) into a context where they are adjacent.
+So the definition still makes sense if we identify patches with the same
+name.
+
+Now, for any two /positive/ patches (in the sense given by 'positiveId' from
+class 'SignedId'), not necessarily adjacent ones, define the relation
+"positively depends on" as the transitive closure of "depends on", inside
+the sub-universe of positive patches. In other words, q positively depends
+on p if there are zero or more positive patches u_1;...;u_n such p and q can
+be commuted to form a sequence p;u_1;...;u_n;q where none to the adjacent
+pairs commute. Define "negatively depends on" analoguously. We will use the
+(obvious) fact that p positively depends on q iff q^ negatively depends on
+p^.
+
+Similarly, recall that u is said to conflict with v if cleanMerge(u:\/:v) is
+defined and fails. Just as with "depends on" this extends to any pair that
+can be brought into a common context using commutation, and (if patches are
+named) is also determined solely by the names of the patches involved, and
+therefore still makes sense if we identify patches with the same name. Note
+that definedness of cleanMerge in the above definition implies that a named
+patch does not conflict with itself.
+
+For any two /positive/ patches we say that p positively conflicts with q iff
+there exist (positive) u and v, such that u conflicts with v (modulo
+commutation as above) and
+
+  * either p == u or p positively depends on u, and
+  * either q == v or q positively depends on v.
+
+(We could define "negatively conflicts with" analoguously but we have no
+need for it.)
+
+In the proofs and invariants we never use "depends on" or "conflicts with"
+for patches with differing polarity and we /always/ mean either "positively"
+or "negatively". We therefore omit these qualifiers in favour of brevity if
+it is clear from the context which one is meant.
+
+(As a side note, these notions of "depends on" and "conflicts with" are
+mutually exclusive: two patches of the same polarity either conflict, or one
+depends on the other, or they are unrelated.)
+
+Invariants:
+
+(0) All patches of type RepoPatchV3 are positive. In particular, we must not
+    construct (Prim p) unless we know that p is positive.
 
 (1) A conflictor reverts a patch in its context iff it is the first patch
     that conflicts with it. This implies that any patch a conflictor reverts
-    exists in its context as an unconflicted Prim.
+    exists in its context as an unconflicted Prim. It also implies that the
+    effect of a conflictor contains only negative prims. It is easy to check
+    that this invariant is maintained whenever we create a new conflictor.
 
-(2) If v depends on u and p conflicts with u then it also conflicts with v.
+(2) The "set of conflicts" in a conflictor representing p consists of all
+    prims (in Contexted form) that p positively conflicts with and that
+    are represented as a RepoPatchV3 in its context. Formally: for every
+    RepoPatchV3 representing q in the context of a (Conflictor _ x _)
+    representing p we have
+
+      ident q `S.member` S.map ctxId x == "p positively conflicts with q"
+
+    It is easy to check that all functions that create new conflictors
+    maintain this invariant.
+
+(3) Contexted prims inside a conflictor contain only positive prims.
+    Furthermore, their context part consists only of prims that either the
+    conflictor itself or previous conflictors have reverted.
+
+    It is immediately clear from inspecing the code that the only prims we
+    ever add to the context of a Contexted prim indeed originate from the
+    effects of conflictors. The only remaining proof obligation is to show
+    that when we are adding /negative/ prims, the contexts remain positive.
+    Concretely, we have to show that when we add some negative u^, then
+    either u^ commutes past or the context already contains the (positive) u
+    (so adding u^ removes it).
 
 -}
 
@@ -206,6 +276,8 @@ instance (SignedId name, StorableId name, PrimPatch prim) =>
         -- the paper uses commutePast to calculate cp' and cq', but this must
         -- succeed (and then give the same result as adding to the context)
         -- because of the ctxNoConflict guards below
+        --
+        -- All ctxAddInvFL calls here effectively add only positive prims.
         let cp' = ctxAddInvFL s' cp
         let cq' = ctxAddInvFL r' cq
         let x' = S.map (ctxAddInvFL s') x
@@ -232,6 +304,7 @@ instance (SignedId name, StorableId name, PrimPatch prim) =>
   -- For the other branch, we add a new conflictor representing p. It
   -- conflicts with q and has no effect, since q is already conflicted.
   merge (Prim p :\/: Conflictor r x cq) =
+    -- We effectively add only positive prims here.
     Conflictor (invert p :>: r) (ctxAddInvFL r (ctx p) +| x) cq
     :/\:
     Conflictor NilFL (S.singleton cq) (ctxAddInvFL r (ctx p))
@@ -247,6 +320,7 @@ instance (SignedId name, StorableId name, PrimPatch prim) =>
       Fork _ r s ->
         case cleanMerge (r :\/: s) of
           Just (s' :/\: r') ->
+            -- again, these all effectively add positive prims
             let cp' = ctxAddInvFL s' cp
                 cq' = ctxAddInvFL r' cq
                 x' = cq' +| S.map (ctxAddInvFL s') x
@@ -259,7 +333,7 @@ instance (SignedId name, StorableId name, PrimPatch prim) =>
             -- conflicts with it. Thus every patch it reverts is contained in
             -- its context as an unconflicted Prim patch. This holds for both
             -- lhs and rhs, which share the same context. Thus there can be no
-            -- conflict between the effects of lhs and rhs. QED
+            -- conflict between the effects of lhs and rhs.
             error $ renderString $ redText "uncommon effects can't be merged cleanly:"
               $$ redText "lhs:" $$ displayPatch lhs
               $$ redText "rhs:" $$ displayPatch rhs
@@ -271,31 +345,40 @@ instance (SignedId name, StorableId name, PrimPatch prim) =>
 instance (SignedId name, StorableId name, PrimPatch prim)
   => CommuteNoConflicts (RepoPatchV3 name prim) where
 
-  -- two prim patches that commute
+  -- The various side-conditions here include checks that the two sides
+  -- are not in conflict with each other (if the rhs is a Conflictor).
   commuteNoConflicts (Prim p :> Prim q) = do
     q' :> p' <- commute (p :> q)
     return $ Prim q' :> Prim p'
-  -- commute a conflictor past a prim patch where everything goes smoothly
-  -- i.e. everything in the lhs commutes past the rhs
   commuteNoConflicts (Conflictor r x cp :> Prim q) = do
     q' :> r' <- commuteRL (reverseFL r :> q)
     let iq = invert q
     cp' <- commutePast iq cp
     x' <- S.fromList <$> mapM (commutePast iq) (S.toList x)
     return $ Prim q' :> Conflictor (reverseRL r') x' cp'
-  -- commute a prim patch past a conflictor where everything goes smoothly
-  -- (completely symmetric to the previous case)
+  -- this case is completely symmetric to the previous one
   commuteNoConflicts (Prim p :> Conflictor s y cq) = do
     s' :> p' <- commuteFL (p :> s)
     cq' <- commutePast p' cq
     y' <- S.fromList <$> mapM (commutePast p') (S.toList y)
     return $ Conflictor s' y' cq' :> Prim p'
-  -- commuting a conflictor past another one where everything goes smoothly
   commuteNoConflicts (Conflictor com_r x cp :> Conflictor s y cq) = do
     -- com = prims in the effect of the lhs that the rhs also conflicts with;
     -- these remain on the lhs
     com :> rr <- commuteToPrefix (S.map (invertId . ctxId) y) com_r
     s' :> rr' <- commuteRLFL (rr :> s)
+    -- (ctxAddInvFL s) adds positive prims but (ctxAddRL rr') does not;
+    --
+    -- Proof that (ctxAddRL rr') maintains positivity of cq and elements of y:
+    --
+    -- Let u^ be the last prim in rr'. It is clear that its inverse u does not
+    -- conflict with q (because then it would be in com and not in rr') nor any
+    -- element of y (because the lhs reverts u and therefore it cannot be in
+    -- conflict with any other patch in the history). So either u is contained
+    -- as a dependency (and then adding u^ merely removes it) or else it must
+    -- commute past.
+    --
+    -- By induction the same is true for the rest of rr'.
     let cp' = ctxAddInvFL s cp
         cq' = ctxAddRL rr' cq
     -- obviously p and q must not conflict, nor depend on each other
@@ -331,12 +414,13 @@ commuteConflicting (Prim p :> Conflictor s y cq)
         Nothing ->
           -- Proof that this is impossible:
           --
-          -- The case assumption (that p is in conflict with q) together
-          -- with the fact that the rhs is obviously the first patch that
-          -- conflicts with the lhs, imply that p^ is contained in s. It
-          -- remains to be shown that p^ does not depend on any prim contained
-          -- in s. Suppose there were such a prim, then p would be in conflict
-          -- with it, which means p would have to be a conflictor. QED
+          -- The case assumption (that p conflicts with q) together with the
+          -- fact that the rhs is obviously the first patch that conflicts with
+          -- the lhs, imply that p^ is contained in s. It remains to be shown
+          -- that p^ does not depend on any u^ contained in s. To see that, let
+          -- u^ be any member of s, different from p^. Since u is reverted by
+          -- the rhs, (Prim u) exists somewhere in the history before (Prim p).
+          -- But then u cannot depend on p and therefore p^ cannot depend on u^.
           error $ renderString
             $ redText "commuteConflicting: cannot remove (invert lhs):"
             $$ displayPatch (invert p)
@@ -356,19 +440,17 @@ commuteConflicting (lhs@(Conflictor r x cp) :> rhs@(Conflictor NilFL y cq))
         Sealed (c' :> _) ->
           -- Proof that this is impossible:
           --
-          -- First, it must be true that commutePastFL r cq = Just cq'. For if
-          -- not, then there would be a conflict between the rhs and one of the
-          -- prims that the lhs reverts, in contradiction to our case
-          -- assumption that the rhs conflicts only with the lhs.
-          --
-          -- Second, suppose that cq' has residual nonempty context. That means
-          -- there is a patch x in the history that the rhs depends on, and
-          -- which is in conflict with at least one other patch y in our
-          -- history (the history being the patches that precede the lhs);
-          -- because otherwise cq' appended to the history would be a sequence
-          -- that contains x twice without an intermediate revert. But then the
-          -- rhs would also have to conflict with the patch x, again in
-          -- contradiction to our case assumption. QED
+          -- We show that any v in the context of cq must be cancelled by
+          -- adding r and that nothing is effectively added. For any such v we
+          -- know that it was reverted by /some/ conflictor preceding the rhs.
+          -- Let w be the prim represented by that conflictor. Since q depends
+          -- on v, and w conflicts with v, w also conflicts with q. But our
+          -- case assumption says that q conflicts only with p, which implies
+          -- that w == p (identity-wise, as usual). This proves that v^ is in r
+          -- and thus v gets cancelled from cq. Let u^ be any prim in r such
+          -- that u is not in the context of cq. Then u^ commutes past cq,
+          -- since otherwise u would be in conflict with q, in contradiction to
+          -- our case assumption that q conflicts only with p.
           error $ renderString $ redText "remaining context in commute:"
             $$ displayPatch c'
             $$ redText "lhs:" $$ displayPatch lhs
@@ -377,18 +459,19 @@ commuteConflicting (lhs@(Conflictor r x cp) :> rhs@(Conflictor NilFL y cq))
 -- also conflicts with other patches
 -- [com r, X, cp] [s, y=({s^cp} U Y'), cq] <-> [com s', r'Y', r'cq] [r', {cq} U s^X, s^cp]
 commuteConflicting (Conflictor com_r x cp :> Conflictor s y cq)
-  | let is_cp = ctxAddInvFL s cp
-  , is_cp `S.member` y
-  , let y' = is_cp -| y =
+  | let cp' = ctxAddInvFL s cp -- note this adds only positive prims
+  , cp' `S.member` y
+  , let y' = cp' -| y =
       case commuteToPrefix (S.map (invertId . ctxId) y') com_r of
         Nothing ->
           -- Proof that the above commute must suceed:
           --
           -- Let u and v be prims that the lhs reverts, and suppose v also
-          -- conflicts with the rhs. If v^ depends on u^, then u depends on v
-          -- and thus u also conflicts with the rhs. Thus any v^ in com_r such
-          -- that v conflicts with the rhs can depend only on other elements of
-          -- com_r that also conflict with the rhs. QED
+          -- conflicts with the rhs (representing q). If v^ (negatively)
+          -- depends on u^, then u (positively) depends on v and thus u also
+          -- conflicts with q. Therefore any v^ in com_r such that v conflicts
+          -- with the q can depend only on other elements of com_r that also
+          -- conflict with q.
           error "commuteConflicting: cannot commute common effects"
         Just (com :> rr) ->
           case commuteRLFL (rr :> s) of
@@ -399,13 +482,17 @@ commuteConflicting (Conflictor com_r x cp :> Conflictor s y cq)
               -- only with the lhs cannot depend on another prim u that
               -- conflicts only with the rhs. Again, this is a consequence of
               -- the fact that if v depends on u and u conflicts with q, then v
-              -- must also conflict with q.
+              -- also conflicts with q.
               error "commuteConflicting: cannot commute uncommon effects"
             Just (s' :> rr') ->
               Just $
+                -- Again, (ctxAddInvFL s) adds only positive prims.
+                -- The proof that (ctxAddRL rr') maintains positivity of cq and
+                -- elements of y' is exactly the same as in the corresponding
+                -- case of commuteNoConflicts.
                 Conflictor (com +>+ s') (S.map (ctxAddRL rr') y') (ctxAddRL rr' cq)
                 :>
-                Conflictor (reverseRL rr') (cq +| S.map (ctxAddInvFL s) x) is_cp
+                Conflictor (reverseRL rr') (cq +| S.map (ctxAddInvFL s) x) cp'
 commuteConflicting _ = Nothing
 
 instance (SignedId name, StorableId name, PrimPatch prim) =>

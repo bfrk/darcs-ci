@@ -197,7 +197,7 @@ common = DarcsCommand
 optimizeClean :: DarcsCommand
 optimizeClean = common
     { commandName = "clean"
-    , commandDescription = "garbage collect pristine, inventories and patches"
+    , commandDescription = "Garbage collect pristine, inventories and patches"
     , commandHelp = optimizeHelpClean
     , commandCommand = optimizeCleanCmd
     }
@@ -214,7 +214,7 @@ optimizeUpgrade = common
     { commandName = "upgrade"
     , commandHelp = wrapText 80
         "Convert old-fashioned repositories to the current default hashed format."
-    , commandDescription = "upgrade repository to latest compatible format"
+    , commandDescription = "Upgrade repository to latest compatible format"
     , commandPrereq = amInRepository
     , commandCommand = optimizeUpgradeCmd
     , commandOptions =
@@ -225,7 +225,7 @@ optimizeHttp :: DarcsCommand
 optimizeHttp = common
     { commandName = "http"
     , commandHelp = optimizeHelpHttp
-    , commandDescription = "optimize repository for getting over network"
+    , commandDescription = "Optimize repository for getting over network"
     , commandCommand = optimizeHttpCmd
     }
 
@@ -241,7 +241,7 @@ optimizeCompress :: DarcsCommand
 optimizeCompress = common
     { commandName = "compress"
     , commandHelp = optimizeHelpCompression
-    , commandDescription = "compress patches and inventories"
+    , commandDescription = "Compress hashed files"
     , commandCommand = optimizeCompressCmd
     }
 
@@ -249,7 +249,7 @@ optimizeUncompress :: DarcsCommand
 optimizeUncompress = common
     { commandName = "uncompress"
     , commandHelp = optimizeHelpCompression
-    , commandDescription = "uncompress patches and inventories"
+    , commandDescription = "Uncompress hashed files (for debugging)"
     , commandCommand = optimizeUncompressCmd
     }
 
@@ -259,7 +259,8 @@ optimizeCompressCmd _ opts _ =
     RepoJob $ \repository -> do
       cleanRepository repository
       optimizeCompression O.GzipCompression opts
-      putInfo opts "Done optimizing by compression!"
+      mapM_ (relinkCaches (repoCache repository)) allHashedDirs
+      putInfo opts "Done compressing hashed files (and relinking)."
 
 optimizeUncompressCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 optimizeUncompressCmd _ opts _ =
@@ -267,7 +268,7 @@ optimizeUncompressCmd _ opts _ =
     RepoJob $ \repository -> do
       cleanRepository repository
       optimizeCompression O.NoCompression opts
-      putInfo opts "Done optimizing by uncompression!"
+      putInfo opts "Done uncompressing hashed files."
 
 optimizeCompression :: O.Compression -> [DarcsFlag] -> IO ()
 optimizeCompression compression opts = do
@@ -341,7 +342,7 @@ optimizeReorder = common
         , "bunches, which can further improve efficiency, but requires all"
         , "patches to be present. It is therefore less suitable for lazy clones."
         ]
-    , commandDescription = "reorder the patches in the repository"
+    , commandDescription = "Reorder the patches in the repository"
     , commandCommand = optimizeReorderCmd
     , commandOptions =
         withStdOpts basicOpts commonAdvancedOpts
@@ -360,7 +361,7 @@ optimizeRelink :: DarcsCommand
 optimizeRelink = common
     { commandName = "relink"
     , commandHelp = optimizeHelpRelink 
-    , commandDescription = "relink random internal data to a sibling"
+    , commandDescription = "Replace copies of hashed files with hard links"
     , commandCommand = optimizeRelinkCmd
     , commandOptions = optimizeRelinkOpts
     }
@@ -527,7 +528,7 @@ optimizeGlobalCache = common
     , commandExtraArgs = 0
     , commandExtraArgHelp = []
     , commandHelp = optimizeHelpGlobalCache
-    , commandDescription = "garbage collect global cache"
+    , commandDescription = "Garbage collect global cache"
     , commandCommand = optimizeGlobalCacheCmd
     , commandPrereq = \_ -> return $ Right ()
     }

@@ -58,3 +58,29 @@ darcs init test2
 cd test2
 darcs optimize clean
 cd ..
+
+## optimize compress/uncompress
+
+find_hashed_files() {
+  find _darcs | grep -E '([0-9]{10}-)?[0-9a-f]{64}'
+}
+
+rm -rf test3
+darcs init test3
+cd test3
+echo one > file
+darcs record -lam one
+darcs tag mytag # so we get a hashed inventory file
+# check all hashed files are compressed
+find_hashed_files | xargs gunzip -t
+# uncompress
+darcs optimize uncompress
+# check all hashed files are uncompressed
+find_hashed_files | while read f; do
+  not gunzip -t $f
+done
+# compress
+darcs optimize compress
+# check all hashed files are compressed
+find_hashed_files | xargs gunzip -t
+cd ..
