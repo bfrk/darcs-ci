@@ -25,9 +25,9 @@ darcs record -A author -am 'Conflict Part 2'
 cd ..
 
 cd temp1
-darcs pull -a ../temp2 2> log
+darcs pull -a ../temp2 >log 2>&1
 grep conflict log
-grep finished log
+grep -i finished log
 grep 'v v' child_of_conflict
 darcs revert -a
 not grep 'v v' child_of_conflict
