@@ -26,11 +26,11 @@
 . lib
 . httplib
 
-check_remote_http http://darcs.net/testing/repo1
+check_remote_http https://darcs.net/testing/repo1
 
 rm -rf S T
-darcs clone --lazy http://darcs.net/testing/repo1 S
+darcs clone --lazy https://darcs.net/testing/repo1 S
 darcs tag --repo S -m 2
-darcs clone --lazy http://darcs.net/testing/repo1 T
+darcs clone --lazy https://darcs.net/testing/repo1 T
 darcs pull --repo T S -a --debug --verbose 2>&1 | tee log
 not grep repo1 log
