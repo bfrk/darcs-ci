@@ -99,7 +99,6 @@ import Darcs.Repository.Flags
     , DryRun (..)
     , UMask (..)
     , SetScriptsExecutable (..)
-    , RemoteRepos (..)
     , SetDefault (..)
     , InheritDefault (..)
     , WithWorkingDir (..)
@@ -163,7 +162,6 @@ cloneRepository ::
     -> CloneKind
     -> UMask -> RemoteDarcs
     -> SetScriptsExecutable
-    -> RemoteRepos
     -> SetDefault
     -> InheritDefault
     -> [MatchFlag]
@@ -174,7 +172,7 @@ cloneRepository ::
     -> ForgetParent
     -> WithPrefsTemplates
     -> IO ()
-cloneRepository repourl mysimplename v useCache cloneKind um rdarcs sse remoteRepos
+cloneRepository repourl mysimplename v useCache cloneKind um rdarcs sse
                 setDefault inheritDefault matchFlags rfsource withWorkingDir
                 usePatchIndex usePacks forget withPrefsTemplates =
   withUMaskFlag um $ withNewDirectory mysimplename $ do
@@ -187,7 +185,7 @@ cloneRepository repourl mysimplename v useCache cloneKind um rdarcs sse remoteRe
           (if cloneKind == LazyClone then NoPatchIndex else usePatchIndex)
           useCache withPrefsTemplates
       debugMessage "Finished initializing new repository."
-      addRepoSource repourl NoDryRun remoteRepos setDefault inheritDefault False
+      addRepoSource repourl NoDryRun setDefault inheritDefault
 
       debugMessage "Identifying remote repository..."
       fromRepo <- identifyRepositoryFor Reading _toRepo useCache repourl

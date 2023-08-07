@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wno-orphans #-}
 {-# LANGUAGE UndecidableInstances #-}
 module Darcs.Test.Patch.Arbitrary.Named
   (

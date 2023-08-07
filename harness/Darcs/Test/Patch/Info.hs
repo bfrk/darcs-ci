@@ -17,6 +17,8 @@
 
 -- | This module contains tests for the code in Darcs.Patch.Info. Most of them
 --   are about the UTF-8-encoding of patch metadata.
+
+{-# OPTIONS_GHC -Wno-orphans #-}
 module Darcs.Test.Patch.Info ( testSuite ) where
 
 import Prelude hiding ( pi )

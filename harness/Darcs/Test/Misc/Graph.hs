@@ -3,6 +3,7 @@ because the specifications aren't optimised (naturally). Exhaustive testing
 is a lot more effective than randomized testing in this case because it
 avoids computations on large graphs. -}
 
+{-# OPTIONS_GHC -Wno-orphans #-}
 module Darcs.Test.Misc.Graph ( testSuite ) where
 
 import Darcs.Prelude

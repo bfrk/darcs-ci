@@ -32,6 +32,8 @@ import Darcs.Test.Patch.Arbitrary.Named ()
 import Darcs.Test.Patch.Arbitrary.PrimV1 ()
 import Darcs.Test.Patch.Arbitrary.RepoPatch
 import Darcs.Test.Patch.RepoModel
+import Darcs.Test.Patch.Types.MergeableSequence
+    ( MergeableSequence(..) )
 import Darcs.Test.Patch.V1Model
 import Darcs.Test.Patch.WithState
 import Darcs.Test.TestOnly.Instance ()

@@ -141,7 +141,7 @@ whatsnew = DarcsCommand
       = O.maybeSummary Nothing
       ^ O.withContext
       ^ O.machineReadable
-      ^ O.maybelookforadds False
+      ^ O.maybelookforadds O.NoLookForAdds
       ^ O.lookforreplaces
       ^ O.lookformoves
       ^ O.diffAlgorithm
@@ -412,7 +412,7 @@ status = statusAlias
       = O.maybeSummary (Just O.YesSummary)
       ^ O.withContext
       ^ O.machineReadable
-      ^ O.maybelookforadds True
+      ^ O.maybelookforadds O.YesLookForAdds
       ^ O.lookforreplaces
       ^ O.lookformoves
       ^ O.diffAlgorithm

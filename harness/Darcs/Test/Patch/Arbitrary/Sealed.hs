@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wno-orphans #-}
 module Darcs.Test.Patch.Arbitrary.Sealed
   ( ArbitraryS2(..)
   ) where

@@ -35,9 +35,6 @@ quickmerge :: (Merge p) => (p :\/: p ) wX wY -> p wY wZ
 quickmerge (p1:\/:p2) = case merge (p1:\/:p2) of
                         _ :/\: p1' -> unsafeCoercePEnd p1'
 
-instance Eq2 p => Eq ((p :/\: p) wX wY) where
-   (x :/\: y) == (x' :/\: y') = isIsEq (x =\/= x') && isIsEq (y =\/= y')
-
 -- ----------------------------------------------------------------------------
 -- A number of "comparison" properties: these carry out some operation on
 -- inputs (first value in the pair) and compare the results with a known

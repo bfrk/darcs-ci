@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wno-orphans #-}
 module Darcs.Test.HashedStorage ( tests, unsafeMakeName ) where
 
 import Prelude hiding ( filter, readFile, writeFile, lookup, (<$>) )
@@ -35,6 +36,7 @@ import Test.HUnit hiding ( path )
 import Test.Framework( testGroup )
 import qualified Test.Framework as TF ( Test )
 import Test.QuickCheck
+import Test.QuickCheck.Instances.ByteString ()
 
 import Test.Framework.Providers.HUnit
 import Test.Framework.Providers.QuickCheck2
@@ -361,9 +363,6 @@ monad = [ testCase "path expansion" check_virtual
 ----------------------------------
 -- Arbitrary instances
 --
-
-instance Arbitrary BLC.ByteString where
-    arbitrary = BLC.pack `fmap` arbitrary
 
 instance Arbitrary Hash where
     arbitrary = mkHash . BC.pack <$> sequence (replicate 32 arbitrary)

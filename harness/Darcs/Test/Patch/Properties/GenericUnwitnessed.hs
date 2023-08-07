@@ -11,8 +11,8 @@ import qualified Darcs.Test.Patch.Properties.Generic as W
 import Darcs.Test.Patch.Arbitrary.Generic ( MightHaveDuplicate )
 import Darcs.Test.Patch.Arbitrary.PrimV1 ()
 
+import Darcs.Test.Patch.Types.Pair ( Pair(..) )
 import Darcs.Test.Patch.WSub
-import Darcs.Test.Patch.WithState ( Pair(..) )
 import Darcs.Test.Util.TestResult
 
 import Darcs.Patch.Commute ( Commute )

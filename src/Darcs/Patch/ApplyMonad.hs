@@ -77,14 +77,17 @@ class MonadThrow m => ApplyMonadTree m where
 
 type instance ApplyMonadOperations Tree = ApplyMonadTree
 
-class ( Monad m
+class ( Monad m, MonadThrow (ApplyMonadBase m)
       , ApplyMonadOperations state m
       )
+      -- ApplyMonadOver (ApplyMonadBase m) ~ m is *not* required in general,
+      -- since ApplyMonadBase is not injective
       => ApplyMonad (state :: (* -> *) -> *) m | m -> state where
-
+    type ApplyMonadBase m :: * -> *
     readFilePS :: ObjectIdOf state -> m B.ByteString
 
 instance MonadThrow m => ApplyMonad Tree (TM.TreeMonad m) where
+    type ApplyMonadBase (TM.TreeMonad m) = m
     readFilePS path = mReadFilePS path
 
 instance MonadThrow m => ApplyMonadTree (TM.TreeMonad m) where
@@ -137,6 +140,7 @@ withFileNames mbofnos fps x = runPure $ execStateT x ([], fps, ofnos)
     ofnos = fromMaybe (map (\y -> (y, y)) fps) mbofnos
 
 instance ApplyMonad Tree FilePathMonad where
+    type ApplyMonadBase FilePathMonad = Pure
     readFilePS = error "readFilePS not defined for FilePathMonad"
 
 instance ApplyMonadTree FilePathMonad where

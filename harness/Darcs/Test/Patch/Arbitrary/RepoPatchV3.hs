@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wno-orphans #-}
 {-# LANGUAGE UndecidableInstances, PatternSynonyms #-}
 module Darcs.Test.Patch.Arbitrary.RepoPatchV3 () where
 

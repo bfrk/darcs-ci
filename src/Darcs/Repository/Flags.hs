@@ -12,10 +12,8 @@ module Darcs.Repository.Flags
     , DiffAlgorithm (..)
     , LookForMoves (..)
     , DiffOpts (..)
-    , RunTest (..)
     , SetScriptsExecutable (..)
     , LeaveTestDir (..)
-    , RemoteRepos (..)
     , SetDefault (..)
     , InheritDefault (..)
     , UseIndex (..)
@@ -83,16 +81,10 @@ data DiffOpts = DiffOpts
   , diffAlg :: DiffAlgorithm
   } deriving Show
 
-data RunTest = YesRunTest | NoRunTest
-    deriving ( Eq, Show )
-
 data SetScriptsExecutable = YesSetScriptsExecutable | NoSetScriptsExecutable
     deriving ( Eq, Show )
 
 data LeaveTestDir = YesLeaveTestDir | NoLeaveTestDir
-    deriving ( Eq, Show )
-
-data RemoteRepos = RemoteRepos [String]
     deriving ( Eq, Show )
 
 data SetDefault = YesSetDefault Bool | NoSetDefault Bool

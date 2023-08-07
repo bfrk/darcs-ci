@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wno-orphans #-}
 {-# LANGUAGE OverloadedStrings #-}
 module Darcs.Test.Patch.Arbitrary.PrimFileUUID where
 
@@ -10,6 +11,7 @@ import Darcs.Test.Patch.RepoModel
 
 import Test.QuickCheck
 import Darcs.Test.Patch.WithState
+import Darcs.Test.Patch.Types.Pair ( Pair(..) )
 import Darcs.Patch.Witnesses.Sealed
 import Darcs.Patch.Witnesses.Eq
 import Darcs.Patch.Witnesses.Unsafe

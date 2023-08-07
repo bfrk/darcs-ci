@@ -37,7 +37,7 @@ import qualified Darcs.Test.Misc.Graph as Graph
 import qualified Darcs.Test.Misc.URL as URL
 
 import qualified Data.ByteString.Char8 as BC ( elem, unpack, pack )
-import qualified Data.ByteString as B ( ByteString, pack, empty, null )
+import qualified Data.ByteString as B ( ByteString, empty, null )
 import Data.Array.Base
 import Data.Coerce ( coerce )
 import Data.Maybe ( isJust )
@@ -47,6 +47,7 @@ import Test.Framework.Providers.QuickCheck2 ( testProperty )
 import Test.Framework.Providers.HUnit ( testCase )
 import Test.Framework ( Test, testGroup )
 import Test.QuickCheck
+import Test.QuickCheck.Instances.ByteString ()
 
 
 testSuite :: Test
@@ -78,9 +79,6 @@ byteStringUtilsTestSuite = testGroup "Darcs.Util.ByteString"
   , testProperty "unlinesPS length property" prop_unlinesPS_length
   , testProperty "betweenLinesPS behaves like its spec" prop_betweenLinesPS
   ]
-
-instance Arbitrary B.ByteString where
-  arbitrary = fmap B.pack $ listOf arbitrary
 
 {- | 'SimpleLines' newtype wrapper for 'B.ByteString' tweaks the
 probabilities in favor of newline characters and line collisions. With the

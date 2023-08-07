@@ -56,12 +56,13 @@ import Darcs.Test.Util.TestResult
     , rejected
     , succeeded
     )
-import Darcs.Test.Patch.WithState ( WithState(..), Pair(..) )
+import Darcs.Test.Patch.WithState ( WithState(..) )
 import Darcs.Test.Patch.Arbitrary.Generic
     ( MightBeEmptyHunk(..)
     , MightHaveDuplicate(..)
     , TestablePrim
     )
+import Darcs.Test.Patch.Types.Pair ( Pair(..) )
 import Darcs.Test.Patch.Properties.Check ( checkAPatch, Check )
 
 import Control.Monad ( msum )

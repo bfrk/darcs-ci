@@ -11,11 +11,11 @@ import Darcs.Prelude
 
 import Data.Maybe ( catMaybes )
 
-import Darcs.Test.Patch.Arbitrary.Generic
-  ( MergeableSequence, mergeableSequenceToRL, PrimBased )
+import Darcs.Test.Patch.Arbitrary.Generic ( PrimBased )
 import Darcs.Test.Patch.Arbitrary.PatchTree
   ( Tree, flattenTree, G2(..), mapTree )
 import Darcs.Test.Patch.Merge.Checked ( CheckedMerge )
+import Darcs.Test.Patch.Types.MergeableSequence ( MergeableSequence, mergeableSequenceToRL )
 import Darcs.Test.Patch.WithState
 import Darcs.Test.Patch.RepoModel ( RepoModel, repoApply, showModel, eqModel, RepoState
                                   , Fail, maybeFail, ModelOf )

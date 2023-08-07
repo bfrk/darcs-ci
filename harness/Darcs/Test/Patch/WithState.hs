@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wno-orphans #-}
 {-# LANGUAGE UndecidableInstances #-}
 module Darcs.Test.Patch.WithState where
 
@@ -19,6 +20,7 @@ import Test.QuickCheck ( Gen, sized, choose )
 import Darcs.Test.Patch.RepoModel
 import Darcs.Test.Patch.Arbitrary.Sealed
 import Darcs.Test.Patch.Arbitrary.Shrink
+import Darcs.Test.Patch.Types.Pair ( Pair(..) )
 
 import Data.Maybe
 
@@ -62,14 +64,6 @@ instance (ArbitraryState p1, ArbitraryState p2, ModelOf p1 ~ ModelOf p2, RepoMod
     Sealed (WithEndState p2 _) <- arbitraryState repo
     return (Sealed2 (p1 :\/: p2))
 
-
-newtype Pair p wX wY = Pair { getPair :: (p :> p) wX wY }
-  deriving Show
-
-instance Show2 p => Show2 (Pair p)
-
-type instance ModelOf (Pair p) = ModelOf p
-
 arbitraryWSPair :: (RepoModel (ModelOf p), ArbitraryState p) => Gen (Sealed2 (WithState (Pair p)))
 arbitraryWSPair = do
   repo <- aSmallRepo
@@ -79,6 +73,9 @@ arbitraryWSPair = do
 instance (RepoModel (ModelOf p), ArbitraryState p) => ArbitraryWS (Pair p) where
   arbitraryWS = arbitraryWSPair
   shrinkWS _ = []
+
+instance (RepoModel (ModelOf p), ArbitraryState p) => ArbitraryWS (FL p) where
+  arbitraryWS = makeWS2Gen aSmallRepo
 
 -- | This is only used for the legacy 'Tree' based test generator, where the
 -- @p@ parameter gets instantiated to @'Tree' p@ (which has no definite end

@@ -15,9 +15,10 @@ import Darcs.Prelude
 
 import Darcs.Test.Patch.WithState
 import Darcs.Test.Patch.RepoModel
-import Darcs.Test.Patch.Arbitrary.Generic
-  ( mergeableSequenceToRL, MergeableSequence(..),  ArbitraryPrim(..), PrimBased )
+import Darcs.Test.Patch.Arbitrary.Generic ( ArbitraryPrim(..), PrimBased )
 import Darcs.Test.Patch.Merge.Checked ( CheckedMerge )
+import Darcs.Test.Patch.Types.MergeableSequence ( mergeableSequenceToRL, MergeableSequence(..) )
+import Darcs.Test.Patch.Types.Pair ( Pair(..) )
 import Darcs.Patch.Witnesses.Sealed
 import Darcs.Patch.Witnesses.Ordered hiding ( Fork )
 import Darcs.Patch.Apply ( Apply(..) )

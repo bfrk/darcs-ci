@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wno-orphans #-}
 {-# LANGUAGE OverloadedStrings, UndecidableInstances #-}
 module Darcs.Test.Patch.Arbitrary.NamedPrim ( aPatchId ) where
 
@@ -15,6 +16,7 @@ import Darcs.Test.Patch.Arbitrary.Shrink
 
 import Darcs.Test.Patch.WithState
 import Darcs.Test.Patch.RepoModel
+import Darcs.Test.Patch.Types.Pair ( Pair(..) )
 import Darcs.Test.TestOnly.Instance ()
 
 import Darcs.Patch.Witnesses.Maybe

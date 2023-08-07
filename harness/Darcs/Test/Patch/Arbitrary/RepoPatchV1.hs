@@ -15,6 +15,7 @@
 -- the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 -- Boston, MA 02110-1301, USA.
 
+{-# OPTIONS_GHC -Wno-orphans #-}
 {-# LANGUAGE UndecidableInstances #-}
 module Darcs.Test.Patch.Arbitrary.RepoPatchV1 (Patch) where
 
@@ -36,10 +37,10 @@ import Darcs.Test.Patch.Arbitrary.Generic ( MightHaveDuplicate, ArbitraryPrim, P
 import Darcs.Test.Patch.Arbitrary.RepoPatch
 import Darcs.Test.Patch.Merge.Checked ( CheckedMerge(..) )
 import Darcs.Test.Patch.RepoModel ( RepoState, ModelOf )
+import Darcs.Test.Patch.Types.Pair ( Pair(..) )
 import Darcs.Test.Patch.WithState
   ( PropagateShrink(..)
   , ArbitraryState(..), WithEndState(..)
-  , Pair(..)
   )
 
 type Patch = RepoPatchV1 V1.Prim

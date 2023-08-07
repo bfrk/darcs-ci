@@ -71,8 +71,6 @@ module Darcs.UI.Options.All
 
     -- local or remote repo(s)
     , repoDir
-    , RemoteRepos (..) -- re-export
-    , remoteRepos
     , possiblyRemoteRepo
     , newRepo
     , NotInRemote (..)
@@ -131,7 +129,6 @@ module Darcs.UI.Options.All
     -- tests
     , TestChanges (..)
     , testChanges
-    , RunTest (..) -- re-export
     , LeaveTestDir (..) -- re-export
     , leaveTestDir
 
@@ -255,10 +252,8 @@ import Darcs.Repository.Flags
     , LookForReplaces (..)
     , DiffAlgorithm (..)
     , DiffOpts (..)
-    , RunTest (..)
     , SetScriptsExecutable (..)
     , LeaveTestDir (..)
-    , RemoteRepos (..)
     , SetDefault (..)
     , InheritDefault (..)
     , UseIndex (..)
@@ -326,10 +321,6 @@ instance YesNo LookForReplaces where
 instance YesNo LookForMoves where
   yes NoLookForMoves = False
   yes YesLookForMoves = True
-
-instance YesNo RunTest where
-  yes NoRunTest = False
-  yes YesRunTest = True
 
 instance YesNo SetScriptsExecutable where
   yes NoSetScriptsExecutable = False
@@ -579,13 +570,6 @@ possiblyRemoteRepo = singleStrArg [] ["repo"] F.WorkRepoUrl arg "URL"
   where arg (F.WorkRepoUrl s) = Just s
         arg _ = Nothing
 
-remoteRepos :: PrimDarcsOption RemoteRepos
-remoteRepos = (imap . cps) (Iso fw bw) $ multiStrArg [] ["remote-repo"] F.RemoteRepo mkV "URL"
-    "specify the remote repository URL to work with"
-  where mkV fs = [ s | F.RemoteRepo s <- fs ]
-        fw ss = RemoteRepos ss
-        bw (RemoteRepos ss) = ss
-
 notInRemoteFlagName :: String
 notInRemoteFlagName = "not-in-remote"
 
@@ -707,29 +691,17 @@ __rmlogfile = withDefault False
 
 -- * Looking for changes
 
-maybelookforadds :: Bool -> PrimDarcsOption LookForAdds
-maybelookforadds dlfa = imap lfa_iso (lookforadds_ dlfa ^ includeBoring)
-
 lookforadds :: PrimDarcsOption LookForAdds
-lookforadds = imap lfa_iso (lookforadds_ False ^ includeBoring)
+lookforadds = maybelookforadds NoLookForAdds
 
-lfa_iso :: Iso (Bool -> Bool -> p) (LookForAdds -> p)
-lfa_iso = (Iso fw bw)
-  where
-    fw k NoLookForAdds = k False False
-    fw k YesLookForAdds = k True False
-    fw k EvenLookForBoring = k True True
-    bw k False False = k NoLookForAdds
-    bw k False True = k NoLookForAdds -- --boring w/o -l is no-op
-    bw k True False = k YesLookForAdds
-    bw k True True = k EvenLookForBoring
-
-lookforadds_ :: Bool -> PrimDarcsOption Bool
-lookforadds_ def = withDefault def
-  [ RawNoArg [] ["dont-look-for-adds","no-look-for-adds"] F.NoLookForAdds False
-    "don't look for any files that could be added"
-  , RawNoArg ['l'] ["look-for-adds"] F.LookForAdds True
-    "look for (non-boring) files that could be added" ]
+maybelookforadds :: LookForAdds -> PrimDarcsOption LookForAdds
+maybelookforadds def = withDefault def
+  [ RawNoArg [] ["dont-look-for-adds","no-look-for-adds"] F.NoLookForAdds NoLookForAdds
+    "don't look for files that could be added"
+  , RawNoArg ['l'] ["look-for-adds"] F.LookForAdds YesLookForAdds
+    "look for files that could be added"
+  , RawNoArg [] ["boring"] F.Boring EvenLookForBoring
+    "look for any file that could be added, even boring files" ]
 
 lookforreplaces :: PrimDarcsOption LookForReplaces
 lookforreplaces = withDefault NoLookForReplaces
@@ -857,15 +829,15 @@ data TestChanges = NoTestChanges | YesTestChanges LeaveTestDir deriving (Eq)
 
 testChanges :: PrimDarcsOption TestChanges
 testChanges = imap (Iso fw bw) $ __runTest ^ leaveTestDir where
-  fw k NoTestChanges = k NoRunTest NoLeaveTestDir
-  fw k (YesTestChanges ltd) = k YesRunTest ltd
-  bw k NoRunTest _ = k NoTestChanges
-  bw k YesRunTest ltd = k (YesTestChanges ltd)
+  fw k NoTestChanges = k False NoLeaveTestDir
+  fw k (YesTestChanges ltd) = k True ltd
+  bw k False _ = k NoTestChanges
+  bw k True ltd = k (YesTestChanges ltd)
 
-__runTest :: PrimDarcsOption RunTest
-__runTest = withDefault NoRunTest
-  [ RawNoArg [] ["test"] F.Test YesRunTest "run the test script"
-  , RawNoArg [] ["no-test"] F.NoTest NoRunTest "don't run the test script" ]
+__runTest :: PrimDarcsOption Bool
+__runTest = withDefault False
+  [ RawNoArg [] ["test"] F.Test True "run the test script"
+  , RawNoArg [] ["no-test"] F.NoTest False "don't run the test script" ]
 
 leaveTestDir :: PrimDarcsOption LeaveTestDir
 leaveTestDir = withDefault NoLeaveTestDir

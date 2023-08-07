@@ -27,12 +27,13 @@ module Darcs.Test.Email ( testSuite ) where
 import Darcs.Prelude
 
 import Data.Char ( isPrint )
-import qualified Data.ByteString as B ( length, unpack, null, head, pack,
+import qualified Data.ByteString as B ( length, unpack, null, head,
                                         cons, empty, foldr, ByteString )
 import qualified Data.ByteString.Char8 as BC ( unlines )
 import Test.Framework ( Test, testGroup )
 import Test.Framework.Providers.QuickCheck2 ( testProperty )
-import Test.QuickCheck ( Arbitrary(..) )
+import Test.QuickCheck.Instances.ByteString ()
+
 import Darcs.Util.Printer ( text, renderPS, packedString )
 import Darcs.UI.Email ( makeEmail, readEmail, formatHeader, prop_qp_roundtrip )
 
@@ -87,9 +88,6 @@ emailHeaderNoEmptyLines =
       let headerLines = bsLines (formatHeader cleanField value)
           cleanField  = cleanFieldString field
           in all (not . B.null) headerLines --(not . B.null . B.filter (not . (`elem` [10, 32, 9]))) headerLines
-
-instance Arbitrary B.ByteString where
-  arbitrary = fmap B.pack arbitrary
 
 emailCodecRoundtrip :: Test
 emailCodecRoundtrip =

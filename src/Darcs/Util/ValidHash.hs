@@ -12,7 +12,7 @@ module Darcs.Util.ValidHash
     , fromHash
     , fromSizeAndHash
     , checkHash
-    , okayHash -- only used for garbage collection
+    , okayHash -- only used for garbage collection and re-linking
     ) where
 
 import qualified Data.ByteString as B

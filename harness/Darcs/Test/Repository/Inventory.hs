@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wno-orphans #-}
 module Darcs.Test.Repository.Inventory where
 
 import Darcs.Prelude
@@ -33,6 +34,7 @@ import Test.Framework.Providers.HUnit ( testCase )
 import Test.Framework.Providers.QuickCheck2 ( testProperty )
 import Test.HUnit ( Assertion, (@=?) )
 import Test.QuickCheck
+import Test.QuickCheck.Instances.ByteString ()
 
 testSuite :: Test
 testSuite = testGroup "Darcs.Repository.Inventory"
@@ -42,9 +44,6 @@ testSuite = testGroup "Darcs.Repository.Inventory"
  , testCase "example1" (testInventory rawHeadInv1 headInv1)
  , testCase "example2" (testInventory rawHeadInv2 headInv2)
  ]
-
-instance Arbitrary B.ByteString where
-  arbitrary = B.pack <$> arbitrary
 
 instance Arbitrary Inventory where
   arbitrary = uncurry Inventory <$> arbitrary

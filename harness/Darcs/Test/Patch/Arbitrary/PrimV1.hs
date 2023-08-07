@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wno-orphans #-}
 module Darcs.Test.Patch.Arbitrary.PrimV1
     ( aPrim
     , aPrimPair
@@ -19,6 +20,7 @@ import Darcs.Test.Patch.Arbitrary.Shrink
 import Control.Applicative ( (<|>) )
 import Test.QuickCheck
 import Darcs.Test.Patch.WithState
+import Darcs.Test.Patch.Types.Pair ( Pair(..) )
 import Darcs.Patch.Witnesses.Sealed
 import Darcs.Patch.Witnesses.Eq
 import Darcs.Patch.Witnesses.Unsafe

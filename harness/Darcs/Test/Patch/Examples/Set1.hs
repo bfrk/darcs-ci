@@ -15,6 +15,7 @@
 --  the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 --  Boston, MA 02110-1301, USA.
 
+{-# OPTIONS_GHC -Wno-orphans #-}
 {-# LANGUAGE OverloadedStrings #-}
 module Darcs.Test.Patch.Examples.Set1
        ( knownCommutes, knownCantCommutes, knownMerges
@@ -40,7 +41,7 @@ import Darcs.Patch.FromPrim ( PrimOf, FromPrim(..) )
 import qualified Darcs.Patch.V1 as V1 ( RepoPatchV1 )
 import qualified Darcs.Patch.V1.Prim as V1 ( Prim(..) )
 import Darcs.Test.Patch.Properties.Check( checkAPatch )
-import Darcs.Test.Patch.WithState ( Pair(..) )
+import Darcs.Test.Patch.Types.Pair ( Pair(..) )
 import Darcs.Patch.Witnesses.Ordered
 import Darcs.Patch.Witnesses.Sealed ( unseal )
 import Darcs.Patch.Witnesses.Unsafe ( unsafeCoerceP, unsafeCoercePEnd )

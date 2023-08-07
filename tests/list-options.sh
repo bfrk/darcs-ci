@@ -12,8 +12,8 @@ touch aboringfile
 darcs record --list-options | not grep -w anunaddedfile
 darcs record -l --list-options | grep -w anunaddedfile
 darcs record -l --list-options | not grep -w aboringfile
-darcs record -l --boring --list-options | grep -w anunaddedfile
-darcs record -l --boring --list-options | grep -w aboringfile
+darcs record --boring --list-options | grep -w anunaddedfile
+darcs record --boring --list-options | grep -w aboringfile
 darcs add --list-options | grep -w anunaddedfile
 darcs add --list-options | not grep -w aboringfile
 darcs add --boring --list-options | grep -w anunaddedfile
