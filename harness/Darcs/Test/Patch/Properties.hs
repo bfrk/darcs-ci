@@ -31,6 +31,7 @@ module Darcs.Test.Patch.Properties
 import Darcs.Prelude
 
 import Data.Constraint ( Dict(..) )
+import Data.Maybe ( fromMaybe )
 import Test.Framework ( Test )
 import Test.Framework.Providers.QuickCheck2 ( testProperty )
 import Test.QuickCheck( Arbitrary(..) )
@@ -44,7 +45,6 @@ import Darcs.Test.Patch.Utils
     , properties
     , testCases
     , testConditional
-    , fromNothing
     )
 
 import Darcs.Patch.Witnesses.Maybe
@@ -164,6 +164,7 @@ qc_prim :: forall prim.
            , ArbitraryWS prim
            ) => [Test]
 qc_prim =
+  [testProperty "prim pair coverage" (unseal2 (PropG.propPrimPairCoverage @prim . wsPatch))] ++
   -- The following fails because of setpref patches:
   -- testProperty "prim inverse doesn't commute" (inverseDoesntCommute :: Prim -> Maybe Doc)
   (case runCoalesceTests @prim of
@@ -320,13 +321,13 @@ difficultRepoPatchProperties =
   , testProperty "recommute"
       (withPair (PropG.recommute com))
   , testConditional "nontrivial recommute"
-      (fromNothing . withPair nontrivialCommute)
+      (fromMaybe False . withPair nontrivialCommute)
       (withPair (PropG.recommute com))
   , testConditional "permutivity"
-      (fromNothing . withTriple notDuplicatestriple)
+      (fromMaybe False . withTriple notDuplicatestriple)
       (withTriple (PropG.permutivity com))
   , testConditional "nontrivial permutivity"
-      (fromNothing . withTriple (\t -> nontrivialTriple t && notDuplicatestriple t))
+      (fromMaybe False . withTriple (\t -> nontrivialTriple t && notDuplicatestriple t))
       (withTriple (PropG.permutivity com))
   , testProperty "merge either way"
       (withFork (PropG.mergeEitherWay :: MergeProperty p))
@@ -335,7 +336,7 @@ difficultRepoPatchProperties =
       (withFork (PropG.mergeEitherWayValid :: MergeProperty p))
 -}
   , testConditional "nontrivial merge either way"
-      (fromNothing . withFork nontrivialMerge)
+      (fromMaybe False . withFork nontrivialMerge)
       (withFork (PropG.mergeEitherWay :: MergeProperty p))
   , testProperty "merge commute"
       (withFork (PropG.mergeCommute :: MergeProperty p))

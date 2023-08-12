@@ -387,6 +387,7 @@ Library
     other-modules:    Version
 
     c-sources:        src/atomic_create.c
+                      src/maybe_relink.c
                       src/umask.c
 
     -- see http://bugs.darcs.net/issue1037

@@ -56,7 +56,7 @@ data DarcsFlag = Version | ExactVersion | ListCommands
                | AllowWindowsReserved | DontAllowWindowsReserved
                | DontGrabDeps | DontPromptForDependencies | PromptForDependencies
                | Compress | NoCompress | UnCompress
-               | WorkRepoDir String | WorkRepoUrl String
+               | WorkRepoDir String | WorkRepoUrl String | RemoteRepo String
                | NewRepo String
                | NotInRemote (Maybe String)
                | Reply String | ApplyAs String

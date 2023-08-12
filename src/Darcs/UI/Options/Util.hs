@@ -32,6 +32,8 @@ module Darcs.UI.Options.Util
     -- * Re-exports
     , AbsolutePath
     , AbsolutePathOrStd
+    , makeAbsolute
+    , makeAbsoluteOrStd
     ) where
 
 import Darcs.Prelude

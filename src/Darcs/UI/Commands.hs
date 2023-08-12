@@ -53,7 +53,6 @@ module Darcs.UI.Commands
 
 import Control.Monad ( when, unless )
 import Data.List ( sort, isPrefixOf )
-import Data.Maybe ( maybeToList )
 import System.Console.GetOpt ( OptDescr )
 import System.IO ( stderr )
 import System.IO.Error ( catchIOError )
@@ -71,7 +70,7 @@ import Darcs.Patch.Witnesses.Ordered ( FL, mapFL )
 import qualified Darcs.Repository as R ( amInHashedRepository, amInRepository
                                        , amNotInRepository, findRepository )
 import Darcs.Repository.Flags ( WorkRepo(..) )
-import Darcs.Repository.Prefs ( getDefaultRepo )
+import Darcs.Repository.Prefs ( defaultrepo )
 
 import Darcs.UI.Options
     ( DarcsOptDescr
@@ -80,6 +79,7 @@ import Darcs.UI.Options
     , defaultFlags
     , ocheck
     , odesc
+    , oempty
     , optDescr
     , parseFlags
     , (?)
@@ -90,7 +90,7 @@ import Darcs.UI.Options.All
     , Verbosity(..), DryRun(..), dryRun, newRepo, verbosity, UseIndex, useIndex, yes
     )
 
-import Darcs.UI.Flags ( DarcsFlag, workRepo, quiet, verbose )
+import Darcs.UI.Flags ( DarcsFlag, remoteRepos, workRepo, quiet, verbose )
 import Darcs.UI.External ( viewDoc )
 import Darcs.UI.PrintPatch ( showWithSummary )
 
@@ -188,13 +188,13 @@ withStdOpts bopts aopts =
 -- consistency
 commandCheckOptions :: DarcsCommand -> [DarcsFlag] -> [OptMsg]
 commandCheckOptions DarcsCommand {commandOptions=co} = coCheckOptions co
-commandCheckOptions SuperCommand {} = ocheck stdCmdActions
+commandCheckOptions SuperCommand {} = ocheck (stdCmdActions ^ oempty)
 
 -- | Built-in default values for all 'DarcsFlag's supported by the given
 -- command
 commandDefaults :: DarcsCommand -> [DarcsFlag]
 commandDefaults DarcsCommand {commandOptions=co} = coDefaults co
-commandDefaults SuperCommand {} = defaultFlags stdCmdActions
+commandDefaults SuperCommand {} = defaultFlags (stdCmdActions ^ oempty)
 
 -- | Option descriptions split into basic and advanced options
 commandAlloptions :: DarcsCommand
@@ -343,10 +343,8 @@ setEnvCautiously e v
     toobig _ [] = False
     toobig n (_ : xs) = toobig (n - 1) xs
 
--- | To use for commandArgdefaults field.
 defaultRepo :: [DarcsFlag] -> AbsolutePath -> [String] -> IO [String]
-defaultRepo _ _ [] = maybeToList <$> getDefaultRepo
-defaultRepo _ _ args = return args
+defaultRepo fs = defaultrepo (remoteRepos ? fs)
 
 amInHashedRepository :: [DarcsFlag] -> IO (Either String ())
 amInHashedRepository fs = R.amInHashedRepository (workRepo fs)

@@ -34,6 +34,7 @@ module Darcs.UI.Flags
     , verbose
     , enumeratePatches
 
+    , fixRemoteRepos
     , fixUrl
     , pathsFromArgs
     , pathSetFromArgs
@@ -76,6 +77,7 @@ module Darcs.UI.Flags
     , O.setScriptsExecutable
     , O.withWorkingDir
     , O.leaveTestDir
+    , O.remoteRepos
     , O.cloneKind
     , O.patchIndexNo
     , O.patchIndexYes
@@ -105,7 +107,9 @@ import System.FilePath.Posix ( (</>) )
 import System.Environment ( lookupEnv )
 import System.Posix.Files ( getSymbolicLinkStatus )
 
-import qualified Darcs.UI.Options.Flags as F ( DarcsFlag )
+-- Use of RemoteRepo data constructor is harmless here, if not ideal.
+-- See haddocks for fixRemoteRepos below for details.
+import qualified Darcs.UI.Options.Flags as F ( DarcsFlag(RemoteRepo) )
 import Darcs.UI.Options ( Config, (?), (^), oparse, parseFlags, unparseOpt )
 import qualified Darcs.UI.Options.All as O
 
@@ -117,8 +121,7 @@ import Darcs.Util.Prompt
 import Darcs.Util.Lock ( writeTextFile )
 import Darcs.Repository.Flags ( WorkRepo(..) )
 import Darcs.Repository.Prefs
-    ( Pref(Author)
-    , getPreflist
+    ( getPreflist
     , getGlobal
     , globalPrefsDirDoc
     , globalPrefsDir
@@ -196,6 +199,15 @@ setDefault defYes = maybe def noDef . parseFlags O.setDefault where
 
 allowConflicts :: Config -> O.AllowConflicts
 allowConflicts = maybe O.NoAllowConflicts id . parseFlags O.conflictsNo
+
+-- | Ugly. The alternative is to put the remoteRepos accessor into the IO monad,
+-- which is hardly better.
+-- However, accessing the flag list directly here is benign, as we only map
+-- over the list and don't change the order.
+fixRemoteRepos :: AbsolutePath -> Config -> IO Config
+fixRemoteRepos d = mapM fixRemoteRepo where
+  fixRemoteRepo (F.RemoteRepo p) = F.RemoteRepo `fmap` fixUrl d p
+  fixRemoteRepo f = return f
 
 -- | The first argument is an 'AbsolutePath', the second a 'String' that may be
 -- a file path or a URL. It returns either the URL, or an absolute version of
@@ -384,8 +396,8 @@ promptAuthor store alwaysAsk = do
 -- possibilities when reading from global preferences.
 getEasyAuthor :: IO [String]
 getEasyAuthor =
-  firstNotNullIO [ (take 1 . nonblank) `fmap` getPreflist Author
-                 , nonblank    `fmap` getGlobal Author
+  firstNotNullIO [ (take 1 . nonblank) `fmap` getPreflist "author"
+                 , nonblank    `fmap` getGlobal "author"
                  , maybeToList `fmap` lookupEnv "DARCS_EMAIL"
                  , maybeToList `fmap` lookupEnv "EMAIL"
                  ]

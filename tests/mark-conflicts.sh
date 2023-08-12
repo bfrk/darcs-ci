@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 
-# tests for "darcs mark-conflicts"
+# Automated tests for "darcs mark-conflicts".
 
-. lib
+# The builtin ! has the wrong semantics for not.
+not () { "$@" && exit 1 || :; }
 
-rm -rf temp1 temp2
 mkdir temp1
 cd temp1
 darcs init
@@ -25,12 +25,14 @@ darcs record -A author -am 'Conflict Part 2'
 cd ..
 
 cd temp1
-darcs pull -a ../temp2 >log 2>&1
+darcs pull -a ../temp2 2> log
 grep conflict log
-grep -i finished log
+grep finished log
 grep 'v v' child_of_conflict
 darcs revert -a
 not grep 'v v' child_of_conflict
 darcs mark-conflicts
 grep 'v v' child_of_conflict
 cd ..
+
+rm -rf temp1 temp2

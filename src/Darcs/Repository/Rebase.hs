@@ -10,11 +10,11 @@ module Darcs.Repository.Rebase
     , readRebase
     , finalizeTentativeRebase
     , revertTentativeRebase
+     -- * Support for various 'RepoJob's
     , withManualRebaseUpdate
-      -- * Handle rebase format and status
-    , checkHasRebase
-    , displayRebaseStatus
-    , updateRebaseFormat
+    , rebaseJob
+    , startRebaseJob
+    , maybeDisplaySuspendedStatus
       -- * Handle old-style rebase
     , extractOldStyleRebase
     , checkOldStyleRebaseStatus
@@ -22,7 +22,8 @@ module Darcs.Repository.Rebase
 
 import Darcs.Prelude
 
-import Control.Monad ( unless, void, when )
+import Control.Exception ( finally )
+import Control.Monad ( unless, when )
 import System.Directory ( copyFile, renameFile )
 import System.Exit ( exitFailure )
 import System.FilePath.Posix ( (</>) )
@@ -60,17 +61,17 @@ import Darcs.Repository.Format
     , formatHas
     , addToFormat
     , removeFromFormat
+    , writeRepoFormat
     )
 import Darcs.Repository.InternalTypes
     ( Repository
-    , AccessType(..)
-    , modifyRepoFormat
     , repoFormat
     , repoLocation
     )
 import Darcs.Repository.Paths
     ( rebasePath
     , tentativeRebasePath
+    , formatPath
     )
 
 import Darcs.Util.Diff ( DiffAlgorithm(MyersDiff) )
@@ -96,8 +97,6 @@ withManualRebaseUpdate r subFunc = do
       writeTentativeRebase r' (simplifyPushes MyersDiff fixups susp)
     return (r', x)
 
--- | Fail if there is an old-style rebase present.
--- To be called initially for every command except rebase upgrade.
 checkOldStyleRebaseStatus :: Repository rt p wU wR -> IO ()
 checkOldStyleRebaseStatus repo = do
   let rf = repoFormat repo
@@ -112,60 +111,79 @@ checkOldStyleRebaseStatus repo = do
       , "older than 2.16 on this repository until the current rebase is finished."
       ]
 
--- | Fail unless we already have some suspended patches.
--- Not essential, since all rebase commands should be happy to work
--- with an empty rebase state.
-checkHasRebase :: Repository rt p wU wR -> IO ()
-checkHasRebase repo =
-  unless (formatHas RebaseInProgress_2_16 $ repoFormat repo) $
-    fail "No rebase in progress. Try 'darcs rebase suspend' first."
+-- | got a rebase operation to run where it is required that a rebase is
+-- already in progress
+rebaseJob :: RepoPatch p
+          => (Repository rt p wU wR -> IO a)
+          -> Repository rt p wU wR
+          -> IO a
+rebaseJob job repo = do
+    job repo
+      -- The use of finally here is because various things in job
+      -- might cause an "expected" early exit leaving us needing
+      -- to remove the rebase-in-progress state (e.g. when suspending,
+      -- conflicts with recorded, user didn't specify any patches).
+      --
+      -- The better fix would be to standardise expected early exits
+      -- e.g. using a layer on top of IO or a common Exception type
+      -- and then just catch those.
+      `finally` checkSuspendedStatus repo
 
--- | Report the rebase status if there is (still) a rebase in progress
--- after the command has finished running.
--- To be called via 'finally' for every 'RepoJob'.
-displayRebaseStatus :: RepoPatch p => Repository rt p wU wR -> IO ()
-displayRebaseStatus repo = do
-  -- The repoLocation may be a remote URL (e.g. darcs log). We neither can nor
-  -- want to display anything in that case.
-  when (isValidLocalPath $ repoLocation repo) $ do
-    -- Why do we use 'readRebase' and not 'readTentativeRebase' here?
-    -- There are three cases:
-    -- * We had no transaction in the first place.
-    -- * We had a successful transaction: then it will be finalized before we
-    --   are called (because finalization is part of the RepoJob itself) and
-    --   we want to report the new finalized state.
-    -- * We had a transaction that was cancelled or failed: then we want to
-    --   report the old (unmodified) rebase state.
-    -- Thus, in all cases 'readRebase' is the correct choice. However, if there
-    -- is no rebase in progress, then 'rebasePath' may not exist, so we must
-    -- handle that.
-    suspended <- readRebase repo `catchDoesNotExistError` return (Items NilFL)
-    case countToEdit suspended of
-      0 -> return ()
-      count ->
-        ePutDocLn $ hsep
-          [ "Rebase in progress:"
-          , text (show count)
-          , "suspended"
-          , text (englishNum count (Noun "patch") "")
-          ]
+-- | Got a rebase operation to run where we may need to initialise the
+-- rebase state first. Make sure you have taken the lock before calling this.
+startRebaseJob :: RepoPatch p
+               => (Repository rt p wU wR -> IO a)
+               -> Repository rt p wU wR
+               -> IO a
+startRebaseJob job repo = do
+    let rf = repoFormat repo
+    unless (formatHas RebaseInProgress_2_16 rf) $
+      writeRepoFormat (addToFormat RebaseInProgress_2_16 rf) formatPath
+    rebaseJob job repo
 
--- | Rebase format update for all commands that modify the repo,
--- except rebase upgrade. This is called by 'finalizeRepositoryChanges'.
-updateRebaseFormat :: RepoPatch p => Repository 'RW p wU wR -> IO ()
-updateRebaseFormat repo = do
-  let rf = repoFormat repo
-      hadRebase = formatHas RebaseInProgress_2_16 rf
-  suspended <-
-    readTentativeRebase repo `catchDoesNotExistError` return (Items NilFL)
-  case countToEdit suspended of
-    0 ->
-      when hadRebase $ do
-        void $ modifyRepoFormat (removeFromFormat RebaseInProgress_2_16) repo
+checkSuspendedStatus :: RepoPatch p => Repository rt p wU wR -> IO ()
+checkSuspendedStatus repo =
+  -- This check is currently not needed as we call it only for RebaseJob
+  -- and RebaseAwareJob which don't work with remote repos. Still, better
+  -- no not have to make assumptions on how things are used.
+  when (isValidLocalPath (repoLocation repo)) $ do
+    -- This may be executed after transaction has been finalized,
+    -- which is why we fall back to readRebase here.
+    ps <- readTentativeRebase repo `catchDoesNotExistError` readRebase repo
+    case countToEdit ps of
+      0 -> do
+        writeRepoFormat
+          (removeFromFormat RebaseInProgress_2_16 $ repoFormat repo)
+          formatPath
         putStrLn "Rebase finished!"
-    _ ->
-      unless hadRebase $
-        void $ modifyRepoFormat (addToFormat RebaseInProgress_2_16) repo
+      n -> displaySuspendedStatus n
+
+displaySuspendedStatus :: Int -> IO ()
+displaySuspendedStatus 0 = return ()
+displaySuspendedStatus count =
+  ePutDocLn $ hsep
+    [ "Rebase in progress:"
+    , text (show count)
+    , "suspended"
+    , text (englishNum count (Noun "patch") "")
+    ]
+
+-- | Generic status display for non-rebase commands.
+maybeDisplaySuspendedStatus :: RepoPatch p
+                            => Repository rt p wU wR
+                            -> IO ()
+maybeDisplaySuspendedStatus repo =
+  -- Called after every RepoJob, so the repoLocation may indeed
+  -- be a remote URL (e.g. darcs log)
+  when (isValidLocalPath (repoLocation repo)) $ do
+    -- This may be executed after transaction has been finalized,
+    -- which is why we fall back to readRebase here.
+    -- Furthermore, it may be called if there is no rebase in progress,
+    -- which is why we can't even rely on 'rebasePath' to exist.
+    ps <-
+      readTentativeRebase repo `catchDoesNotExistError`
+        readRebase repo `catchDoesNotExistError` return (Items NilFL)
+    displaySuspendedStatus (countToEdit ps)
 
 withTentativeRebase
   :: RepoPatch p

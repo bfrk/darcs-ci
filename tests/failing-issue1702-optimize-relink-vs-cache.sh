@@ -26,11 +26,6 @@
 
 . lib
 
-if grep no-cache $HOME/.darcs/defaults; then
-  echo this test makes no sense with --no-cache
-  exit 200
-fi
-
 rm -rf R S
 darcs init R
 

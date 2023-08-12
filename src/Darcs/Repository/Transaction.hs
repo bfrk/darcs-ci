@@ -7,7 +7,7 @@ module Darcs.Repository.Transaction
 
 import Darcs.Prelude
 
-import Control.Monad ( unless, void, when )
+import Control.Monad ( unless, when )
 import System.Directory ( doesFileExist, removeFile )
 import System.IO ( IOMode(..), hClose, hPutStrLn, openBinaryFile, stderr )
 import System.IO.Error ( catchIOError )
@@ -26,6 +26,7 @@ import Darcs.Repository.Format
     , addToFormat
     , formatHas
     , removeFromFormat
+    , writeRepoFormat
     )
 import Darcs.Repository.Hashed
     ( finalizeTentativeChanges
@@ -37,7 +38,6 @@ import Darcs.Repository.Hashed
 import Darcs.Repository.InternalTypes
     ( AccessType(..)
     , Repository
-    , modifyRepoFormat
     , repoCache
     , repoFormat
     , repoLocation
@@ -53,7 +53,8 @@ import Darcs.Repository.PatchIndex
     , doesPatchIndexExist
     )
 import Darcs.Repository.Paths
-    ( indexInvalidPath
+    ( formatPath
+    , indexInvalidPath
     , indexPath
     , tentativeHashedInventoryPath
     )
@@ -63,7 +64,6 @@ import Darcs.Repository.Rebase
     , finalizeTentativeRebase
     , readTentativeRebase
     , revertTentativeRebase
-    , updateRebaseFormat
     , writeTentativeRebase
     )
 import Darcs.Repository.State ( updateIndex )
@@ -114,7 +114,6 @@ finalizeRepositoryChanges r dryrun
           when (dryrun == NoDryRun) $ do
             debugMessage "Finalizing changes..."
             withSignalsBlocked $ do
-                updateRebaseFormat r
                 finalizeTentativeRebase
                 finalizeTentativeChanges r
                 finalizePending r
@@ -149,11 +148,13 @@ upgradeOldStyleRebase repo = do
       case old_r of
         NilFL -> do
           writeTentativeRebase (unsafeCoerceR repo) r
-          repo' <-
-            modifyRepoFormat
-              (addToFormat RebaseInProgress_2_16 . removeFromFormat RebaseInProgress)
-              repo
-          void $ finalizeRepositoryChanges repo' NoDryRun
+          writeRepoFormat
+            ( addToFormat RebaseInProgress_2_16
+            $ removeFromFormat RebaseInProgress
+            $ repoFormat repo)
+            formatPath
+          _ <- finalizeRepositoryChanges repo NoDryRun
+          return ()
         _ -> do
           ePutDocLn
             $  "A new-style rebase is already in progress, not overwriting it."

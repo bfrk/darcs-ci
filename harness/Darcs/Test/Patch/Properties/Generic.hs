@@ -36,6 +36,7 @@ module Darcs.Test.Patch.Properties.Generic
     , PatchProperty
     , MergeProperty
     , SequenceProperty
+    , propPrimPairCoverage
     ) where
 
 import Darcs.Prelude
@@ -90,6 +91,8 @@ import Darcs.Patch.Witnesses.Ordered
 import Darcs.Patch.Witnesses.Sealed ( Sealed(..) )
 import Darcs.Util.Printer ( Doc, renderPS, redText, greenText, ($$), text, vcat )
 --import Darcs.ColorPrinter ( traceDoc )
+
+import Test.QuickCheck (Property, checkCoverage, cover)
 
 type PatchProperty p = forall wA wB. p wA wB -> TestResult
 -- type PairProperty p = forall wA wB. (p :> p) wA wB -> TestResult
@@ -644,3 +647,25 @@ inverseDoesntCommute x =
     Just (ix' :> x') -> failed $ redText "x:" $$ displayPatch x
       $$ redText "commutes with x^ to ix':" $$ displayPatch ix'
       $$ redText "x':" $$ displayPatch x'
+
+-- This property is just to check the coverage of pairs,
+-- it doesn't test any actual property.
+propPrimPairCoverage :: forall prim wX wY . (Eq2 prim, Commute prim) => Pair prim wX wY -> Property
+propPrimPairCoverage (Pair pq) =
+  checkCoverage $
+  -- The coverage percentages should pass reliably, but
+  -- could be dropped a bit if not.
+  let theKind = classifyCommute pq (commute pq) in
+    cover 20 (theKind == Failed) "Not Commutable" $
+    cover 60 (theKind /= Failed) "Commutable" $
+    cover 20 (theKind == Changed) "Representation Changed" $
+    True
+
+data CommuteKind = Failed | Unchanged | Changed
+  deriving (Eq, Show)
+
+classifyCommute :: Eq2 prim => (prim :> prim) wX wY -> Maybe ((prim :> prim) wX wY) -> CommuteKind
+classifyCommute _ Nothing = Failed
+classifyCommute (p :> q) (Just (q' :> p'))
+  | unsafeCompare p p' && unsafeCompare q q' = Unchanged
+  | otherwise = Changed

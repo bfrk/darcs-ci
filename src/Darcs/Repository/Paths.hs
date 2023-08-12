@@ -13,10 +13,6 @@ makeDarcsdirPath name = darcsdir </> name
 -- | Location of the lock file.
 lockPath = makeDarcsdirPath "lock"
 
--- | Location of the prefs directory.
-prefsDir = "prefs"
-prefsDirPath = makeDarcsdirPath prefsDir
-
 -- | Location of the (one and only) head inventory.
 hashedInventory = "hashed_inventory"
 hashedInventoryPath = makeDarcsdirPath hashedInventory

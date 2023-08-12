@@ -36,4 +36,10 @@ echo 'Example content line 2.' >> f
 # Darcs passes the parameters to diff like [ "-wpurNd -U 999" ]
 # instead of [ "-wpurNd","-U","999" ]
 darcs diff --diff-opts '-wpurNd -U 999' > result
-test -n "$(cat result)"
+
+# Darcs doesn't indicate the error in return error code,
+# when diff command didn't work the result is empty.
+
+if [ -z "$(cat result)" ]; then 
+   exit 2
+fi
