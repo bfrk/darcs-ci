@@ -25,6 +25,7 @@
 ## SOFTWARE.
 
 . lib                           # Load some portability helpers.
+abort_windows                   # No diff command available
 
 darcs init      --repo R        # Create our test repos.
 

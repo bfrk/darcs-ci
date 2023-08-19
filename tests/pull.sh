@@ -31,7 +31,12 @@ darcs add --repodir ./temp2 one/date.t
 darcs record --repodir ./temp2 -a -m foo
 
 # set up client repo for failure
-if ! os_is_windows; then
+if echo $OS | grep -i windows; then
+    echo this test does not work on windows because it
+    echo is not possible to chmod -r
+elif whoami | grep root; then
+    echo root never gets permission denied
+else
     chmod a-rwx ./temp1/one # remove all permissions
     # this fails only with --ignore-times because otherwise the index
     # will be used

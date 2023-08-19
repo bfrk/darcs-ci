@@ -707,17 +707,29 @@ __rmlogfile = withDefault False
 
 -- * Looking for changes
 
-lookforadds :: PrimDarcsOption LookForAdds
-lookforadds = maybelookforadds NoLookForAdds
+maybelookforadds :: Bool -> PrimDarcsOption LookForAdds
+maybelookforadds dlfa = imap lfa_iso (lookforadds_ dlfa ^ includeBoring)
 
-maybelookforadds :: LookForAdds -> PrimDarcsOption LookForAdds
-maybelookforadds def = withDefault def
-  [ RawNoArg [] ["dont-look-for-adds","no-look-for-adds"] F.NoLookForAdds NoLookForAdds
-    "don't look for files that could be added"
-  , RawNoArg ['l'] ["look-for-adds"] F.LookForAdds YesLookForAdds
-    "look for files that could be added"
-  , RawNoArg [] ["boring"] F.Boring EvenLookForBoring
-    "look for any file that could be added, even boring files" ]
+lookforadds :: PrimDarcsOption LookForAdds
+lookforadds = imap lfa_iso (lookforadds_ False ^ includeBoring)
+
+lfa_iso :: Iso (Bool -> Bool -> p) (LookForAdds -> p)
+lfa_iso = (Iso fw bw)
+  where
+    fw k NoLookForAdds = k False False
+    fw k YesLookForAdds = k True False
+    fw k EvenLookForBoring = k True True
+    bw k False False = k NoLookForAdds
+    bw k False True = k NoLookForAdds -- --boring w/o -l is no-op
+    bw k True False = k YesLookForAdds
+    bw k True True = k EvenLookForBoring
+
+lookforadds_ :: Bool -> PrimDarcsOption Bool
+lookforadds_ def = withDefault def
+  [ RawNoArg [] ["dont-look-for-adds","no-look-for-adds"] F.NoLookForAdds False
+    "don't look for any files that could be added"
+  , RawNoArg ['l'] ["look-for-adds"] F.LookForAdds True
+    "look for (non-boring) files that could be added" ]
 
 lookforreplaces :: PrimDarcsOption LookForReplaces
 lookforreplaces = withDefault NoLookForReplaces

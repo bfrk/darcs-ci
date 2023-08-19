@@ -26,6 +26,7 @@ module Darcs.UI.Flags
     , wantGuiPause
     , isInteractive
     , willRemoveLogFile
+    , includeBoring
     , setDefault
     , allowConflicts
     , hasXmlOutput
@@ -191,6 +192,9 @@ isInteractive def = oparse (O.dryRunXml ^ O.changesFormat ^ O.interactive) decid
 
 willRemoveLogFile :: Config -> Bool
 willRemoveLogFile = O._rmlogfile . parseFlags O.logfile
+
+includeBoring :: Config -> Bool
+includeBoring cfg = O.includeBoring ? cfg
 
 setDefault :: Bool -> Config -> O.SetDefault
 setDefault defYes = maybe def noDef . parseFlags O.setDefault where

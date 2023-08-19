@@ -37,8 +37,6 @@ import Darcs.UI.Options.Iso
 
 -- * Option specifications
 
-data OptMsg = OptWarning String | OptError String
-
 {-| A type for option specifications.
 
 It consists of four components: a parser, an unparser, a checker, and a list
@@ -132,7 +130,7 @@ data OptSpec d f a b = OptSpec
   , oparse :: b -> ([f] -> a)
     -- ^ Convert flag list to option value, in CPS. Note: as a pure
     -- function, it is not supposed to fail.
-  , ocheck :: [f] -> [OptMsg]
+  , ocheck :: [f] -> [String]
     -- ^ Check for erros in a flag list, returns error messages.
   , odesc :: [d f]
     -- ^ Descriptions, one for each flag that makes up the option.

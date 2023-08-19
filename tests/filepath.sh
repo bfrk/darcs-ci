@@ -23,8 +23,10 @@ cd ..
 # local vs remote filepaths
 # ----------------------------------------------------------------------
 
-# Windows does not allow ':' in file names
-if ! os_is_windows; then
+# trick: OS-detection (if needed)
+if echo $OS | grep -i windows; then
+  echo This test does not work on Windows
+else
   darcs get temp1 temp2
   cd temp2
   mkdir -p dir

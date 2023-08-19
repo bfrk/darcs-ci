@@ -5,7 +5,6 @@ module Darcs.UI.Options
     , DarcsOptDescr
     , optDescr
     , Config
-    , withDashes
     ) where
 
 import Darcs.Prelude
@@ -15,7 +14,7 @@ import System.Console.GetOpt ( OptDescr )
 
 import Darcs.UI.Options.All ( DarcsOption )
 import Darcs.UI.Options.Core
-import Darcs.UI.Options.Util ( DarcsOptDescr, Flag, PrimDarcsOption, withDashes )
+import Darcs.UI.Options.Util ( DarcsOptDescr, Flag, PrimDarcsOption )
 import Darcs.Util.Path ( AbsolutePath )
 
 -- | Instantiate a 'DarcsOptDescr' with an 'AbsolutePath'

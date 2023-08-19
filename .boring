@@ -39,7 +39,7 @@
 \.installed-pkg-config
 \.setup-config
 # standard cabal build dir, might not be boring for everybody
-^dist(-newstyle)?(/|$)
+# ^dist(/|$)
 # autotools
 (^|/)autom4te\.cache($|/)
 (^|/)config\.(log|status)$
@@ -114,6 +114,7 @@
 # darcs stuff
 ^tests-.*$
 ^_test_playground($|/)
+^(cabal-dev|dist)[^/]*/
 ^.cabal-sandbox($|/)
 ^cabal.sandbox.config$
 ^.hpc$
@@ -137,4 +138,3 @@
 ^\.ghc\.environment\..*$
 (^|/).stack-work($|/)
 ^stack.yaml.lock$
-^\.vscode

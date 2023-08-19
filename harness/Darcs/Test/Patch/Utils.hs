@@ -8,6 +8,7 @@ module Darcs.Test.Patch.Utils
     , PropList
     , properties
     , testCases
+    , fromNothing
     ) where
 
 import Darcs.Prelude
@@ -59,8 +60,17 @@ testCases :: String             -- ^ The test name
           -> Test
 testCases name test datas = testCase name (mapM_ (assertNotFailed . test) datas)
 
+class HasDefault a where
+  def :: a
+
+instance HasDefault Bool where
+  def = False
+
+instance HasDefault TestResult where
+  def = rejected
+
 newtype TestGenerator thing gen =
-  TestGenerator (forall t. (forall wX wY. thing wX wY -> t) -> (gen -> Maybe t))
+  TestGenerator (forall t. HasDefault t => (forall wX wY. thing wX wY -> t) -> (gen -> Maybe t))
 
 newtype TestCondition thing =
   TestCondition (forall wX wY. thing wX wY -> Bool)
@@ -70,16 +80,19 @@ newtype TestCheck thing t =
 
 type PropList what gen = String -> TestGenerator what gen -> [Test]
 
+fromNothing :: HasDefault a => Maybe a -> a
+fromNothing = fromMaybe def
+
 properties :: forall thing gen. (Show gen, Arbitrary gen)
            => TestGenerator thing gen
            -> String -> String
-           -> forall t. (Testable t) => [(String, TestCondition thing, TestCheck thing t)]
+           -> forall t. (Testable t, HasDefault t) => [(String, TestCondition thing, TestCheck thing t)]
            -> [Test]
 properties (TestGenerator gen) prefix genname tests =
   [cond name condition check | (name, condition, check) <- tests]
   where
     cond ::
-         forall testable. (Testable testable)
+         forall testable. (Testable testable, HasDefault testable)
       => String
       -> TestCondition thing
       -> TestCheck thing testable
@@ -87,5 +100,5 @@ properties (TestGenerator gen) prefix genname tests =
     cond t (TestCondition c) (TestCheck p) =
       testConditional
         (prefix ++ " (" ++ genname ++ "): " ++ t)
-        (fromMaybe False . gen c)
+        (fromMaybe def . gen c)
         (gen p)

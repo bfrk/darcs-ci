@@ -83,7 +83,7 @@ revertDescription = "Discard unrecorded changes."
 
 revertHelp :: Doc
 revertHelp = vsep $ map formatWords
-  [ [ "The `darcs revert` command discards unrecorded changes in the working"
+  [ [ "The `darcs revert` command discards unrecorded changes the working"
     , "tree.  As with `darcs record`, you will be asked which hunks (changes)"
     , "to revert.  The `--all` switch can be used to avoid such prompting. If"
     , "files or directories are specified, other parts of the working tree"
@@ -125,7 +125,7 @@ revert = DarcsCommand
       = O.interactive -- True
       ^ O.repoDir
       ^ O.diffAlgorithm
-      ^ O.maybelookforadds O.NoLookForAdds
+      ^ O.maybelookforadds False
     advancedOpts = O.umask
     opts = withStdOpts basicOpts advancedOpts
 
@@ -210,6 +210,6 @@ clean = alias
       = O.interactive -- True
       ^ O.repoDir
       ^ O.diffAlgorithm
-      ^ O.maybelookforadds O.YesLookForAdds
+      ^ O.maybelookforadds True
     advancedOpts = O.umask
     opts = withStdOpts basicOpts advancedOpts

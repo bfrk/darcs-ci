@@ -60,7 +60,7 @@ darcs clean --boring -a
 test_boring
 
 create_stuff
-# error: conflicting options
-not darcs revert -l --boring -a
+darcs revert -l --boring -a
+test_boring
 
 cd ..
