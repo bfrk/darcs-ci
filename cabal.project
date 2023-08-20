@@ -1,3 +1,1 @@
 packages: .
--- constraint for aeson needed until http-conduit fixes their upper bounds
-constraints: aeson < 2.2

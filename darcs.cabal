@@ -1,6 +1,6 @@
 Cabal-Version:  2.4
 Name:           darcs
-version:        2.17.2
+version:        2.17.3
 License:        GPL-2.0-or-later
 License-file:   COPYING
 Author:         David Roundy <droundy@darcs.net>, <darcs-devel@darcs.net>
