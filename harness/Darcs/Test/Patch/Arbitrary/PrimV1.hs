@@ -281,24 +281,6 @@ aPrim repo
       repoDirs  = filterDirs repoItems
       rootDir   = (anchoredRoot,root repo)
 
-{- [COVERAGE OF aPrim]
-
-  PLEASE,
-  if you change something that may affect the coverage of aPrim then
-      a) recalculate it, or if that is not possible;
-      b) indicate the need to do it.
-
-  Patch type
-  ----------
-  42% hunk
-  22% tokreplace
-  14% move
-   6% rmdir
-   6% addfile
-   6% adddir
-   4% rmfile
--}
-
 ----------------------------------------------------------------------
 -- *** Pairs of primitive patches
 
@@ -348,34 +330,6 @@ aPrimPair repo
   where
       repoItems = list repo
       repoFiles = filterFiles repoItems
-
-{- [COVERAGE OF aPrimPair]
-
-  PLEASE,
-  if you change something that may affect the coverage of aPrimPair then
-      a) recalculate it, or if that is not possible;
-      b) indicate the need to do it.
-
-  Rate of ommutable pairs
-  -----------------------
-  67% commutable
-
-  Commutable coverage (for 1000 tests)
-  -------------------
-  21% hunks-B
-  20% hunks-A
-  14% file:>dir
-  12% file:>move
-   8% trivial-FP
-   8% hunk:>tok
-   4% hunks-D
-   3% tok:>tok
-   2% hunks-C
-   1% move:>move
-   1% dir:>move
-   1% dir:>dir
-   0% emptyhunk:>file
--}
 
 ----------------------------------------------------------------------
 -- Arbitrary instances
