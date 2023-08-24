@@ -64,7 +64,7 @@ import Darcs.UI.Commands.Util ( doesDirectoryReallyExist )
 import Darcs.UI.Completion ( unknownFileArgs )
 import Darcs.UI.Flags
     ( DarcsFlag, diffingOpts
-    , includeBoring, allowCaseDifferingFilenames, allowWindowsReservedFilenames, useCache, dryRun, umask
+    , allowCaseDifferingFilenames, allowWindowsReservedFilenames, useCache, dryRun, umask
     , pathsFromArgs )
 import Darcs.UI.Options ( parseFlags, (?), (^) )
 import qualified Darcs.UI.Options.All as O
@@ -110,7 +110,7 @@ addHelp' = text $
     "Darcs will ignore all files and folders that look \"boring\".  The\n" ++
     "`--boring` option overrides this behaviour.\n" ++
     "\n" ++
-    "Darcs will not add file if another file in the same folder has the\n" ++
+    "Darcs will not add a file if another file in the same folder has the\n" ++
     "same name, except for case.  The `--case-ok` option overrides this\n" ++
     "behaviour.  Windows and OS X usually use filesystems that do not allow\n" ++
     "files a folder to have the same name except for case (for example,\n" ++
@@ -173,7 +173,7 @@ addFiles opts paths =
                         else id) paths
         all_orig_paths = map displayPath all_paths
     boring <- isBoring
-    let nboring s = if includeBoring opts then id else filter (not . boring . s)
+    let nboring s = if O.includeBoring ? opts then id else filter (not . boring . s)
     mapM_ (putWarning opts . text . ((msgSkipping msgs ++ " boring file ")++)) $
         all_orig_paths \\ nboring id all_orig_paths
     Sealed ps <- fmap unFreeLeft $ addp msgs opts cur $ nboring realPath all_paths

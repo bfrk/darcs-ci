@@ -13,5 +13,3 @@ int renamefile(const char *from, const char *to);
 #endif
 
 int stdout_is_a_pipe();
-
-int maybe_relink(const char *src, const char *dst, int careful);

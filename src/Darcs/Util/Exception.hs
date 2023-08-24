@@ -28,57 +28,51 @@ import Data.Maybe ( isJust )
 import System.Exit ( exitFailure )
 import System.IO ( stderr, hPutStrLn )
 import System.IO.Error
-    ( ioeGetErrorString
+    ( catchIOError
+    , ioeGetErrorString
     , ioeGetFileName
     , isDoesNotExistError
     , isUserError
     )
 
 import Darcs.Util.Global ( debugMessage )
-import Darcs.Util.SignalHandler ( catchNonSignal )
 
+-- | This handles /all/ 'IOException's
 catchall :: IO a -> IO a -> IO a
-a `catchall` b = a `catchNonSignal` (\e -> debugMessage ("catchall: "++show e) >> b)
+a `catchall` b = a `catchIOError` (\e -> debugMessage ("catchall: "++show e) >> b)
 
--- | The firstJustM returns the first Just entry in a list of monadic
--- operations. This is close to `listToMaybe `fmap` sequence`, but the sequence
--- operator evaluates all monadic members of the list before passing it along
--- (i.e. sequence is strict). The firstJustM is lazy in that list member monads
--- are only evaluated up to the point where the first Just entry is obtained.
-firstJustM :: Monad m
-           => [m (Maybe a)]
-           -> m (Maybe a)
+-- | Run the elements of a list of monadic actions until a 'Just' result is
+-- obtained. Return that result or 'Nothing' if all actions do.
+firstJustM :: Monad m => [m (Maybe a)] -> m (Maybe a)
 firstJustM [] = return Nothing
 firstJustM (e:es) = e >>= (\v -> if isJust v then return v else firstJustM es)
 
-
--- | The firstJustIO is a slight modification to firstJustM: the entries in the
--- list must be IO monad operations and the firstJustIO will silently turn any
--- monad call that throws an exception into Nothing, basically causing it to be
--- ignored.
-firstJustIO :: [IO (Maybe a)]
-            -> IO (Maybe a)
+-- | A slight modification to 'firstJustM': the entries in the list must be IO
+-- actions and any 'IOException's are converted to a 'Nothing' result.
+firstJustIO :: [IO (Maybe a)] -> IO (Maybe a)
 firstJustIO = firstJustM . map (`catchall` return Nothing)
 
-
-clarifyErrors :: IO a
-              -> String
-              -> IO a
+-- | Convert any exception thrown by the action into an 'ExitFailure' and
+-- combine the pretty-printed exception with the given error message.
+clarifyErrors :: IO a -> String -> IO a
 clarifyErrors a e = a `catch` (\x -> die $ unlines [prettyException x,e])
 
-prettyException :: SomeException
-                -> String
-prettyException e | Just ioe <- fromException e, isUserError ioe = ioeGetErrorString ioe
-prettyException e | Just ioe <- fromException e, isDoesNotExistError ioe =
-  case ioeGetFileName ioe of
-    Just f  -> f ++ " does not exist"
-    Nothing -> show e
-prettyException e = show e
+-- | Like 'show', but with rewordings for some selected exceptions.
+prettyException :: SomeException -> String
+prettyException e
+  | Just ioe <- fromException e, isUserError ioe = ioeGetErrorString ioe
+  | Just ioe <- fromException e, isDoesNotExistError ioe =
+    case ioeGetFileName ioe of
+      Just f  -> f ++ " does not exist"
+      Nothing -> show e
+  | otherwise = show e
 
-
+-- | Like 'show', except for 'UserError's where we return only the error string
+-- itself.
 prettyError :: IOError -> String
-prettyError e | isUserError e = ioeGetErrorString e
-              | otherwise = show e
+prettyError e
+  | isUserError e = ioeGetErrorString e
+  | otherwise = show e
 
 -- | Terminate the program with an error message.
 die :: String -> IO a

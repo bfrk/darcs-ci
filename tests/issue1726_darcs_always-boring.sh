@@ -37,7 +37,7 @@ cd R
 function bad_add {
     filename="$1"
     touch "$filename"
-    not darcs whatsnew -ls --boring
+    not darcs whatsnew -s --boring
     not darcs whatsnew -ls
     not darcs add --boring "$filename"
 }
@@ -62,7 +62,7 @@ bad_add "../${PWD##*/}/_darcs/foo"
 
 # Passing --boring should definitely succeed.
 touch _darcsfoo
-darcs whatsnew -ls --boring
+darcs whatsnew -s --boring
 darcs add --boring _darcsfoo
 darcs record -am 'add _darcsfoo' _darcsfoo
 

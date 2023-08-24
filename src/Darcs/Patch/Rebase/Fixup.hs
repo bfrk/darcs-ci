@@ -8,6 +8,7 @@ module Darcs.Patch.Rebase.Fixup
     , commuteNamedFixup, commuteFixupNamed
     , pushFixupFixup
     , flToNamesPrims, namedToFixups
+    , primNamedToFixups
     ) where
 
 import Darcs.Prelude
@@ -54,7 +55,12 @@ data RebaseFixup prim wX wY where
   NameFixup :: RebaseName wX wY -> RebaseFixup prim wX wY
 
 namedToFixups :: Effect p => Named p wX wY -> FL (RebaseFixup (PrimOf p)) wX wY
-namedToFixups (NamedP p _ contents) = NameFixup (AddName p) :>: mapFL_FL PrimFixup (effect contents)
+namedToFixups (NamedP p _ contents) =
+  NameFixup (AddName p) :>: mapFL_FL PrimFixup (effect contents)
+
+primNamedToFixups :: Named prim wX wY -> FL (RebaseFixup prim) wX wY
+primNamedToFixups (NamedP p _ contents) =
+  NameFixup (AddName p) :>: mapFL_FL PrimFixup contents
 
 instance Show2 prim => Show (RebaseFixup prim wX wY) where
     showsPrec d (PrimFixup p) =

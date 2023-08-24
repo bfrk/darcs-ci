@@ -30,12 +30,12 @@ cd ..
 
 # --external-merge is now in the same set of mutually exclusive options
 # as the --{[no-]allow,mark}-conflicts, so passing two of them
-# should result in a warning and the first(!) option wins.
+# should result in an error.
 
 rm -rf S1
 darcs get S S1
 cd S1
-darcs pull --no-pause-for-gui --all --external-merge 'cp %2 %o' --dont-allow-conflicts ../R 2>log
+not darcs pull --no-pause-for-gui --all --external-merge 'cp %2 %o' --dont-allow-conflicts ../R 2>log
 grep -i 'conflicting options' log
 cd ..
 

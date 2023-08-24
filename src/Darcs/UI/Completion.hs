@@ -1,8 +1,13 @@
 -- | How to complete arguments
 {-# LANGUAGE NamedFieldPuns #-}
 module Darcs.UI.Completion
-    ( fileArgs, knownFileArgs, unknownFileArgs, modifiedFileArgs
-    , noArgs, prefArgs
+    ( fileArgs
+    , knownFileArgs
+    , unknownFileArgs
+    , modifiedFileArgs
+    , noArgs
+    , Pref(..) -- re-export
+    , prefArgs
     ) where
 
 import Darcs.Prelude
@@ -17,7 +22,7 @@ import Darcs.Repository.Flags
     ( UseCache(..)
     )
 import Darcs.Repository.Prefs
-    ( getPreflist
+    ( Pref(..), getPreflist
     )
 import Darcs.Repository.Job
     ( RepoJob(..)
@@ -103,7 +108,7 @@ modifiedFileArgs fps flags args = notYetListed args $ do
       return $ mapMaybe (stripPathPrefix (toPath here)) $ map realPath new
 
 -- | Return the available prefs of the given kind.
-prefArgs :: String
+prefArgs :: Pref
          -> (AbsolutePath, AbsolutePath)
          -> [DarcsFlag]
          -> [String]

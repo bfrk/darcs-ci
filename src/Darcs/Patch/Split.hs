@@ -42,7 +42,8 @@ import Darcs.Patch.FileHunk ( FileHunk(..), IsHunk(..) )
 import Darcs.Patch.Read ( ReadPatch(..) )
 import Darcs.Patch.Show ( showPatch, ShowPatch(..) )
 import Darcs.Patch.Invert( Invert(..), invertFL )
-import Darcs.Patch.Prim ( PrimPatch, canonizeFL, primFromHunk )
+import Darcs.Patch.Prim ( canonizeFL, primFromHunk )
+import Darcs.Patch.Prim.Class ( PrimCoalesce, PrimConstruct )
 import Darcs.Util.Parser ( parse )
 import Darcs.Patch.Read ()
 import Darcs.Patch.Show ( ShowPatchFor(ForDisplay) )
@@ -54,6 +55,11 @@ import qualified Darcs.Util.Diff as D ( DiffAlgorithm )
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC
 
+type PrimSplit prim =
+    ( IsHunk prim
+    , PrimCoalesce prim
+    , PrimConstruct prim
+    )
 
 -- |A splitter is something that can take a patch and (possibly) render it
 -- as text in some format of its own choosing.
@@ -118,8 +124,11 @@ noSplitter :: Splitter p
 noSplitter = Splitter { applySplitter = const Nothing, canonizeSplit = id }
 
 
-doPrimSplit :: PrimPatch prim => D.DiffAlgorithm -> prim wX wY
-            -> Maybe (B.ByteString, B.ByteString -> Maybe (FL prim wX wY))
+doPrimSplit
+  :: (IsHunk prim, PrimCoalesce prim, PrimConstruct prim)
+  => D.DiffAlgorithm
+  -> prim wX wY
+  -> Maybe (B.ByteString, B.ByteString -> Maybe (FL prim wX wY))
 doPrimSplit da = doPrimSplit_ da True explanation
   where
     explanation =
@@ -134,12 +143,19 @@ doPrimSplit da = doPrimSplit_ da True explanation
         , ""
         ]
 
-doPrimSplit_ :: forall prim p wX wY. (PrimPatch prim, IsHunk p, ApplyState p ~ ApplyState prim)
-             => D.DiffAlgorithm
-             -> Bool
-             -> [B.ByteString]
-             -> p wX wY
-             -> Maybe (B.ByteString, B.ByteString -> Maybe (FL prim wX wY))
+doPrimSplit_
+  :: forall prim p wX wY
+   . ( IsHunk p
+     , IsHunk prim
+     , PrimCoalesce prim
+     , PrimConstruct prim
+     , ApplyState p ~ ApplyState prim
+     )
+  => D.DiffAlgorithm
+  -> Bool
+  -> [B.ByteString]
+  -> p wX wY
+  -> Maybe (B.ByteString, B.ByteString -> Maybe (FL prim wX wY))
 doPrimSplit_ da edit_before_part helptext (isHunk -> Just (FileHunk fn n before after))
  = Just (B.concat $ intersperse (BC.pack "\n") $ concat
            [ helptext
@@ -168,12 +184,16 @@ doPrimSplit_ _ _ _ _ = Nothing
 
 -- |Split a primitive hunk patch up by allowing the user to edit both the
 -- before and after lines, then insert fixup patches to clean up the mess.
-primSplitter :: PrimPatch p => D.DiffAlgorithm -> Splitter p
+primSplitter
+  :: (IsHunk p, PrimCoalesce p, PrimConstruct p) => D.DiffAlgorithm -> Splitter p
 primSplitter da = Splitter { applySplitter = doPrimSplit da
                            , canonizeSplit = canonizeFL da }
 
-doReversePrimSplit :: PrimPatch prim => D.DiffAlgorithm -> prim wX wY
-                   -> Maybe (B.ByteString, B.ByteString -> Maybe (FL prim wX wY))
+doReversePrimSplit
+  :: (Invert prim, PrimSplit prim)
+  => D.DiffAlgorithm
+  -> prim wX wY
+  -> Maybe (B.ByteString, B.ByteString -> Maybe (FL prim wX wY))
 doReversePrimSplit da prim = do
   (text, parser) <- doPrimSplit_ da False reverseExplanation (invert prim)
   let parser' p = do
@@ -194,6 +214,7 @@ doReversePrimSplit da prim = do
         , ""
         ]
 
-reversePrimSplitter :: PrimPatch prim => D.DiffAlgorithm -> Splitter prim
+reversePrimSplitter
+  :: (Invert prim, PrimSplit prim) => D.DiffAlgorithm -> Splitter prim
 reversePrimSplitter da = Splitter { applySplitter = doReversePrimSplit da
                                   , canonizeSplit = canonizeFL da }

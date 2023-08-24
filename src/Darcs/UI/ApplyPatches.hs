@@ -91,7 +91,7 @@ standardApplyPatches cmdName opts repository patches@(Fork _ _ to_be_applied) = 
     !no_patches <- return (nullFL to_be_applied)
     applyPatchesStart cmdName opts to_be_applied
     Sealed pw <- mergeAndTest cmdName opts repository patches
-    applyPatchesFinish cmdName opts repository pw no_patches
+    applyPatchesFinish cmdName opts repository pw (not no_patches)
 
 mergeAndTest :: (RepoPatch p, ApplyState p ~ Tree)
              => String

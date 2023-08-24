@@ -40,6 +40,6 @@ cd R
 echo "text" > file              # Modify the working dir
 darcs record -lam "First Patch" # Record the changes
 
-check="\"${SSH}\" \"--\" \"${REMOTE}\" \"darcs apply --all --debug --repodir '${REMOTE_DIR}/R'\""
+check="\"${SSH}\" \"--\" \"${REMOTE}\" \"darcs apply --all --repodir '${REMOTE_DIR}/R' --debug\""
 darcs push -a --debug "${REMOTE}":"${REMOTE_DIR}"/R 2>&1 >/dev/null | \
     fgrep "$check"

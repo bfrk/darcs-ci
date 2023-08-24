@@ -40,8 +40,8 @@ import Darcs.UI.Flags
     ( DarcsFlag
     , isInteractive, verbosity
     , xmlOutput, selectDeps, applyAs
-    , changesReverse, dryRun, useCache, remoteRepos, setDefault, fixUrl )
-import Darcs.UI.Options ( parseFlags, (?), (^) )
+    , changesReverse, dryRun, useCache, setDefault, fixUrl )
+import Darcs.UI.Options ( (?), (^) )
 import qualified Darcs.UI.Options.All as O
 import Darcs.Repository.Flags ( DryRun (..) )
 import qualified Darcs.Repository.Flags as R ( remoteDarcs )
@@ -59,7 +59,11 @@ import Darcs.Patch.Apply( ApplyState )
 import Darcs.Patch.Witnesses.Ordered
     ( (:>)(..), RL, FL, nullRL,
     nullFL, reverseFL, mapFL_FL, mapRL )
-import Darcs.Repository.Prefs ( addRepoSource, getPreflist )
+import Darcs.Repository.Prefs
+    ( Pref(Defaultrepo, Repos)
+    , addRepoSource
+    , getPreflist
+    )
 import Darcs.UI.External ( signString, darcsProgram
                          , pipeDoc, pipeDocSSH )
 import Darcs.Util.Exception ( die )
@@ -131,7 +135,7 @@ push = DarcsCommand
     , commandExtraArgHelp = ["[REPOSITORY]"]
     , commandCommand = pushCmd
     , commandPrereq = amInHashedRepository
-    , commandCompleteArgs = prefArgs "repos"
+    , commandCompleteArgs = prefArgs Repos
     , commandArgdefaults = defaultRepo
     , commandOptions = pushOpts
     }
@@ -147,9 +151,9 @@ push = DarcsCommand
       ^ O.setDefault
       ^ O.inheritDefault
       ^ O.allowUnrelatedRepos
+      ^ O.reorderPush
     pushAdvancedOpts
       = O.applyAs
-      ^ O.remoteRepos
       ^ O.changesReverse
       ^ O.compress
       ^ O.remoteDarcs
@@ -181,13 +185,13 @@ pushCmd _ _ _ = die "Cannot push to more than one repo."
 prepareBundle :: (RepoPatch p, ApplyState p ~ Tree)
               => [DarcsFlag] -> String -> Repository rt p wU wR -> IO Doc
 prepareBundle opts repodir repository = do
-  old_default <- getPreflist "defaultrepo"
+  old_default <- getPreflist Defaultrepo
   when (old_default == [repodir]) $
        let pushing = if dryRun ? opts == YesDryRun then "Would push" else "Pushing"
        in  putInfo opts $ text pushing <+> "to" <+> quoted repodir <> "..."
   them <- identifyRepositoryFor Writing repository (useCache ? opts) repodir >>= readPatches
-  addRepoSource repodir (dryRun ? opts) (remoteRepos ? opts)
-      (setDefault False opts) (O.inheritDefault ? opts) (isInteractive True opts)
+  addRepoSource repodir (dryRun ? opts) (setDefault False opts)
+      (O.inheritDefault ? opts)
   us <- readPatches repository
   common :> only_us <- return $ findCommonWithThem us them
   prePushChatter opts us (reverseFL only_us) them
@@ -261,29 +265,48 @@ remoteApply opts repodir bundle
             | otherwise -> applyViaLocal opts repodir bundle
         Just un
             | isSshUrl repodir -> applyViaSshAndSudo opts (splitSshUrl repodir) un bundle
-            | otherwise -> applyViaSudo un repodir bundle
+            | otherwise -> applyViaSudo opts un repodir bundle
 
-applyViaSudo :: String -> String -> Doc -> IO ExitCode
-applyViaSudo user repo bundle =
-    darcsProgram >>= \darcs ->
-    pipeDoc "sudo" ["-u",user,darcs,"apply","--all","--repodir",repo] bundle
+applyViaSudo :: [DarcsFlag] -> String -> String -> Doc -> IO ExitCode
+applyViaSudo opts user repo bundle =
+  darcsProgram >>= \darcs ->
+    pipeDoc "sudo" ("-u" : user : darcs : darcsArgs opts repo) bundle
 
 applyViaLocal :: [DarcsFlag] -> String -> Doc -> IO ExitCode
 applyViaLocal opts repo bundle =
-    darcsProgram >>= \darcs ->
-    pipeDoc darcs ("apply":"--all":"--repodir":repo:applyopts opts) bundle
+  darcsProgram >>= \darcs -> pipeDoc darcs (darcsArgs opts repo) bundle
 
 applyViaSsh :: [DarcsFlag] -> SshFilePath -> Doc -> IO ExitCode
 applyViaSsh opts repo =
-    pipeDocSSH (parseFlags O.compress opts) repo
-           [R.remoteDarcs (O.remoteDarcs ? opts) ++" apply --all "++unwords (applyopts opts)++
-                     " --repodir '"++sshRepo repo++"'"]
+  pipeDocSSH
+    (O.compress ? opts)
+    repo
+    [ unwords $
+        R.remoteDarcs (O.remoteDarcs ? opts) :
+        darcsArgs opts (shellQuote (sshRepo repo))
+    ]
 
 applyViaSshAndSudo :: [DarcsFlag] -> SshFilePath -> String -> Doc -> IO ExitCode
 applyViaSshAndSudo opts repo username =
-    pipeDocSSH (parseFlags O.compress opts) repo
-           ["sudo -u "++username++" "++R.remoteDarcs (O.remoteDarcs ? opts)++
-                     " apply --all --repodir '"++sshRepo repo++"'"]
+  pipeDocSSH
+    (O.compress ? opts)
+    repo
+    [ unwords $
+        "sudo" : "-u" : username :
+        R.remoteDarcs (O.remoteDarcs ? opts) :
+        darcsArgs opts (shellQuote (sshRepo repo))
+    ]
 
-applyopts :: [DarcsFlag] -> [String]
-applyopts opts = if parseFlags O.debug opts then ["--debug"] else []
+darcsArgs :: [DarcsFlag] -> String -> [String]
+darcsArgs opts repodir = "apply" : standardFlags ++ reorderFlags ++ debugFlags
+  where
+    standardFlags = ["--all", "--repodir", repodir]
+    reorderFlags = if O.yes (O.reorderPush ? opts) then ["--reorder-patches"] else []
+    debugFlags = if O.debug ? opts then ["--debug"] else []
+
+shellQuote :: String -> String
+shellQuote s = "'" ++ escapeQuote s ++ "'"
+  where
+    escapeQuote [] = []
+    escapeQuote cs@('\'':_) = '\\' : escapeQuote cs
+    escapeQuote (c:cs) = c : escapeQuote cs

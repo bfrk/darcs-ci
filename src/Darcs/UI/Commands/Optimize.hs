@@ -22,7 +22,7 @@ module Darcs.UI.Commands.Optimize ( optimize ) where
 
 import Darcs.Prelude
 
-import Control.Monad ( when, unless, forM_ )
+import Control.Monad ( when, forM_ )
 import System.Directory
     ( listDirectory
     , doesDirectoryExist
@@ -36,7 +36,7 @@ import Darcs.UI.Commands ( DarcsCommand(..), nodefaults
                          , amInHashedRepository, amInRepository, putInfo
                          , normalCommand, withStdOpts )
 import Darcs.UI.Completion ( noArgs )
-import Darcs.Repository.Prefs ( getPreflist, globalCacheDir )
+import Darcs.Repository.Prefs ( globalCacheDir )
 import Darcs.Repository
     ( Repository
     , AccessType(RW)
@@ -75,10 +75,21 @@ import Darcs.Patch.Set
     )
 import Darcs.Patch.Apply( ApplyState )
 import Darcs.Util.ByteString ( gzReadFilePS )
+import Darcs.Util.Cache
+    ( CacheLoc(..)
+    , CacheType(Repo)
+    , WritableOrNot(NotWritable)
+    , allHashedDirs
+    , bucketFolder
+    , cacheEntries
+    , cleanCaches
+    , mkCache
+    , mkDirCache
+    , relinkCaches
+    )
 import Darcs.Util.Printer ( Doc, formatWords, wrapText, ($+$) )
 import Darcs.Util.Lock
-    ( maybeRelink
-    , gzWriteAtomicFilePS
+    ( gzWriteAtomicFilePS
     , writeAtomicFilePS
     , removeFileMayNotExist
     , writeBinFile
@@ -108,11 +119,10 @@ import Darcs.Repository.Flags
     , WithWorkingDir(WithWorkingDir)
     )
 import Darcs.Patch.Progress ( progressFL )
-import Darcs.Util.Cache ( allHashedDirs, bucketFolder, cleanCaches, mkDirCache )
 import Darcs.Repository.Format
     ( identifyRepoFormat
     , createRepoFormat
-    , writeRepoFormat
+    , unsafeWriteRepoFormat
     , formatHas
     , RepoProperty ( HashedInventory )
     )
@@ -126,15 +136,8 @@ import Darcs.Repository.Pristine
     ( applyToTentativePristine
     )
 
-import Darcs.Util.Tree
-    ( Tree
-    , TreeItem(..)
-    , list
-    , expand
-    , emptyTree
-    )
-import Darcs.Util.Path ( AbsolutePath, realPath, toFilePath )
-import Darcs.Util.Tree.Plain( readPlainTree )
+import Darcs.Util.Tree ( Tree, emptyTree )
+import Darcs.Util.Path ( AbsolutePath, toFilePath )
 import Darcs.Util.Tree.Hashed ( writeDarcsHashed )
 
 optimizeDescription :: String
@@ -194,7 +197,7 @@ common = DarcsCommand
 optimizeClean :: DarcsCommand
 optimizeClean = common
     { commandName = "clean"
-    , commandDescription = "garbage collect pristine, inventories and patches"
+    , commandDescription = "Garbage collect pristine, inventories and patches"
     , commandHelp = optimizeHelpClean
     , commandCommand = optimizeCleanCmd
     }
@@ -211,7 +214,7 @@ optimizeUpgrade = common
     { commandName = "upgrade"
     , commandHelp = wrapText 80
         "Convert old-fashioned repositories to the current default hashed format."
-    , commandDescription = "upgrade repository to latest compatible format"
+    , commandDescription = "Upgrade repository to latest compatible format"
     , commandPrereq = amInRepository
     , commandCommand = optimizeUpgradeCmd
     , commandOptions =
@@ -222,7 +225,7 @@ optimizeHttp :: DarcsCommand
 optimizeHttp = common
     { commandName = "http"
     , commandHelp = optimizeHelpHttp
-    , commandDescription = "optimize repository for getting over network"
+    , commandDescription = "Optimize repository for getting over network"
     , commandCommand = optimizeHttpCmd
     }
 
@@ -238,7 +241,7 @@ optimizeCompress :: DarcsCommand
 optimizeCompress = common
     { commandName = "compress"
     , commandHelp = optimizeHelpCompression
-    , commandDescription = "compress patches and inventories"
+    , commandDescription = "Compress hashed files"
     , commandCommand = optimizeCompressCmd
     }
 
@@ -246,7 +249,7 @@ optimizeUncompress :: DarcsCommand
 optimizeUncompress = common
     { commandName = "uncompress"
     , commandHelp = optimizeHelpCompression
-    , commandDescription = "uncompress patches and inventories"
+    , commandDescription = "Uncompress hashed files (for debugging)"
     , commandCommand = optimizeUncompressCmd
     }
 
@@ -256,7 +259,8 @@ optimizeCompressCmd _ opts _ =
     RepoJob $ \repository -> do
       cleanRepository repository
       optimizeCompression O.GzipCompression opts
-      putInfo opts "Done optimizing by compression!"
+      mapM_ (relinkCaches (repoCache repository)) allHashedDirs
+      putInfo opts "Done compressing hashed files (and relinking)."
 
 optimizeUncompressCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 optimizeUncompressCmd _ opts _ =
@@ -264,7 +268,7 @@ optimizeUncompressCmd _ opts _ =
     RepoJob $ \repository -> do
       cleanRepository repository
       optimizeCompression O.NoCompression opts
-      putInfo opts "Done optimizing by uncompression!"
+      putInfo opts "Done uncompressing hashed files."
 
 optimizeCompression :: O.Compression -> [DarcsFlag] -> IO ()
 optimizeCompression compression opts = do
@@ -338,7 +342,7 @@ optimizeReorder = common
         , "bunches, which can further improve efficiency, but requires all"
         , "patches to be present. It is therefore less suitable for lazy clones."
         ]
-    , commandDescription = "reorder the patches in the repository"
+    , commandDescription = "Reorder the patches in the repository"
     , commandCommand = optimizeReorderCmd
     , commandOptions =
         withStdOpts basicOpts commonAdvancedOpts
@@ -357,7 +361,7 @@ optimizeRelink :: DarcsCommand
 optimizeRelink = common
     { commandName = "relink"
     , commandHelp = optimizeHelpRelink 
-    , commandDescription = "relink random internal data to a sibling"
+    , commandDescription = "Replace copies of hashed files with hard links"
     , commandCommand = optimizeRelinkCmd
     , commandOptions = optimizeRelinkOpts
     }
@@ -367,11 +371,14 @@ optimizeRelink = common
 
 optimizeRelinkCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 optimizeRelinkCmd _ opts _ =
-    withRepoLock (useCache ? opts) (umask ? opts) $
-    RepoJob $ \repository -> do
-      cleanRepository repository
-      doRelink opts
-      putInfo opts "Done relinking!"
+  withRepoLock (useCache ? opts) (umask ? opts) $ RepoJob $ \repo -> do
+    cleanRepository repo
+    let siblings = map toFilePath (O.siblings ? opts)
+        orig_entries = cacheEntries (repoCache repo)
+        new_cache =
+          mkCache $ orig_entries ++ map (Cache Repo NotWritable) siblings
+    mapM_ (relinkCaches new_cache) allHashedDirs
+    putInfo opts "Done relinking!"
 
 optimizeHelpHttp :: Doc
 optimizeHelpHttp = formatWords
@@ -418,30 +425,6 @@ optimizeHelpRelink =
   , "into multiple local repositories."
   ]
 
-doRelink :: [DarcsFlag] -> IO ()
-doRelink opts =
-    do let some_siblings = O.siblings ? opts
-       defrepolist <- getPreflist "defaultrepo"
-       let siblings = map toFilePath some_siblings ++ defrepolist
-       if null siblings
-          then putInfo opts "No siblings -- no relinking done."
-          else do debugMessage "Relinking patches..."
-                  patch_tree <- expand =<< readPlainTree patchesDirPath
-                  let patches = [ realPath p | (p, File _) <- list patch_tree ]
-                  maybeRelinkFiles siblings patches patchesDirPath
-                  debugMessage "Done relinking."
-
-maybeRelinkFiles :: [String] -> [String] -> String -> IO ()
-maybeRelinkFiles src dst dir =
-    mapM_ (maybeRelinkFile src . ((dir ++ "/") ++)) dst
-
-maybeRelinkFile :: [String] -> String -> IO ()
-maybeRelinkFile [] _ = return ()
-maybeRelinkFile (h:t) f =
-    do done <- maybeRelink (h ++ "/" ++ f) f
-       unless done $
-           maybeRelinkFile t f
-
 -- Only 'optimize' commands that works on old-fashionned repositories
 optimizeUpgradeCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
 optimizeUpgradeCmd _ opts _ = do
@@ -477,7 +460,7 @@ actuallyUpgradeFormat _opts _repository = do
   applyToTentativePristine (unsafeCoerceR _repository) (mkInvertible patchesToApply)
   -- now make it official
   finalizeTentativeChanges _repository
-  writeRepoFormat (createRepoFormat PatchFormat1 WithWorkingDir) formatPath
+  unsafeWriteRepoFormat (createRepoFormat PatchFormat1 WithWorkingDir) formatPath
   -- clean out old-fashioned junk
   debugMessage "Cleaning out old-fashioned repository files..."
   removeFileMayNotExist oldInventoryPath
@@ -545,7 +528,7 @@ optimizeGlobalCache = common
     , commandExtraArgs = 0
     , commandExtraArgHelp = []
     , commandHelp = optimizeHelpGlobalCache
-    , commandDescription = "garbage collect global cache"
+    , commandDescription = "Garbage collect global cache"
     , commandCommand = optimizeGlobalCacheCmd
     , commandPrereq = \_ -> return $ Right ()
     }
