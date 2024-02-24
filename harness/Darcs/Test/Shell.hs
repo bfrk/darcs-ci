@@ -111,7 +111,6 @@ runtest' ShellTest{..} srcdir =
           , ("XDG_CACHE_HOME"            , EnvFilePath (wd </> ".cache"))
           , ("TESTDATA", EnvFilePath (srcdir </> "tests" </> "data"))
           , ("TESTBIN", EnvFilePath (srcdir </> "tests" </> "bin"))
-          , ("DARCS_TESTING_CACHE_DIR"   , EnvFilePath $ wd </> ".cache/darcs")
           , ("DARCS_TESTING_PREFS_DIR"   , EnvFilePath $ wd </> ".darcs")
           , ("EMAIL"                     , EnvString "tester")
           , ("GIT_AUTHOR_NAME"           , EnvString "tester")

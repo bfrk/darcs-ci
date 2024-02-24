@@ -102,8 +102,10 @@ tagHelp =
     , "The command `darcs show tags` lists all tags in the current repository."
     ]
   , [ "Tagging also provides significant performance benefits: when Darcs"
-    , "reaches a shared tag that depends on all antecedent patches, it can"
-    , "simply stop processing."
+    , "reaches a tag that depends on all preceding patches, it can often"
+    , "stop processing. A tag in such a position is called \"clean\". For"
+    , "instance, operations like push and pull need to examine only patches"
+    , "that come after the latest shared clean tag."
     ]
   , [ "Like normal patches, a tag has a name, an author, a timestamp and an"
     , "optional long description, but it does not change the working tree."

@@ -120,12 +120,14 @@ applyHelp = vsep $ map formatWords
     , "(partly) fail, because some conflicts cannot be marked, such as e.g."
     , "conflicts between two adds of the same file. In this case Darcs will"
     , "warn you and display the conflicting changes instead. When Darcs"
-    , "detects conflicts with unrecord changes, it will give you an extra"
+    , "detects conflicts with unrecorded changes, it will give you an extra"
     , "warning and prompts you to confirm that you want to continue. This is"
     , "because your original unrecorded changes cannot be automatically"
-    , "restored by Darcs. Note that conflict markup is something Darcs"
-    , "adds to your working tree files. Nevertheless, you"
-    , "can always re-construct it using `darcs mark-conflicts`."
+    , "restored by Darcs."
+    ]
+  , [ "Note that conflict markup is something Darcs adds to your working tree"
+    , "files. Nevertheless, you can always re-construct it using"
+    , "`darcs mark-conflicts`."
     ]
   , [ "The `--external-merge` option lets you resolve conflicts"
     , "using an external merge tool.  In the option, `%a` is replaced with"

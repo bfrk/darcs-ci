@@ -9,7 +9,7 @@ set -e
 test -d _darcs || (echo need to be in a darcs repo >&2 && false)
 github=git@github.com:bfrk/darcs-ci.git
 rm -rf .git
-git init
+git init -b master
 if ! test "$1" = "init"; then
   git fetch $github master
   # like checkout but does not touch working tree or staging area:

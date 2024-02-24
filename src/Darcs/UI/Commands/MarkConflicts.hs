@@ -117,7 +117,7 @@ markconflictsHelp = vsep $
     , "This is usually not a state you would regard as a successful resolution"
     , "of the conflict; but there are exceptional situations where this may be"
     , "exactly what you want. In order to tell Darcs that you want this conflict"
-    , "to be regarded as resolved, use `record record --ask-deps` to record a"
+    , "to be regarded as resolved, use `darcs record --ask-deps` to record a"
     , "patch that explicitly depends on all patches involved in the conflict."
     ]
  ]

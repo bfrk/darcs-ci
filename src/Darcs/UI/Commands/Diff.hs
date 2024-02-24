@@ -23,7 +23,6 @@ import Control.Monad ( unless, when )
 import Data.Maybe ( fromMaybe )
 import Data.Maybe ( isJust )
 import System.Directory ( createDirectory, findExecutable, withCurrentDirectory )
-import System.Exit ( ExitCode(..) )
 import System.FilePath.Posix ( takeFileName, (</>) )
 import System.IO ( hFlush, stdout )
 
@@ -247,13 +246,8 @@ doDiff opts mpaths = withRepository (useCache ? opts) $ RepoJob $ \repository ->
           let pausingForGui = (wantGuiPause opts == O.YesWantGuiPause)
               cmdline = unwords (d_cmd : d_args)
           when pausingForGui $ putStrLn $ "Running command '" ++ cmdline ++ "'"
-          exitCode <- execInteractive cmdline Nothing
+          _ <- execInteractive cmdline Nothing
           when pausingForGui $ askEnter "Hit return to move on..."
-          case exitCode of
-            -- diff returns 1 if there are differences, everything else is an error
-            ExitFailure code | code /= 1 ->
-              fail $ "The diff command failed with exit code " ++ show code
-            _ -> return ()
 
 -- | Returns the command we should use for diff as a tuple (command, arguments).
 -- This will either be whatever the user specified via --diff-command  or the

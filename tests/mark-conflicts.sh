@@ -33,4 +33,17 @@ darcs revert -a
 not grep 'v v' child_of_conflict
 darcs mark-conflicts
 grep 'v v' child_of_conflict
+
+# test that a change depending on both parts counts as resolution,
+# so that mark-conflicts doesn't see any conflicts to mark
+darcs revert  -a
+echo "Conflict, Part 3." > child_of_conflict
+# it should count as resolution regardless of whether unrecorded...
+darcs mark-conflicts | grep -i 'No conflicts'
+not grep 'v v' child_of_conflict
+# ...or recorded
+darcs record -am 'Conflict resolution'
+darcs mark-conflicts | grep -i 'No conflicts'
+not grep 'v v' child_of_conflict
+
 cd ..

@@ -10,12 +10,12 @@ jobs:
       fail-fast: false
       matrix:
         os:
-          - ubuntu-20.04
+#           - ubuntu-20.04
           - ubuntu-22.04
-          - macos-11
-          - macos-12
+#           - macos-11
+#           - macos-12
           - macos-13
-          - windows-2019
+#           - windows-2019
           - windows-2022
         ghc:
           - 8.2.2
@@ -61,13 +61,8 @@ jobs:
         ghc-version: ${{ matrix.ghc }}
         cabal-version: ${{ matrix.cabal }}
 
-    - name: Configure (with docs)
-      if: env.builddocs == 'true'
-      run: cabal configure --enable-tests -fwarn-as-error --enable-documentation
-
-    - name: Configure (without docs)
-      if: env.builddocs == 'false'
-      run: cabal configure --enable-tests -fwarn-as-error --disable-documentation
+    - name: Configure
+      run: cabal configure --enable-tests -fwarn-as-error
 
     - name: Cabal freeze
       run: cabal freeze
@@ -79,8 +74,13 @@ jobs:
         key: cabal-store-${{ matrix.os }}-ghc-${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}
         restore-keys: cabal-store-${{ matrix.os }}-ghc-${{ matrix.ghc }}-
 
-    - name: Build dependencies
-      run: cabal build --only-dependencies
+    - name: Build dependencies (with docs)
+      if: env.builddocs == 'true'
+      run: cabal build --only-dependencies --enable-documentation
+
+    - name: Build dependencies (without docs)
+      if: env.builddocs == 'false'
+      run: cabal build --only-dependencies --disable-documentation
 
     - name: Save cabal store to cache
       uses: actions/cache/save@v3

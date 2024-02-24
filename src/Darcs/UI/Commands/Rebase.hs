@@ -83,13 +83,11 @@ import Darcs.Patch.Rebase.Change
     , partitionUnconflicted
     , WithDroppedDeps(..), WDDNamed, commuterIdWDD
     , simplifyPush, simplifyPushes
-    , forceCommuteRebaseChange
     )
 import Darcs.Patch.Rebase.Fixup
     ( RebaseFixup(..)
     , commuteNamedFixup
     , flToNamesPrims
-    , primNamedToFixups
     )
 import Darcs.Patch.Rebase.Name ( RebaseName(..), commuteNameNamed )
 import Darcs.Patch.Rebase.Suspended ( Suspended(..), addToEditsToSuspended )
@@ -131,7 +129,7 @@ import Darcs.Patch.Witnesses.Ordered
     , (+>>+)
     )
 import Darcs.Patch.Witnesses.Sealed
-    ( Sealed(..), seal, unseal, mapSeal
+    ( Sealed(..), seal, unseal
     , Sealed2(..)
     )
 import Darcs.Patch.Witnesses.Unsafe ( unsafeCoerceP )
@@ -154,7 +152,7 @@ import Darcs.Util.SignalHandler ( withSignalsBlocked )
 import Darcs.Util.Tree ( Tree )
 
 import Control.Exception ( throwIO, try )
-import Control.Monad ( mplus, unless, when, void )
+import Control.Monad ( unless, when, void )
 import Control.Monad.Trans ( liftIO )
 import System.Exit ( ExitCode(ExitSuccess), exitSuccess )
 
@@ -644,31 +642,12 @@ obliterateOne
   -> RebaseChange prim wX wY
   -> Sealed (FL (RebaseChange prim) wY)
   -> Sealed (FL (RebaseChange prim) wX)
-obliterateOne da rc = unseal (simplifyPushes da (rcToFixups rc))
-
-rcToFixups :: RebaseChange prim wX wY -> FL (RebaseFixup prim) wX wY
-rcToFixups (RC fs e) = fs +>+ primNamedToFixups e
-
-forceCommute
-  :: PrimPatch prim
-  => O.DiffAlgorithm
-  -> RebaseChange prim wX wY
-  -> RebaseChange prim wY wZ
-  -> Sealed (FL (RebaseChange prim) wZ)
-  -> Maybe (Sealed (FL (RebaseChange prim) wX))
-forceCommute da rc1 rc2 (Sealed rcs) =
-  do
-    rc2' :> rc1' <- commute (rc1 :> rc2)
-    return $ Sealed (rc2' :>: rc1' :>: rcs)
-  `mplus`
-  do
-    RC fs2' e2' :> RC fs1' e1' <- forceCommuteRebaseChange (rc1 :> rc2)
-    return $
-      unseal (simplifyPushes da fs2') $
-      mapSeal (RC NilFL e2' :>:) $
-      unseal (simplifyPushes da fs1') $
-      mapSeal (RC NilFL e1' :>:) $
-      Sealed rcs
+obliterateOne da (RC fs e) =
+  unseal (simplifyPushes da fs) .
+  -- since Named doesn't have any witness context for the
+  -- patch names, the AddName here will be inferred to be wX wX
+  unseal (simplifyPush da (NameFixup (AddName (patch2patchinfo e)))) .
+  unseal (simplifyPushes da (mapFL_FL PrimFixup (patchcontents e)))
 
 edit :: DarcsCommand
 edit = DarcsCommand
@@ -788,9 +767,8 @@ interactiveEdit opts redos s@EditState{..} undos =
               , PromptChoice 'e' True reword "edit name and/or long comment (log)"
               , PromptChoice 's' (index > 0) squash "squash with previous patch"
               , PromptChoice 'i' can_inject inject' "inject fixups"
-              , PromptChoice 'c' (index > 0) comm "(force-)commute with previous patch)"
               -- TODO
-              -- , PromptChoice '???' True ??? "select individual changes for editing"
+              -- , PromptChoice 'c' True ??? "select individual changes for editing"
               ]
             choicesView =
               [ PromptChoice 'v' True view "view this patch in full"
@@ -833,19 +811,6 @@ interactiveEdit opts redos s@EditState{..} undos =
             reword = do
               Sealed todo'' <- rewordOne da p todo'
               edit' "reword" s { patches = Sealed (done :> todo'') }
-            comm = do
-              case done of
-                NilRL -> error "impossible"
-                done' :<: q ->
-                  case forceCommute da q p (Sealed todo') of
-                    Just (Sealed todo'') ->
-                      edit' "commute" s
-                        { patches = Sealed (done' :> todo'')
-                        , index = index - 1
-                        }
-                    Nothing -> do
-                      putStrLn "Failed to commute fixups backward, try inject first."
-                      prompt
             squash =
               case done of
                 NilRL -> error "impossible"

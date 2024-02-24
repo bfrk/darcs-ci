@@ -12,6 +12,7 @@ module Darcs.Repository.Flags
     , DiffAlgorithm (..)
     , LookForMoves (..)
     , DiffOpts (..)
+    , RunTest (..)
     , SetScriptsExecutable (..)
     , LeaveTestDir (..)
     , SetDefault (..)
@@ -80,6 +81,9 @@ data DiffOpts = DiffOpts
   , lookForMoves :: LookForMoves
   , diffAlg :: DiffAlgorithm
   } deriving Show
+
+data RunTest = YesRunTest | NoRunTest
+    deriving ( Eq, Show )
 
 data SetScriptsExecutable = YesSetScriptsExecutable | NoSetScriptsExecutable
     deriving ( Eq, Show )

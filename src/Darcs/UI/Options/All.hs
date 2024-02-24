@@ -129,6 +129,7 @@ module Darcs.UI.Options.All
     -- tests
     , TestChanges (..)
     , testChanges
+    , RunTest (..) -- re-export
     , LeaveTestDir (..) -- re-export
     , leaveTestDir
 
@@ -253,6 +254,7 @@ import Darcs.Repository.Flags
     , LookForReplaces (..)
     , DiffAlgorithm (..)
     , DiffOpts (..)
+    , RunTest (..)
     , SetScriptsExecutable (..)
     , LeaveTestDir (..)
     , SetDefault (..)
@@ -322,6 +324,10 @@ instance YesNo LookForReplaces where
 instance YesNo LookForMoves where
   yes NoLookForMoves = False
   yes YesLookForMoves = True
+
+instance YesNo RunTest where
+  yes NoRunTest = False
+  yes YesRunTest = True
 
 instance YesNo SetScriptsExecutable where
   yes NoSetScriptsExecutable = False
@@ -830,15 +836,15 @@ data TestChanges = NoTestChanges | YesTestChanges LeaveTestDir deriving (Eq)
 
 testChanges :: PrimDarcsOption TestChanges
 testChanges = imap (Iso fw bw) $ __runTest ^ leaveTestDir where
-  fw k NoTestChanges = k False NoLeaveTestDir
-  fw k (YesTestChanges ltd) = k True ltd
-  bw k False _ = k NoTestChanges
-  bw k True ltd = k (YesTestChanges ltd)
+  fw k NoTestChanges = k NoRunTest NoLeaveTestDir
+  fw k (YesTestChanges ltd) = k YesRunTest ltd
+  bw k NoRunTest _ = k NoTestChanges
+  bw k YesRunTest ltd = k (YesTestChanges ltd)
 
-__runTest :: PrimDarcsOption Bool
-__runTest = withDefault False
-  [ RawNoArg [] ["test"] F.Test True "run the test script"
-  , RawNoArg [] ["no-test"] F.NoTest False "don't run the test script" ]
+__runTest :: PrimDarcsOption RunTest
+__runTest = withDefault NoRunTest
+  [ RawNoArg [] ["test"] F.Test YesRunTest "run the test script"
+  , RawNoArg [] ["no-test"] F.NoTest NoRunTest "don't run the test script" ]
 
 leaveTestDir :: PrimDarcsOption LeaveTestDir
 leaveTestDir = withDefault NoLeaveTestDir

@@ -109,6 +109,14 @@ pushHelp =
     , "current repository into another repository."
     ]
   $+$ formatWords
+    [ "The --reorder-patches option works in the same way as it does for pull"
+    , "and apply: instead of placing the new patches (coming from your local"
+    , "repository) on top of (i.e. after) the existing (remote) ones, it puts"
+    , "the remote-only patches on top of the ones that you are pushing. This"
+    , "can be useful, for instance, if you have recorded a tag locally and want"
+    , "this tag to be clean in the remote repository after pushing."
+    ]
+  $+$ formatWords
     [ "If you give the `--apply-as` flag, darcs will use `sudo` to apply the"
     , "patches as a different user.  This can be useful if you want to set up a"
     , "system where several users can modify the same repository, but you don't"

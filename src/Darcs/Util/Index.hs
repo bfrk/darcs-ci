@@ -139,7 +139,6 @@ import Data.ByteString.Unsafe( unsafeHead, unsafeDrop )
 import Data.ByteString.Internal
     ( c2w
     , fromForeignPtr
-    , memcpy
     , nullForeignPtr
     , toForeignPtr
     )
@@ -151,6 +150,7 @@ import Data.IORef( )
 import Data.Maybe( fromJust, isJust, isNothing )
 import Data.Typeable( Typeable )
 
+import Foreign.Marshal.Utils ( copyBytes )
 import Foreign.Storable
 import Foreign.ForeignPtr( ForeignPtr, withForeignPtr, castForeignPtr )
 import Foreign.Ptr( Ptr, plusPtr )
@@ -288,7 +288,7 @@ createItem typ apath fp off = do
   withForeignPtr fp $ \p ->
     withForeignPtr dsc_fp $ \dsc_p -> do
       pokeByteOff p (off + off_dsclen) (fromIntegral dsc_len :: Int32)
-      memcpy
+      copyBytes
         (plusPtr p $ off + off_dsc)
         (plusPtr dsc_p dsc_start)
         (fromIntegral dsc_len)
@@ -700,7 +700,8 @@ unsafePokeBS to from =
             ++ show len_from ++ " /= to = " ++ show len_to
        withForeignPtr fp_from $ \p_from ->
          withForeignPtr fp_to $ \p_to ->
-           memcpy (plusPtr p_to off_to)
+           copyBytes
+                  (plusPtr p_to off_to)
                   (plusPtr p_from off_from)
                   (fromIntegral len_to)
 
