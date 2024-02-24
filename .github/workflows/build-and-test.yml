@@ -25,7 +25,9 @@ jobs:
           - 8.10.7
           - 9.0.2
           - 9.2.8
-          - 9.4.5
+          - 9.4.8
+          - 9.6.4
+          - 9.8.1
         cabal:
           - '3.10'
         exclude:
@@ -56,7 +58,7 @@ jobs:
 
     - name: Setup Haskell
       id: setup-haskell-cabal
-      uses: haskell/actions/setup@v2
+      uses: haskell-actions/setup@v2
       with:
         ghc-version: ${{ matrix.ghc }}
         cabal-version: ${{ matrix.cabal }}
