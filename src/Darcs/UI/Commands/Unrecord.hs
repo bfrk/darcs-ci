@@ -260,7 +260,7 @@ obliterateCmd cmdname _ opts _ = do
           "obliterate" verbOpt (O.withSummary ? opts) (dryRun ? opts)
           (xmlOutput ? opts) (isInteractive True opts) removed
         setEnvDarcsPatches removed
-        when (isJust $ getOutput opts "") $
+        when (isJust $ getOutput opts (return "")) $
           -- The call to preselectPatches above may have unwrapped the latest
           -- clean tag. If we don't want to remove it, we lost information
           -- about that tag being clean, so we have to access it's inventory.
@@ -298,8 +298,8 @@ savetoBundle opts removed@(x :>: _) orig = do
           Sealed (kept' :> removed') ->
             makeBundle Nothing kept' (mapFL_FL hopefully removed'))
           `catchInterrupt` genFullBundle
-  filename <- getUniqueDPatchName (patchDesc x)
-  let outname = fromJust (getOutput opts filename)
+  let filename = getUniqueDPatchName (patchDesc x)
+  outname <- fromJust (getOutput opts filename)
   exists <- useAbsoluteOrStd (doesPathExist . toFilePath) (return False) outname
   when exists $
     fail $ "Directory or file named '" ++ (show outname) ++ "' already exists."

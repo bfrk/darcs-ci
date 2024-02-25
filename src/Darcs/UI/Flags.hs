@@ -429,11 +429,13 @@ getSendmailCmd fs =
     Nothing -> lookupEnv "SENDMAIL"
     justcmd -> return justcmd
 
--- | Accessor for output option
-getOutput :: Config -> FilePath -> Maybe AbsolutePathOrStd
+-- | Accessor for output option. Takes and returns IO actions
+-- so that the default value is only calculated if needed,
+-- as it might involve filesystem actions that can fail.
+getOutput :: Config -> IO FilePath -> Maybe (IO AbsolutePathOrStd)
 getOutput fs fp = fmap go (parseFlags O.output fs) where
-  go (O.Output ap)         = ap
-  go (O.OutputAutoName ap) = makeAbsoluteOrStd ap fp
+  go (O.Output ap)         = return ap
+  go (O.OutputAutoName ap) = makeAbsoluteOrStd ap <$> fp
 
 -- |'getSubject' takes a list of flags and returns the subject of the mail
 -- to be sent by @darcs send@. Looks for a subject specified by

@@ -320,10 +320,10 @@ makeBundle opts (Sealed (Fork common _ to_be_fetched)) =
     do
       bundle <- Bundle.makeBundle Nothing common $
                  mapFL_FL hopefully to_be_fetched
-      fname <- case to_be_fetched of
+      let fname = case to_be_fetched of
                     (x:>:_)-> getUniqueDPatchName $ patchDesc x
                     _ -> error "impossible case"
-      let o = fromMaybe stdOut (getOutput opts fname)
+      o <- fromMaybe (return stdOut) (getOutput opts fname)
       useAbsoluteOrStd writeDocBinFile putDoc o bundle
 
 {- Read in the specified pull-from repositories.  Perform

@@ -36,6 +36,7 @@ import Control.Monad ( when, unless )
 
 import Darcs.Prelude
 
+import Control.Exception ( catch )
 import Data.Char ( isAlpha, toLower, isDigit, isSpace )
 import Data.Maybe ( fromMaybe )
 
@@ -204,13 +205,19 @@ getUniqueRepositoryName talkative name = getUniquePathName talkative buildMsg bu
                  n ++"'"
 
 getUniqueDPatchName :: FilePath -> IO FilePath
-getUniqueDPatchName name = getUniquePathName False (const "") buildName
+getUniqueDPatchName name =
+  catch
+    (getUniquePathName False (const "") buildName)
+    (\(e :: IOError) ->
+      fail $ "Error constructing filename corresponding to " ++ show name ++ ": " ++ show e ++
+             "\nConsider using '-o' to specify an output filename."
+    )
   where
     buildName i =
       if i == -1 then patchFilename name else patchFilename $ name++"_"++show i
 
 -- |patchFilename maps a patch description string to a safe (lowercased, spaces
--- removed and ascii-only characters) patch filename.
+-- removed and only letters/digits) patch filename.
 patchFilename :: String -> String
 patchFilename the_summary = name ++ ".dpatch"
   where

@@ -147,9 +147,9 @@ weakhash verbosity = do
   unless inrepo $ fail "Not a repository."
   out <- rawSystemStdout verbosity "darcs" ["show", "repo"]
   let line = filter ("Weak Hash:" `isInfixOf`) $ lines out
-  return $ case (length line) of
-                0 -> Nothing
-                _ -> Just $ last $ words $ head line
+  return $ case line of
+                [] -> Nothing
+                x:_ -> Just $ last $ words x
  `catchAny` \_ -> return Nothing
 
 context :: Verbosity -> IO (Maybe String)

@@ -257,15 +257,15 @@ sendToThem repo opts wtds their_name them = do
   here   <- getCurrentDirectory
   let make_fname (tb:>:_) = getUniqueDPatchName $ patchDesc tb
       make_fname _ = error "impossible case"
-  fname <- make_fname to_be_sent
+  let fname = make_fname to_be_sent
   let outname = case getOutput opts fname of
                     Just f  -> Just f
                     Nothing | O.mail ? opts -> Nothing
                             | not $ null [ p | PostHttp p <- wtds] -> Nothing
-                            | otherwise        -> Just (makeAbsoluteOrStd here fname)
+                            | otherwise        -> Just (makeAbsoluteOrStd here <$> fname)
   case outname of
-    Just fname' -> writeBundleToFile opts to_be_sent bundle fname' wtds their_name
-    Nothing     -> sendBundle opts to_be_sent bundle fname wtds their_name
+    Just fname' -> fname' >>= \f -> writeBundleToFile opts to_be_sent bundle f wtds their_name
+    Nothing     -> fname >>= \f -> sendBundle opts to_be_sent bundle f wtds their_name
 
 
 prepareBundle :: forall p wX wY wZ. (RepoPatch p, ApplyState p ~ Tree)
@@ -427,7 +427,7 @@ decideOnBehavior opts remote_repo =
                 msg = willSendTo (dryRun ? opts) (map pn emails)
             in case dryRun ? opts of
                 O.YesDryRun -> putInfo opts msg
-                O.NoDryRun  -> when (null the_targets && isNothing (getOutput opts "")) $
+                O.NoDryRun  -> when (null the_targets && isNothing (getOutput opts (return ""))) $
                                 putInfo opts msg
 
 getTargets :: [WhatToDo] -> IO [WhatToDo]
