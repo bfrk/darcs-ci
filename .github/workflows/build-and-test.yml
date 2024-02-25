@@ -40,8 +40,8 @@ jobs:
           - os: windows-2019
             ghc: 8.2.2
     env:
-      builddocs: ${{ matrix.ghc == '9.4.5' }}
-      runtests: ${{ matrix.ghc == '8.4.4' || matrix.ghc == '9.4.5' }}
+      builddocs: ${{ matrix.ghc == '9.8.1' }}
+      runtests: ${{ matrix.ghc == '8.6.5' || matrix.ghc == '9.8.1' }}
       tests-to-run: # e.g. -t=EXAMPLE
       testcmd: cabal run -- darcs-test -j=6 -f=123 -i=yn -c=yn --hide
       ACTIONS_ALLOW_UNSECURE_COMMANDS: true
