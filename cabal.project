@@ -1,6 +1,1 @@
 packages: .
-
-constraints:
-    -- constraining indirect dependency to work around problems
-    -- connecting to hub.darcs.net - see https://bugs.darcs.net/issue2715
-    tls < 2.0.0,

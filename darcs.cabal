@@ -453,6 +453,9 @@ Library
                       network           >= 2.6 && < 3.2,
                       conduit           >= 1.3.0 && < 1.4,
                       http-conduit      >= 2.3 && < 2.4,
+                      -- constraining indirect dependency to work around problems
+                      -- connecting to hub.darcs.net - see https://bugs.darcs.net/issue2715
+                      tls               < 2.0.0,
                       http-types        >= 0.12.1 && < 0.12.5,
                       exceptions        >= 0.6 && < 0.11,
                       terminal-size     >= 0.3.4 && < 0.4,
