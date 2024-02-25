@@ -21,7 +21,6 @@ module Darcs.Util.Diff.Patience
 import Darcs.Prelude
 
 import Data.List ( sort )
-import Data.Maybe ( fromJust )
 import Data.Array.Unboxed
 import Data.Array.ST
 import Control.Monad.ST
@@ -96,11 +95,14 @@ insert h bs hmap = (hunknumber, HunkMapInfo newsize (M.insertWith (\_ o -> (hunk
 
 --Given a HunkMap, check collisions and return the line with an updated Map
 toHunk' :: HunkMap -> B.ByteString -> (Hunk, HunkMap)
-toHunk' lmap bs | oldbs == Nothing || null oldhunkpair = insert hash bs lmap
-                | otherwise = (fst $ head oldhunkpair, lmap)
-                    where hash = H.hash bs
-                          oldbs = M.lookup hash (getMap lmap)
-                          oldhunkpair = filter ((== bs) . snd) $ fromJust oldbs
+toHunk' lmap bs =
+  case M.lookup hash (getMap lmap) of
+    Nothing -> insert hash bs lmap
+    Just hunkpairs ->
+        case filter ((== bs) . snd) hunkpairs of
+            [] -> insert hash bs lmap
+            (hunknumber, _):_ -> (hunknumber, lmap)
+    where hash = H.hash bs
 
 listToHunk :: [B.ByteString] -> HunkMap -> ([Hunk], HunkMap)
 listToHunk [] hmap = ([], hmap)

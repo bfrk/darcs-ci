@@ -28,6 +28,7 @@ import qualified Data.ByteString as B
 import Data.Char ( isAscii, isPrint, isSpace )
 import Data.List.Ordered ( nubSort )
 import Data.Maybe ( fromJust, isJust )
+import Safe ( headErr, tailErr )
 import Control.Monad ( unless, filterM, void, when )
 import Darcs.Util.Tree( readBlob, modifyTree, findFile, TreeItem(..), Tree
                       , makeBlobBS )
@@ -253,9 +254,9 @@ chooseToks (Just t) a b
     | length t <= 2 =
         badTokenSpec $ "It must contain more than 2 characters, because it"
                        ++ " should be enclosed in square brackets"
-    | head t /= '[' || last t /= ']' =
+    | headErr t /= '[' || last t /= ']' =
         badTokenSpec "It should be enclosed in square brackets"
-    | '^' == head tok && length tok == 1 =
+    | '^' == headErr tok && length tok == 1 =
         badTokenSpec "Must be at least one character in the complementary set"
     | any isSpace t =
         badTokenSpec "Space is not allowed"
@@ -269,7 +270,7 @@ chooseToks (Just t) a b
     | not (isTok tok b) = badTokenSpec $ notAToken b
     | otherwise = return tok
   where
-    tok = init $ tail t :: String
+    tok = init $ tailErr t :: String
     badTokenSpec msg = fail $ "Bad token spec: " ++ show t ++ " (" ++ msg ++ ")"
     spaceyToken x = x ++ " must not contain any space"
     notAToken x = x ++ " is not a token, according to your spec"

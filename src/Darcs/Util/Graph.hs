@@ -43,6 +43,8 @@ import qualified Data.Vector.Mutable as MV
 import qualified Data.Vector.Unboxed as U
 import qualified Data.Vector.Unboxed.Mutable as MU
 
+import Safe ( tailErr )
+
 import Darcs.Prelude
 
 -- | Vertices are represented as 'Int'.
@@ -241,7 +243,7 @@ prop_self_contained g c =
 prop_connected :: Graph -> VertexSet -> Bool
 prop_connected g = not . any (prop_self_contained g) . proper_non_empty_subsets
   where
-    proper_non_empty_subsets = filter (not . null) . tail . powerset
+    proper_non_empty_subsets = filter (not . null) . tailErr . powerset
 
 -- | Whether a 'VertexSet' is a connected component of the 'Graph'.
 prop_connected_component :: Component -> Bool

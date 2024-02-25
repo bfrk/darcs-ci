@@ -89,6 +89,8 @@ import System.Posix.Files ( fileMode, getFileStatus, setFileMode )
 
 import GHC.IO.Encoding ( getFileSystemEncoding )
 
+import Safe ( headErr )
+
 import Darcs.Util.URL ( isRelative )
 import Darcs.Util.Exception
     ( firstJustIO
@@ -172,7 +174,7 @@ environmentHelpLocks = (["DARCS_SLOPPY_LOCKS"],[
 
 tempdirLoc :: IO FilePath
 tempdirLoc = fromJust <$>
-    firstJustIO [ fmap (Just . head . words) (readFile (darcsdir++"/prefs/tmpdir")) >>= chkdir,
+    firstJustIO [ fmap (Just . headErr . words) (readFile (darcsdir++"/prefs/tmpdir")) >>= chkdir,
                   lookupEnv "DARCS_TMPDIR" >>= chkdir,
                   getTemporaryDirectory >>= chkdir . Just,
                   getCurrentDirectorySansDarcs,

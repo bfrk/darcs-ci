@@ -42,6 +42,7 @@ import Data.Array.Base
 import Data.Coerce ( coerce )
 import Data.Maybe ( isJust )
 import Control.Monad.ST
+import Safe ( tailErr )
 import Test.HUnit ( assertBool, assertEqual, assertFailure )
 import Test.Framework.Providers.QuickCheck2 ( testProperty )
 import Test.Framework.Providers.HUnit ( testCase )
@@ -148,8 +149,8 @@ checkKnownShifts (ca, cb, sa, sb, ca', cb') = runST (
            p_b = listArray (0, length sb) $ B.empty:(toPS sb)
        shiftBoundaries ca_arr cb_arr p_a 1 1
        shiftBoundaries cb_arr ca_arr p_b 1 1
-       ca_res <- fmap (fromBool . tail) $ getElems ca_arr
-       cb_res <- fmap (fromBool . tail) $ getElems cb_arr
+       ca_res <- fmap (fromBool . tailErr) $ getElems ca_arr
+       cb_res <- fmap (fromBool . tailErr) $ getElems cb_arr
        return $ if ca_res  == ca' && cb_res == cb' then []
                 else ["shiftBoundaries failed on "++sa++" and "++sb++" with "
                       ++(show (ca,cb))++" expected "++(show (ca', cb'))

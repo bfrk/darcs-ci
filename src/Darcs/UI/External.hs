@@ -23,9 +23,7 @@ module Darcs.UI.External
 import Darcs.Prelude
 
 import Data.Maybe ( isJust )
-#ifndef WIN32
-import Data.Maybe ( isNothing, maybeToList )
-#endif
+import Safe ( tailErr )
 import Control.Monad ( unless, when, filterM, void )
 #ifndef WIN32
 import Control.Monad ( liftM2 )
@@ -113,17 +111,19 @@ sendmailPath = do
                 searchPath
                 [ "sendmail" ]
   ex <- findExecutable "sendmail"
-  when (isNothing ex && null l) $
-    fail $ "Cannot find the 'sendmail' program in " ++
+  case (ex, l) of
+    (Just v, _) -> return v
+    (_, v:_) -> return v
+    _ -> fail $ "Cannot find the 'sendmail' program in " ++
       orClauses ("your PATH" : searchPath) ++ "."
-  return $ head $ maybeToList ex ++ l
 #endif
 
 diffProgram :: IO String
 diffProgram = do
   l <- filterM (fmap isJust . findExecutable) [ "gdiff", "gnudiff", "diff" ]
-  when (null l) $ fail "Cannot find the \"diff\" program."
-  return $ head l
+  case l of
+    [] -> fail "Cannot find the \"diff\" program."
+    v:_ -> return v
 
 -- |Get the name of the darcs executable (as supplied by @getExecutablePath@)
 darcsProgram :: IO String
@@ -348,7 +348,7 @@ verifyGPG goodkeys s =
                     x /= BC.pack "-----BEGIN PGP SIGNED MESSAGE-----"
                     &&
                     x /= BC.pack "-----BEGIN PGP SIGNED MESSAGE-----\r"
-                in unlinesPS $ map fix_line $ tail $ dropWhile not_begin_signature $ linesPS s
+                in unlinesPS $ map fix_line $ tailErr $ dropWhile not_begin_signature $ linesPS s
             fix_line x | B.length x < 3 = x
                        | BC.pack "- -" `B.isPrefixOf` x = B.drop 2 x
                        | otherwise = x
@@ -364,7 +364,7 @@ verifySSL goodkeys s = do
     certdata <- opensslPS ["smime", "-pk7out"] s
                 >>= opensslPS ["pkcs7", "-print_certs"]
     cruddy_pk <- opensslPS ["x509", "-pubkey"] certdata
-    let key_used = B.concat $ tail $
+    let key_used = B.concat $ tailErr $
                    takeWhile (/= BC.pack"-----END PUBLIC KEY-----")
                            $ linesPS cruddy_pk
         in do allowed_keys <- linesPS `fmap` B.readFile (toFilePath goodkeys)

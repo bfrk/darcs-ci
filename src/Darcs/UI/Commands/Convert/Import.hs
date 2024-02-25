@@ -36,6 +36,8 @@ import Data.IORef (modifyIORef, newIORef)
 import Data.Maybe (fromMaybe)
 import Data.Word (Word8)
 
+import Safe (headErr, tailErr)
+
 import System.Directory (doesFileExist)
 import System.FilePath.Posix ((</>))
 import System.IO (stdin)
@@ -266,7 +268,7 @@ fastImport' repo diffalg marks = do
         makeinfo author message tag = do
           let (name, log) = case unpackPSFromUTF8 message of
                                       "" -> ("Unnamed patch", [])
-                                      msg -> (head &&& tail) . lines $ msg
+                                      msg -> (headErr &&& tailErr) . lines $ msg
               (author'', date'') = span (/='>') $ unpackPSFromUTF8 author
               date' = dropWhile (`notElem` ("0123456789" :: String)) date''
               author' = author'' ++ ">"
@@ -290,7 +292,7 @@ fastImport' repo diffalg marks = do
         --   but only for blobs and excluding anything under _darcs
         -- * it also returns the resulting tree with _darcs filtered out
         updateHashes = do
-          let nodarcs = \(AnchoredPath xs) _ -> head xs /= darcsdirName
+          let nodarcs = \(AnchoredPath xs) _ -> headErr xs /= darcsdirName
               hashblobs (File blob@(T.Blob con Nothing)) =
                 do hash <- sha256 `fmap` readBlob blob
                    return $ File (T.Blob con (Just hash))
@@ -464,13 +466,11 @@ fastImport' repo diffalg marks = do
             Unquoted uqNames -> do
                 let spaceIndices = BC.elemIndices ' ' uqNames
                     splitStr = second (BC.drop 1) . flip BC.splitAt uqNames
-                    -- Reverse the components, so we find the longest
-                    -- prefix existing name.
-                    spaceComponents = reverse $ map splitStr spaceIndices
-                    componentCount = length spaceComponents
-                if componentCount == 1
-                    then return $ head spaceComponents
-                    else do
+                -- Reverse the components, so we find the longest
+                -- prefix existing name.
+                case reverse $ map splitStr spaceIndices of
+                    [component] -> return component
+                    spaceComponents -> do
                         let dieMessage = unwords
                                 [ "Couldn't determine move/rename"
                                 , "source/destination filenames, with the"

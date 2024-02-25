@@ -9,6 +9,7 @@ import Control.Monad ( forM, unless, void, when )
 import qualified Data.ByteString.Char8 as BC
 import Data.List( intercalate )
 import Data.Maybe( catMaybes )
+import Safe ( tailErr )
 import System.FilePath.Posix ( (</>) )
 import System.Directory
     ( removeFile
@@ -412,7 +413,7 @@ fetchPatchesIfNecessary toRepo =
   do  ps <- readPatches toRepo
       let patches = patchSet2RL ps
           ppatches = progressRLShowTags "Copying patches" patches
-          (first, other) = splitAt (100 - 1) $ tail $ hashes patches
+          (first, other) = splitAt (100 - 1) $ tailErr $ hashes patches
           speculate = [] : first : map (:[]) other
       mapM_ fetchAndSpeculate $ zip (hashes ppatches) (speculate ++ repeat [])
   where hashes :: forall wX wY . RL (PatchInfoAnd p) wX wY -> [PatchHash]

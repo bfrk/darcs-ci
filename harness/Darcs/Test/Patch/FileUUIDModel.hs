@@ -162,11 +162,11 @@ aDir (dirid:dirids) fileids =
      return $ (dirid, Directory $ M.fromList $ names `zip` ids ++ dirnames `zip` dirids)
             : (fileids `zip` files) ++ dirs
   where subdirs [] _ _ = return []
-        subdirs tomake dirs files = do
+        subdirs (uuid:uuids) dirs files = do
           dirsplit <- choose (1, length dirs)
           filesplit <- choose (1, length files)
-          dir <- aDir (head tomake : take dirsplit dirs) (take filesplit files)
-          remaining <- subdirs (tail tomake) (drop dirsplit dirs) (drop filesplit files)
+          dir <- aDir (uuid : take dirsplit dirs) (take filesplit files)
+          remaining <- subdirs uuids (drop dirsplit dirs) (drop filesplit files)
           return $ dir ++ remaining
 
 

@@ -74,6 +74,8 @@ import qualified Data.ByteString       as B  (length, splitAt, null
 import qualified Data.ByteString.Char8 as BC
     ( index, head, notElem, all, unpack, pack )
 import Data.List( isPrefixOf )
+import Data.List.NonEmpty ( NonEmpty(..) )
+import qualified Data.List.NonEmpty as NE
 
 import Darcs.Util.Printer ( Doc, packedString,
                  empty, ($$), (<+>), vcat, text, cyanText, blueText, prefix )
@@ -212,18 +214,21 @@ addJunk pinf =
                           "will not be shown when displaying a patch."
                confirmed <- promptYorn "Proceed? "
                unless confirmed $ fail "User cancelled because of Ignore-this."
-       return $ pinf { _piLog = BC.pack (head ignored++showHex x ""):
+       return $ pinf { _piLog = BC.pack (NE.head ignored++showHex x ""):
                                  _piLog pinf }
 
 replaceJunk :: PatchInfo -> IO PatchInfo
 replaceJunk pi@(PatchInfo {_piLog=log}) = addJunk $ pi{_piLog = ignoreJunk log}
 
-ignored :: [String] -- this is a [String] so we can change the junk header.
-ignored = ["Ignore-this: "]
+-- This is a list so we can change the junk header.
+-- The first element will be used for new patches, the rest are also recognised
+-- in existing patches.
+ignored :: NonEmpty String
+ignored = "Ignore-this: " :| []
 
 ignoreJunk :: [B.ByteString] -> [B.ByteString]
 ignoreJunk = filter isnt_ignored
-    where isnt_ignored x = doesnt_start_with x (map BC.pack ignored) -- TODO
+    where isnt_ignored x = doesnt_start_with x (map BC.pack (NE.toList ignored)) -- TODO
           doesnt_start_with x ys = not $ any (`B.isPrefixOf` x) ys
 
 

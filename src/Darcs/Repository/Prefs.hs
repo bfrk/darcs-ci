@@ -68,6 +68,7 @@ import Data.Maybe
 import qualified Control.Exception as C
 import qualified Data.ByteString       as B  ( empty, null, hPut, ByteString )
 import qualified Data.ByteString.Char8 as BC ( unpack )
+import Safe ( tailErr )
 import System.Directory
     ( createDirectory
     , doesDirectoryExist
@@ -498,7 +499,7 @@ getPrefval p = do
     return $ case map snd $ filter ((== p) . fst) $ map (break (== ' ')) pl of
                  [val] -> case words val of
                     [] -> Nothing
-                    _ -> Just $ tail val
+                    _ -> Just $ tailErr val
                  _ -> Nothing
 
 setPrefval :: String -> String -> IO ()

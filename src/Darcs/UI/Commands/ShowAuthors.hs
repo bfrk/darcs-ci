@@ -22,7 +22,9 @@ module Darcs.UI.Commands.ShowAuthors
 import Control.Arrow ( (&&&), (***) )
 import Data.Char ( toLower, isSpace )
 import Data.Function ( on )
-import Data.List ( isInfixOf, sortBy, groupBy, group, sort )
+import Data.List ( isInfixOf, sortBy, sort )
+import Data.List.NonEmpty ( group, groupBy )
+import qualified Data.List.NonEmpty as NE
 import Data.Maybe( isJust )
 import Data.Ord ( comparing )
 import System.IO.Error ( catchIOError )
@@ -132,13 +134,13 @@ rankAuthors spellings authors =
               reverse $ sortBy (comparing fst) .
               -- Combine duplicates from a list [(count, canonized name)]
               -- with duplicates canonized names (see next comment).
-              map ((sum *** head) . unzip) .
+              map ((sum *** NE.head) . NE.unzip) .
               groupBy ((==) `on` snd) .
               sortBy  (comparing snd) .
               -- Because it would take a long time to canonize "foo" into
               -- "foo <foo@bar.baz>" once per patch, the code below
               -- generates a list [(count, canonized name)].
-              map (length &&& (canonizeAuthor spellings . head)) .
+              map (length &&& (canonizeAuthor spellings . NE.head)) .
               group $ sort authors
 
 canonizeAuthor :: [Spelling] -> String -> String

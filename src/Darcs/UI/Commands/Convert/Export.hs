@@ -17,7 +17,12 @@
 
 {-# LANGUAGE OverloadedStrings #-}
 
-module Darcs.UI.Commands.Convert.Export ( convertExport ) where
+module Darcs.UI.Commands.Convert.Export
+  ( convertExport
+  -- exported for testing
+  , cleanPatchAuthor
+  , cleanPatchAuthorTestCases
+  ) where
 
 import Darcs.Prelude hiding ( readFile, lex )
 
@@ -313,29 +318,43 @@ dumpBits = liftIO . BLC.putStrLn . BL.intercalate "\n"
 -- john <john@home  -> john <john@home>
 -- <john>           -> john <unknown>
 patchAuthor :: (PatchInfoAnd p) x y -> String
-patchAuthor p
+patchAuthor = cleanPatchAuthor . piAuthor . info
+
+cleanPatchAuthor :: String -> String
+cleanPatchAuthor authorString
  | null author = unknownEmail "unknown"
  | otherwise = case span (/='<') author of
                -- No name, but have email (nothing spanned)
-               ("", email) -> case span (/='@') (tail email) of
+               ("", _:email) -> case span (/='@') email of
                    -- Not a real email address (no @).
                    (n, "") -> case span (/='>') n of
                        (name, _) -> unknownEmail name
                    -- A "real" email address.
-                   (user, rest) -> case span (/= '>') (tail rest) of
+                   (user, _:rest) -> case span (/= '>') rest of
                        (dom, _) -> mkAuthor user $ emailPad (user ++ "@" ++ dom)
                -- No email (everything spanned)
                (_, "") -> case span (/='@') author of
                    (n, "") -> unknownEmail n
                    (name, _) -> mkAuthor name $ emailPad author
                -- Name and email
-               (n, rest) -> case span (/='>') $ tail rest of
+               (n, _:rest) -> case span (/='>') rest of
                    (email, _) -> n ++ emailPad email
  where
-   author = dropWhile isSpace $ piAuthor (info p)
+   author = dropWhile isSpace authorString
    unknownEmail = flip mkAuthor "<unknown>"
    emailPad email = "<" ++ email ++ ">"
    mkAuthor name email = name ++ " " ++ email
+
+cleanPatchAuthorTestCases :: [(String, String)]
+cleanPatchAuthorTestCases =
+  [ ("<john@home>", "john <john@home>")
+  , ("john@home", "john <john@home>")
+  , ("john <john@home>", "john <john@home>")
+  , ("john <john@home", "john <john@home>")
+  , ("<john>", "john <unknown>")
+  , ("", "unknown <unknown>")
+  , (" ", "unknown <unknown>")
+  ]
 
 patchDate :: (PatchInfoAnd p) x y -> String
 patchDate = formatDateTime "%s +0000" . fromClockTime . toClockTime .

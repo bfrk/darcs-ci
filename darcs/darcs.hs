@@ -81,7 +81,7 @@ main = handleErrors . handleExecFail . withSignalsHandled . withAtexit $ do
         ["-V"] -> putStrLn version
         ["--version"] -> putStrLn version
         ["--exact-version"] -> printExactVersion
-        _ -> runTheCommand commandControlList (head argv) (tail argv)
+        cmd:args -> runTheCommand commandControlList cmd args
   where
     handleErrors = handle errorExceptionHandler
     handleExecFail = handle execExceptionHandler

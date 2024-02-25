@@ -53,7 +53,9 @@ import qualified Data.Map as M
 import qualified Data.Vector as V
 
 import Data.Function ( on )
-import Data.List( nub, groupBy )
+import Data.List( nub )
+import Data.List.NonEmpty ( groupBy )
+import qualified Data.List.NonEmpty as NE
 import Data.Maybe( isJust, mapMaybe )
 
 import qualified Darcs.Patch.Prim.FileUUID as FileUUID
@@ -233,8 +235,8 @@ format d a = pi_list ++ "\n" ++ numbered
     pi_list = unlines [ show n ++ ": " ++ renderString (displayPatchInfo i)
                       | (n :: Int, i) <- zip [1..] pis ]
 
-    file = concat [ annotation (fst $ head chunk) ++ " | " ++ line (head chunk) ++
-                    "\n" ++ unlines [ indent 25 (" | " ++ line l) | l <- tail chunk ]
+    file = concat [ annotation (fst $ NE.head chunk) ++ " | " ++ line (NE.head chunk) ++
+                    "\n" ++ unlines [ indent 25 (" | " ++ line l) | l <- NE.tail chunk ]
                   | chunk <- file_ann ]
 
     pis = nub $ mapMaybe fst $ V.toList a

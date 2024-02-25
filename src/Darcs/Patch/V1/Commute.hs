@@ -31,6 +31,7 @@ import Darcs.Prelude
 import Control.Monad ( MonadPlus, mplus, msum, mzero, guard )
 import Control.Applicative ( Alternative(..) )
 import Data.Maybe ( fromMaybe )
+import Safe ( headErr )
 
 import Darcs.Patch.Apply ( ApplyState )
 import Darcs.Patch.Commute ( selfCommuter )
@@ -390,7 +391,7 @@ Sealed x `isSuperpatchOf` Sealed y = x `iso` y
           _ `iso` NilFL = True
           NilFL `iso` _ = False
           a `iso` (b:>:bs) =
-              head $ ([as `iso` bs | (ah :>: as) <- simpleHeadPermutationsFL a, IsEq <- [ah =\/= b]] :: [Bool]) ++ [False]
+              headErr $ ([as `iso` bs | (ah :>: as) <- simpleHeadPermutationsFL a, IsEq <- [ah =\/= b]] :: [Bool]) ++ [False]
 
 -- | merger takes two patches, (which have been determined to conflict) and
 -- constructs a Merger patch to represent the conflict. @p1@ is considered to

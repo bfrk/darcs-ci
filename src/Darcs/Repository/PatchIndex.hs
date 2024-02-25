@@ -50,6 +50,8 @@ import qualified Data.IntSet as I
 import qualified Data.Map as M
 import qualified Data.Set as S
 
+import Safe ( tailErr )
+
 import System.Directory
     ( createDirectory
     , doesDirectoryExist
@@ -750,7 +752,7 @@ piTest repodir = do
       let f :: FilePathSpan -> FilePathSpan -> Bool
           f (FpSpan _ x _) (FpSpan _ _ (Just y)) = x == y
           f _ _ = error "adj test of fpspans fail"
-      unless (and $ zipWith f spans (tail spans)) (fail $ "Adjcency test failed! fid: " ++ show fid)
+      unless (and $ zipWith f spans (tailErr spans)) (fail $ "Adjcency test failed! fid: " ++ show fid)
    putStrLn "fpspans tests passed"
 
    -- test infomap

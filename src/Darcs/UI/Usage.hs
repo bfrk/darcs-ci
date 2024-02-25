@@ -10,6 +10,7 @@ module Darcs.UI.Usage
 import Darcs.Prelude
 
 import Data.Functor.Compose
+import Safe ( headErr )
 import System.Console.GetOpt( OptDescr(..), ArgDescr(..) )
 import Darcs.UI.Options.All ( stdCmdActions )
 import Darcs.UI.Commands
@@ -35,7 +36,7 @@ formatOptions optDescrs = table
                                           (sameLen $ map last ls))
                             ds
          shortPadded    = sameLen ss
-         prePad         = replicate (3 + length (head shortPadded)) ' '
+         prePad         = replicate (3 + length (headErr shortPadded)) ' '
          -- Similar to unlines (additional ',' and padding):
          unlines'       = concatMap (\x -> x ++ ",\n" ++ prePad)
          -- Unchanged:

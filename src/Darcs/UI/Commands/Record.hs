@@ -252,7 +252,12 @@ checkNameIsNotOption :: Maybe String -> Bool -> IO ()
 checkNameIsNotOption Nothing     _      = return ()
 checkNameIsNotOption _           False  = return ()
 checkNameIsNotOption (Just name) True   =
-    when (length name == 1 || (length name == 2 && head name == '-')) $ do
+  case name of
+    [_] -> warnPatchName
+    ('-':_) -> warnPatchName
+    _ -> return ()
+  where
+    warnPatchName = do
         confirmed <- promptYorn $ "You specified " ++ show name ++ " as the patch name. Is that really what you want?"
         unless confirmed $ putStrLn "Okay, aborting the record." >> exitFailure
 

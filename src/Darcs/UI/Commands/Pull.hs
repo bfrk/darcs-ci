@@ -29,6 +29,7 @@ import System.Exit ( exitSuccess )
 import Control.Monad ( when, unless, (>=>) )
 import Data.List ( nub )
 import Data.Maybe ( fromMaybe )
+import Safe ( headErr, tailErr )
 
 import Darcs.UI.Commands
     ( DarcsCommand(..)
@@ -273,7 +274,7 @@ fetchPatches o opts unfixedrepourls@(_:_) jobname repository = do
                       O.NoDryRun -> "Pulling"
       in  putInfo opts $ text pulling <+> "from" <+> hsep (map quoted repourls) <> "..."
   (Sealed them, Sealed compl) <- readRepos repository opts repourls
-  addRepoSource (head repourls) (dryRun ? opts)
+  addRepoSource (headErr repourls) (dryRun ? opts)
       (setDefault False opts) (O.inheritDefault ? opts)
   mapM_ (addToPreflist Repos) repourls
   unless (quiet opts || hasXmlOutput opts) $ mapM_ showMotd repourls
@@ -354,7 +355,7 @@ readRepos to_repo opts us =
                             return $ seal ps) us
        return $ case parseFlags O.repoCombinator opts of
                   O.Intersection -> (patchSetIntersection rs, seal emptyPatchSet)
-                  O.Complement -> (head rs, patchSetUnion $ tail rs)
+                  O.Complement -> (headErr rs, patchSetUnion $ tailErr rs)
                   O.Union -> (patchSetUnion rs, seal emptyPatchSet)
 
 pullPatchSelOpts :: [DarcsFlag] -> S.PatchSelectionOptions

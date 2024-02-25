@@ -10,6 +10,7 @@ import Prelude ()
 import Darcs.Prelude
 
 import Data.Maybe ( catMaybes )
+import Safe ( tailErr )
 
 import Darcs.Test.Patch.Arbitrary.Generic ( PrimBased )
 import Darcs.Test.Patch.Arbitrary.PatchTree
@@ -68,7 +69,7 @@ propConsistentTreeFlattenings fromPrim (Sealed (WithStartState start t)) =
       let flat = take 20 flat' in
       case map (start `repoApply`) flat of
         rms ->
-          if and $ zipWith assertEqualFst (zip rms flat) (tail $ zip rms flat)
+          if and $ zipWith assertEqualFst (zip rms flat) (tailErr $ zip rms flat)
             then succeeded
             else failed $ redText "oops"
 

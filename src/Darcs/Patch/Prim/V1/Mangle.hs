@@ -8,6 +8,7 @@ import qualified Data.ByteString.Char8 as BC (pack, last)
 import qualified Data.ByteString as B (null, ByteString)
 import Data.Maybe ( isJust, listToMaybe )
 import Data.List ( sort, intercalate, nub )
+import Safe ( headErr, tailErr )
 
 import Darcs.Patch.Apply ( ObjectIdOfPatch )
 import Darcs.Patch.FileHunk ( FileHunk(..), IsHunk(..) )
@@ -102,9 +103,9 @@ instance PrimMangleUnravelled Prim where
         where
           -- head and tail are safe here because all inner lists are infinite
           go n pps =
-            if any (isJust . head) pps
+            if any (isJust . headErr) pps
               then n
-              else go (n + 1) $ map tail pps
+              else go (n + 1) $ map tailErr pps
 
       -- | The chunk of defined lines starting at the given position (1-based).
       makeChunk :: Int -> Sealed FileState -> [B.ByteString]

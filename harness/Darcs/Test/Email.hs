@@ -36,6 +36,7 @@ import Test.QuickCheck.Instances.ByteString ()
 
 import Darcs.Util.Printer ( text, renderPS, packedString )
 import Darcs.UI.Email ( makeEmail, readEmail, formatHeader, prop_qp_roundtrip )
+import Safe ( tailErr )
 
 testSuite :: Test
 testSuite = testGroup "Darcs.Email"
@@ -79,7 +80,7 @@ emailHeaderLinesStart =
     testProperty "Checking for spaces at start of folded email header lines" $ \field value ->
       let headerLines = bsLines (formatHeader cleanField value)
           cleanField  = cleanFieldString field
-      in all (\l -> B.null l || B.head l == 32) (tail headerLines)
+      in all (\l -> B.null l || B.head l == 32) (tailErr headerLines)
 
 -- Checks that there are no lines in email headers with only whitespace
 emailHeaderNoEmptyLines :: Test

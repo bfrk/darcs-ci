@@ -22,6 +22,7 @@ import qualified Data.ByteString as B
 import Data.Char ( toLower )
 import Data.Maybe ( catMaybes )
 import Data.List ( lookup )
+import Safe ( headErr )
 import System.FilePath.Posix ( (</>) )
 import System.Directory ( doesDirectoryExist, doesFileExist )
 
@@ -270,7 +271,7 @@ makeRepoName opts d =
 
 modifyRepoName :: String -> IO String
 modifyRepoName name =
-    if head name == '/'
+    if headErr name == '/'
     then mrn name (-1)
     else do cwd <- getCurrentDirectory
             mrn (cwd ++ "/" ++ name) (-1)

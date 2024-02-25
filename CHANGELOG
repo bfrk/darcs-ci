@@ -1,4 +1,4 @@
-Darcs 2.18.1, PENDING
+Darcs 2.18.1, 25 Feb 2024
 
   * Supports GHC 9.8 and the most recent version of other dependencies
     at the time of release, with the exception of the tls 2.0 package,
