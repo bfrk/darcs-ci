@@ -1,3 +1,106 @@
+Darcs 2.18.1, PENDING
+
+  * Supports GHC 9.8 and the most recent version of other dependencies
+    at the time of release, with the exception of the tls 2.0 package,
+    which has been held back because of problems connecting to hub.darcs.net
+    (see https://bugs.darcs.net/issue2715).
+
+  * Substantial rewrite of the 'darcs test' command.
+
+    The most important user visible change is that a test script can now
+    return an exit code of 125 to reflect an untestable/skipped state
+    (as with with "git bisect run").
+
+    This in turn means that a group of patches can be found to be responsible
+    for a failure rather than just a single one. By default, Darcs will
+    try to minimise such a group by reordering patches to remove irrelevant
+    ones from the initial group found from the patch ordering in the
+    repository. This behaviour can be disabled with --no-shrink-failure.
+
+  * Remove support for downloading via curl
+
+    This is no longer particularly useful as we now use modern, maintained
+    Haskell libraries for native HTTP downloading, and substantially simplifies
+    this area of the code.
+
+  * Patch index: Significant performance improvement
+
+    The patch index is used in commands like annotate and log. A couple of
+    performance improvements were made that should speed up using the patch
+    index.
+
+  * Progress reporting
+
+    Progress reports are now provided during more long-running operations,
+    including updating the "index" (a cache that speeds up detecting
+    changes in the working directory), and during merge operations.
+
+    They also behave better on Windows and when outputting long lines.
+
+  * Other changes/fixes:
+    * Use hardlinks more often to share files between repositories/caches.
+    * Support --leave-test-dir for all commands that support --test
+    * Avoid extraneous "repo:." entries in _darcs/prefs/sources [issue2672]
+    * Add 'darcs clean' command as an alias for 'darcs revert -l'
+    * 'darcs rebase unsuspend': add more patch editing options
+    * Fix stale lock files after Ctrl-C
+    * External merge tools: preserve output, and fail if tool does
+    * Properly reference renamed files in external merge [issue189]
+    * Mark conflicts properly if tag pulled at the same time [issue2682]
+    * Remove the useless optimize pristine subcommand
+    * 'darcs convert': honour the --compress and --diff-algorithm options
+    * Fix contrib/darcs-shell [issue2646]
+    * Fix 'darcs pull --dont-allow-conflicts' with external-merge [issue1819]
+    * Problems with local pristine files now tell user to run
+      'darcs repair' [issue1981]
+    * Fix various problems with symlinks, including on Windows
+    * Add --no-prefs-templates option when creating a repository
+    * Allow 'darcs rebase unsuspend' when there are non-conflicting
+      unrecorded changes
+    * Handle broken pending patches in 'darcs check' and 'darcs repair'
+    * Improve error reporting when remote _darcs/format doesn't exist
+    * 'darcs optimize reorder': add --deep/--shallow options
+    * 'darcs optimize compress/uncompress': also handle pristine files
+    * 'darcs optimize cache': don't work with lists of darcs repos
+      Instead just the global cache is cleaned by checking hard-link counts
+    * Skip the pager when $DARCS_PAGER / $PAGER are set to the empty string
+    * 'darcs convert export': allow relative paths for --read-marks and
+      --write-marks
+    * Fix 'darcs amend --unrecord' to move unrecorded changes to pending
+      [issue2697]
+    * Don't treat cancelling an operation as failure [issue2074]
+    * Fix cloning of ssh repo when using Ctrl-C to stop getting patches
+      [issue2701]
+    * Don't report invalid regexes as a bug in darcs [issue2702]
+    * Add short option -n for --dry-run
+    * 'darcs diff': support --look-for-moves and --look-for-adds
+    * Fix buffering problem with 'darcs diff' [issue2704]
+    * 'darcs obliterate' and 'darcs rebase': offer to revert any conflicting
+      unrecorded changes
+    * Stop displaying context lines in various interactive scenarios:
+      it didn't work properly and would require a lot of work to fix.
+    * Improve conflict display for Rebase and V3 patches
+    * Increase size limit to 100K for environment variables like
+      DARCS_PATCHES_XML, and warn when it is exceeded
+    * 'darcs rebase unsuspend': improve the display of dropped dependencies
+    * 'darcs amend --ask-deps': also provide a way to remove dependencies
+    * 'darcs push': support --reorder-patches option
+    * Remove the --remote-repo option
+    * Don't display hints about using --set-default
+    * Conflict resolution: unrecorded changes will suppress conflict marking
+      of appropriate changes [issue2708]
+    * Explain what a "clean tag" is in help for tag command
+    * Fix problem with naming patch bundles after patches that contain
+      characters incompatible with the current locale [issue2716]
+
+Darcs 2.16.5, 20 Feb 2022
+
+  This release is to support newer dependencies, most importantly
+  GHC 9.0 and Cabal 3.6.
+
+  It also includes a small number of refactors that help with moving
+  to those newer dependencies.
+
 Darcs 2.16.4, 20 May 2021
 
   This release is mostly to fix http://bugs.darcs.net/issue2674 which can
