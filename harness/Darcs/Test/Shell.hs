@@ -61,6 +61,7 @@ data ShellTest = ShellTest
   , testfile :: FilePath
   , testdir :: Maybe FilePath -- ^ only if you want to set it explicitly
   , darcspath :: FilePath
+  , ghcflags :: String
   , diffalgorithm :: DiffAlgorithm
   , useindex :: UseIndex
   , usecache :: UseCache
@@ -124,6 +125,7 @@ runtest' ShellTest{..} srcdir =
           -- double-check that the darcs on the path is the expected one,
           -- so is passed as a string directly without any translation
           , ("DARCS"                     , EnvString darcspath)
+          , ("GHC_FLAGS"                 , EnvString ghcflags)
           , ("GHC_VERSION", EnvString $ show (__GLASGOW_HASKELL__ :: Int))
           -- https://www.joshkel.com/2018/01/18/symlinks-in-windows/
           , ("MSYS"                      , EnvString "winsymlinks:nativestrict")
@@ -237,12 +239,13 @@ findShell
   :: FilePath
   -> [FilePath]
   -> Maybe FilePath
+  -> String
   -> [DiffAlgorithm]
   -> [Format]
   -> [UseIndex]
   -> [UseCache]
   -> IO [Test]
-findShell dp files tdir diffAlgorithms repoFormats useindexs usecaches =
+findShell dp files tdir ghcflags diffAlgorithms repoFormats useindexs usecaches =
   do
     return
       [ shellTest
@@ -251,6 +254,7 @@ findShell dp files tdir diffAlgorithms repoFormats useindexs usecaches =
             , testfile = file
             , testdir = tdir
             , darcspath = dp
+            , ghcflags = ghcflags
             , diffalgorithm = da
             , useindex = ui
             , usecache = uc

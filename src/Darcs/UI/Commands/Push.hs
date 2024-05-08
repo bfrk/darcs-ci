@@ -199,7 +199,7 @@ prepareBundle opts repodir repository = do
        in  putInfo opts $ text pushing <+> "to" <+> quoted repodir <> "..."
   them <- identifyRepositoryFor Writing repository (useCache ? opts) repodir >>= readPatches
   addRepoSource repodir (dryRun ? opts) (setDefault False opts)
-      (O.inheritDefault ? opts)
+      (O.inheritDefault ? opts) (isInteractive True opts)
   us <- readPatches repository
   common :> only_us <- return $ findCommonWithThem us them
   prePushChatter opts us (reverseFL only_us) them

@@ -33,26 +33,26 @@ import System.Environment
 import System.IO
 main = getArgs >>= \[name] -> writeFile name "fake"
 FAKE
-ghc -o editor-good --make editor-good.hs
+ghc $GHC_FLAGS -o editor-good --make editor-good.hs
 
 cat <<FAKE > editor-bad.hs
 import System.Exit
 main = exitWith (ExitFailure 127)
 FAKE
-ghc -o editor-bad --make editor-bad.hs
+ghc $GHC_FLAGS -o editor-bad --make editor-bad.hs
 
 cat <<FAKE > editor-gave-up.hs
 import System.Exit
 main = exitWith (ExitFailure 1)
 FAKE
-ghc -o editor-gave-up --make editor-gave-up.hs
+ghc $GHC_FLAGS -o editor-gave-up --make editor-gave-up.hs
 
 cat <<VI > vi.hs
 import System.Environment
 import System.IO
 main = getArgs >>= \[name] -> writeFile name "vi"
 VI
-ghc -o vi --make vi.hs
+ghc $GHC_FLAGS -o vi --make vi.hs
 
 cd R
 mkdir d

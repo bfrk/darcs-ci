@@ -186,7 +186,7 @@ cloneRepository repourl mysimplename v useCache cloneKind um rdarcs sse
           (if cloneKind == LazyClone then NoPatchIndex else usePatchIndex)
           useCache withPrefsTemplates
       debugMessage "Finished initializing new repository."
-      addRepoSource repourl NoDryRun setDefault inheritDefault
+      addRepoSource repourl NoDryRun setDefault inheritDefault False
 
       debugMessage "Identifying remote repository..."
       fromRepo <- identifyRepositoryFor Reading _toRepo useCache repourl

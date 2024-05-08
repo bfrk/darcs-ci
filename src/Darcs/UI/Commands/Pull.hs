@@ -275,7 +275,7 @@ fetchPatches o opts unfixedrepourls@(_:_) jobname repository = do
       in  putInfo opts $ text pulling <+> "from" <+> hsep (map quoted repourls) <> "..."
   (Sealed them, Sealed compl) <- readRepos repository opts repourls
   addRepoSource (headErr repourls) (dryRun ? opts)
-      (setDefault False opts) (O.inheritDefault ? opts)
+      (setDefault False opts) (O.inheritDefault ? opts) (isInteractive True opts)
   mapM_ (addToPreflist Repos) repourls
   unless (quiet opts || hasXmlOutput opts) $ mapM_ showMotd repourls
   us <- readPatches repository

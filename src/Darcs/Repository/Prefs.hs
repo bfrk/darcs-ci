@@ -101,7 +101,7 @@ import Darcs.Repository.Flags
     )
 import Darcs.Repository.Paths ( prefsDirPath )
 import Darcs.Util.Lock( readTextFile, writeTextFile )
-import Darcs.Util.Exception ( catchall, ifIOError )
+import Darcs.Util.Exception ( catchall )
 import Darcs.Util.Global ( darcsdir, debugMessage )
 import Darcs.Util.Path
     ( AbsoluteOrRemotePath
@@ -528,20 +528,33 @@ addRepoSource :: String
               -> DryRun
               -> SetDefault
               -> InheritDefault
+              -> Bool
               -> IO ()
-addRepoSource r isDryRun setDefault inheritDefault =
-  ifIOError () $ do
+addRepoSource r isDryRun setDefault inheritDefault isInteractive = (do
     olddef <- getDefaultRepo
     newdef <- newDefaultRepo
-    let shouldDoIt =
-          noSetDefault && isDryRun == NoDryRun && olddef /= Just newdef
-    when shouldDoIt $ setPreflist Defaultrepo [newdef]
-    addToPreflist Repos newdef
+    let shouldDoIt = null noSetDefault && greenLight
+        greenLight = shouldAct && olddef /= Just newdef
+    -- the nuance here is that we should only notify when the reason we're not
+    -- setting default is the --no-set-default flag, not the various automatic
+    -- show stoppers
+    if shouldDoIt
+       then setPreflist Defaultrepo [newdef]
+       else when (True `notElem` noSetDefault && greenLight && inheritDefault == NoInheritDefault) $
+                putStr . unlines $ setDefaultMsg
+    addToPreflist Repos newdef) `catchall` return ()
   where
-    noSetDefault =
-      case setDefault of
-        NoSetDefault _ -> False
-        _ -> True
+    shouldAct = isDryRun == NoDryRun
+    noSetDefault = case setDefault of
+                       NoSetDefault x -> [x]
+                       _ -> []
+    setDefaultMsg =
+        [ "By the way, to change the default remote repository to"
+        , "      " ++ r ++ ","
+        , "you can " ++
+          (if isInteractive then "quit now and " else "") ++
+          "issue the same command with the --set-default flag."
+        ]
     newDefaultRepo :: IO String
     newDefaultRepo = case inheritDefault of
       YesInheritDefault -> getRemoteDefaultRepo

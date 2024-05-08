@@ -98,7 +98,10 @@ removeCmd fps opts relargs = do
         fail "Cannot remove a repository's root directory!"
     withRepoLock (useCache ? opts) (umask ? opts) $
       RepoJob $ \repository -> do
-        recorded_and_pending <- readPristineAndPending repository
+        -- TODO Do not expand here, instead put explodePath(s) into the
+        -- tree's monad, so that it can expand any stubs along the way,
+        -- which is more economical.
+        recorded_and_pending <- T.expand =<< readPristineAndPending repository
         let exploded_paths =
               (if parseFlags O.recursive opts
                 then reverse . explodePaths recorded_and_pending

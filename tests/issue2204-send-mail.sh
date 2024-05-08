@@ -33,7 +33,7 @@ cat <<FAKE > dummy-sendmail.hs
 import System.IO
 main = hGetContents stdin >>= writeFile "message"
 FAKE
-ghc -o dummy-sendmail --make dummy-sendmail.hs
+ghc $GHC_FLAGS -o dummy-sendmail --make dummy-sendmail.hs
 
 cd R
 echo 'foo@example.com' > _darcs/prefs/email

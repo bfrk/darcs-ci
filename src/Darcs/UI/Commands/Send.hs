@@ -215,7 +215,7 @@ sendCmd (_,o) opts [unfixedrepodir] =
         repo <- identifyRepositoryFor Reading repository (useCache ? opts) repodir
         them <- readPatches repo
         addRepoSource repodir (dryRun ? opts) (setDefault False opts)
-          (O.inheritDefault ? opts)
+          (O.inheritDefault ? opts) (isInteractive True opts)
         wtds <- decideOnBehavior opts (Just repo)
         sendToThem repository opts wtds repodir them
 sendCmd _ _ _ = error "impossible case"

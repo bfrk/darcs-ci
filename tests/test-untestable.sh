@@ -38,7 +38,7 @@ main = do
     when (n /= 0) (exitWith (ExitFailure n))
 END
 
-ghc --make -o runtest runtest.hs
+ghc $GHC_FLAGS --make -o runtest runtest.hs
 
 export RUNTEST=`pwd`/runtest
 

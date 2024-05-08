@@ -38,6 +38,7 @@ data Config = Config { suites :: String
                      , darcs :: String
                      , tests :: [String]
                      , testDir :: Maybe FilePath
+                     , ghcFlags :: String
                      , plain :: Bool
                      , hideSuccesses :: Bool
                      , threads :: Int
@@ -59,6 +60,7 @@ defaultConfigAnn
      , darcs         := ""       += help "Darcs binary path" += typ "PATH"
      , tests         := []       += help "Pattern to limit the tests to run" += typ "PATTERN" += name "t"
      , testDir       := Nothing  += help "Directory to run tests in" += typ "PATH" += name "d"
+     , ghcFlags      := ""       += help "GHC flags to use when compiling tests" += typ "FLAGS" += name "g"
      , plain         := False    += help "Use plain-text output [no]"
      , hideSuccesses := False    += help "Hide successes [no]"
      , threads       := 1        += help "Number of threads [1]" += name "j"
@@ -176,14 +178,14 @@ run conf = do
       if shell
         then do
           files <- findTestFiles "tests"
-          findShell darcsBin files (testDir conf) diffAlgorithm
+          findShell darcsBin files (testDir conf) (ghcFlags conf) diffAlgorithm
             repoFormat useIndex useCache
         else return []
     ntests <-
       if network
         then do
           files <- findTestFiles "tests/network"
-          findShell darcsBin files (testDir conf) diffAlgorithm
+          findShell darcsBin files (testDir conf) (ghcFlags conf) diffAlgorithm
             repoFormat useIndex useCache
         else return []
     let utests =

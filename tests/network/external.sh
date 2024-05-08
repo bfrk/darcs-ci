@@ -11,7 +11,7 @@ fakessh=$(pwd)/fakessh
 cat >$fakessh.hs <<EOF
 main = writeFile "touchedby_fakessh" "hello\n"
 EOF
-ghc --make $fakessh.hs
+ghc $GHC_FLAGS --make $fakessh.hs
 
 export DARCS_SSH=$fakessh
 export DARCS_SCP=$fakessh

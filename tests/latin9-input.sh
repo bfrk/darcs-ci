@@ -132,7 +132,7 @@ import qualified Data.ByteString as B
 str = B.pack [65,108,108,32,109,121,32,164,115,32,97,114,101,32,103,111,110,101]
 main = getArgs >>= \[x] -> B.writeFile x str
 FAKE
-ghc --make -o editor editor.hs
+ghc $GHC_FLAGS --make -o editor editor.hs
 export DARCS_EDITOR="`pwd`/editor"
 if echo $OS | not grep -i windows; then # issue2591
     printf "y\ny\n" | darcs amend --edit -p 'Patch by '

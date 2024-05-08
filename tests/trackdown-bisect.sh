@@ -13,7 +13,7 @@ if echo $OS | grep -i windows; then
 fi
 
 cp $TESTBIN/trackdown-bisect-helper.hs .
-ghc -o trackdown-bisect-helper trackdown-bisect-helper.hs
+ghc $GHC_FLAGS -o trackdown-bisect-helper trackdown-bisect-helper.hs
 
 function make_repo_with_test {
     rm -fr temp1

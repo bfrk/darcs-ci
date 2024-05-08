@@ -43,7 +43,7 @@ main = do
   when (c2 /= "content2\n") exitFailure
   when (co /= "content\n") exitFailure
 EOF
-ghc --make external_merge.hs
+ghc $GHC_FLAGS --make external_merge.hs
 merge_tool=$(pwd)/external_merge
 
 # try to merge them with our external_merge script
