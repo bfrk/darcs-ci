@@ -11,26 +11,23 @@ jobs:
       matrix:
         os:
 #           - ubuntu-20.04
-#          - ubuntu-22.04
+          - ubuntu-22.04
 #           - macos-11
 #           - macos-12
           - macos-13
 #           - windows-2019
-#          - windows-2022
+          - windows-2022
         ghc:
-          - 8.2.2
           - 8.4.4
+          - 8.6.5
+          - 8.8.2
+          - 8.10.7
+          - 9.0.2
+          - 9.2.8
+          - 9.4.8
+          - 9.6.4
         cabal:
           - '3.10'
-        exclude:
-          # ghc-8.2.2 fails to install
-          - os: ubuntu-22.04
-            ghc: 8.2.2
-          # build fails with linker error
-          - os: windows-2022
-            ghc: 8.2.2
-          - os: windows-2019
-            ghc: 8.2.2
     env:
       builddocs: ${{ matrix.ghc == '9.4.5' }}
       runtests: ${{ matrix.ghc == '8.4.4' || matrix.ghc == '9.4.5' }}
