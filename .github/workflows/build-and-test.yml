@@ -59,6 +59,7 @@ jobs:
       run: cabal freeze
 
     - name: Restore cabal store from cache
+      id: restore-cabal-store
       uses: actions/cache/restore@v4
       with:
         path: ${{ steps.setup-haskell-cabal.outputs.cabal-store }}
@@ -74,6 +75,7 @@ jobs:
       run: cabal build --only-dependencies --disable-documentation
 
     - name: Save cabal store to cache
+      if: steps.restore-cabal-store.outputs.cache-hit != 'true'
       uses: actions/cache/save@v4
       with:
         path: ${{ steps.setup-haskell-cabal.outputs.cabal-store }}
