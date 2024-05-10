@@ -44,6 +44,7 @@ import Darcs.Repository
     , readUnrecorded
     )
 import Darcs.Repository.Diff( treeDiff )
+import Darcs.Repository.State ( restrictSubpaths, applyTreeFilter )
 
 import Darcs.Patch ( RepoPatch, PrimOf, PrimPatch, adddir, rmdir, addfile, rmfile,
                      listTouchedFiles )
@@ -98,15 +99,15 @@ removeCmd fps opts relargs = do
         fail "Cannot remove a repository's root directory!"
     withRepoLock (useCache ? opts) (umask ? opts) $
       RepoJob $ \repository -> do
-        -- TODO Do not expand here, instead put explodePath(s) into the
-        -- tree's monad, so that it can expand any stubs along the way,
-        -- which is more economical.
-        recorded_and_pending <- T.expand =<< readPristineAndPending repository
+        pathFilter <- restrictSubpaths repository paths
+        pristine <-
+            T.expand =<<
+            applyTreeFilter pathFilter <$> readPristineAndPending repository
         let exploded_paths =
               (if parseFlags O.recursive opts
-                then reverse . explodePaths recorded_and_pending
+                then reverse . explodePaths pristine
                 else id) paths
-        Sealed p <- makeRemovePatch opts repository exploded_paths
+        Sealed p <- makeRemovePatch opts repository exploded_paths pristine
         when (nullFL p && not (null paths)) $
             fail "No files were removed."
         addToPending repository (diffingOpts opts) p
@@ -121,12 +122,11 @@ removeCmd fps opts relargs = do
 --   to the files list.
 makeRemovePatch :: (RepoPatch p, ApplyState p ~ Tree)
                 => [DarcsFlag] -> Repository rt p wU wR
-                -> [AnchoredPath] -> IO (Sealed (FL (PrimOf p) wU))
-makeRemovePatch opts repository files = do
-  recorded <- T.expand =<< readPristineAndPending repository
+                -> [AnchoredPath] -> Tree IO -> IO (Sealed (FL (PrimOf p) wU))
+makeRemovePatch opts repository files pristine = do
   unrecorded <- readUnrecorded repository (O.useIndex ? opts) $ Just files
   ftf <- filetypeFunction
-  result <- foldM removeOnePath (ftf, recorded, unrecorded, []) files
+  result <- foldM removeOnePath (ftf, pristine, unrecorded, []) files
   case result of
     (_, _, _, patches) ->
       return $

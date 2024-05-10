@@ -72,7 +72,7 @@ EOF
 
 darcs rec -am "patch 2"
 darcs pull -a ../R2 2> pull-output
-grep "conflicts in the following files" pull-output
+grep "conflicts" pull-output
 grep "file1" pull-output
 not grep "file2" pull-output
 

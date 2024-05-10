@@ -73,6 +73,7 @@ import Darcs.Repository.Pending ( setTentativePending )
 import Darcs.Repository.Resolution
     ( StandardResolution(..)
     , announceConflicts
+    , haveConflicts
     , externalResolution
     , patchsetConflictResolutions
     , standardResolution
@@ -245,7 +246,7 @@ tentativelyMergePatches_ mc _repo cmd allowConflicts wantGuiPause
     pw' :/\: them'' <- return $ merge (them' :\/: anonpw :>: NilFL)
     let them''content = concatFL $ mapFL_FL (patchcontents . hopefully) them''
         no_conflicts_in_them =
-          null $ conflictedPaths $ patchsetConflictResolutions $
+          not $ haveConflicts $ patchsetConflictResolutions $
           slightlyOptimizePatchset (appendPSFL context them)
         conflicts =
           let us'' = us' +>+ pw' in

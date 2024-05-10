@@ -21,6 +21,7 @@ module Darcs.Repository.Resolution
     , patchsetConflictResolutions
     , StandardResolution(..)
     , announceConflicts
+    , haveConflicts
     , warnUnmangled
     , showUnmangled
     , showUnravelled
@@ -34,7 +35,7 @@ import System.Directory ( setCurrentDirectory, getCurrentDirectory )
 import Data.List ( intersperse, zip4 )
 import Data.List.Ordered ( nubSort )
 import Data.Maybe ( catMaybes, isNothing )
-import Control.Monad ( when )
+import Control.Monad ( unless, when )
 
 import Darcs.Repository.Diff( treeDiff )
 import Darcs.Patch
@@ -61,7 +62,7 @@ import Darcs.Util.Path
     , filterPaths
     , toFilePath
     )
-import Darcs.Patch.Witnesses.Ordered ( FL(..), RL(..), concatRLFL, mapRL_RL )
+import Darcs.Patch.Witnesses.Ordered ( FL(..), RL(..), concatRLFL, mapRL_RL, nullFL )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(..), unseal, unFreeLeft )
 
 import Darcs.Util.CommandLine ( parseCmd )
@@ -93,6 +94,9 @@ data StandardResolution prim wX =
     unmangled :: [Unravelled prim wX],
     conflictedPaths :: [AnchoredPath]
   }
+
+haveConflicts :: StandardResolution prim wX -> Bool
+haveConflicts res = not $ null (unmangled res) && unseal nullFL (mangled res)
 
 standardResolution :: (RepoPatch p)
                    => RL (PatchInfoAnd p) wO wX
@@ -157,25 +161,26 @@ announceConflicts :: PrimPatch prim
                   -> AllowConflicts
                   -> StandardResolution prim wX
                   -> IO Bool
-announceConflicts cmd allowConflicts conflicts =
-  case nubSort (conflictedPaths conflicts) of
-    [] -> return False
-    cfs -> do
-      ePutDocLn $ vcat $ redText
-        "We have conflicts in the following files:" : map (text . displayPath) cfs
-      case allowConflicts of
-        NoAllowConflicts ->
-          fail $
-          "Refusing to "++cmd++" patches leading to conflicts.\n"++
-          "If you would rather apply the patch and mark the conflicts,\n"++
-          "use the --mark-conflicts or --allow-conflicts options to "++cmd++"\n"++
-          "These can set as defaults by adding\n"++
-          " "++cmd++" mark-conflicts\n"++
-          "to "++darcsdir++"/prefs/defaults in the target repo. "
-        YesAllowConflicts MarkConflicts -> do
-          warnUnmangled Nothing conflicts
-          return True
-        _ -> return True
+announceConflicts cmd allowConflicts conflicts = do
+  let result = haveConflicts conflicts
+  when result $ do
+    let cfs = nubSort (conflictedPaths conflicts)
+    ePutDocLn $ redText "We have conflicts!"
+    unless (null cfs) $
+      ePutDocLn $ vcat $ text "Affected paths:" : map (text . displayPath) cfs
+    case allowConflicts of
+      NoAllowConflicts ->
+        fail $
+        "Refusing to "++cmd++" patches leading to conflicts.\n"++
+        "If you would rather apply the patch and mark the conflicts,\n"++
+        "use the --mark-conflicts or --allow-conflicts options to "++cmd++"\n"++
+        "These can set as defaults by adding\n"++
+        " "++cmd++" mark-conflicts\n"++
+        "to "++darcsdir++"/prefs/defaults in the target repo. "
+      YesAllowConflicts MarkConflicts ->
+        warnUnmangled Nothing conflicts
+      _ -> return ()
+  return result
 
 externalResolution :: forall p wX wY wZ wA. (RepoPatch p, ApplyState p ~ Tree.Tree)
                    => DiffAlgorithm
