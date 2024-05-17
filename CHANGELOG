@@ -1,3 +1,14 @@
+Darcs 2.18.2, 24 Mar 2024
+
+  * Fix deprecated head/tail warnings on GHC 9.8, making the build there
+    warning-free.
+
+  * Replace the set-default hint that was removed in 2.18.1
+
+  * Add a --ghcflags/-g option to the test suite to allow flags
+    like -dynamic to be passed to GHC when it builds helper exes
+    in various test scripts.
+
 Darcs 2.18.1, 25 Feb 2024
 
   * Supports GHC 9.8 and the most recent version of other dependencies

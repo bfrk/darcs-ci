@@ -1,9 +1,11 @@
+{-# LANGUAGE CPP #-}
 module Darcs.Util.HTTP
     ( Cachable(..)
     , copyRemote
     , copyRemoteLazy
     , speculateRemote
     , postUrl
+    , configureHttpConnectionManager
     ) where
 
 import Control.Concurrent.Async ( async, cancel, poll )
@@ -42,6 +44,19 @@ import Network.HTTP.Types.Header
     , hAccept
     , hContentLength
     )
+
+#ifdef HAVE_CRYPTON_CONNECTION
+import Data.Default.Class ( def )
+import qualified Network.Connection as NC
+import Network.HTTP.Client.TLS
+    ( mkManagerSettings
+    , newTlsManagerWith
+    , setGlobalManager
+    )
+import qualified Network.TLS as TLS
+import qualified Network.TLS.Extra as TLS
+#endif
+
 import Numeric ( showHex )
 import System.Directory ( renameFile )
 import System.Environment ( lookupEnv )
@@ -135,3 +150,18 @@ handleHttpAndUrlExn url action =
       fail $ "Invalid URI: " ++ url ++ ", reason: " ++ reason
     HttpExceptionRequest _ hec {- :: HttpExceptionContent -}
      -> fail $ "Error getting " ++ show url ++ ": " ++ show hec)
+
+configureHttpConnectionManager :: IO ()
+#ifdef HAVE_CRYPTON_CONNECTION
+configureHttpConnectionManager = do
+  let tlsSettings =
+        NC.TLSSettingsSimple False False False
+          def
+            { TLS.supportedExtendedMainSecret = TLS.AllowEMS
+            , TLS.supportedCiphers = TLS.ciphersuite_default
+            }
+  manager <- newTlsManagerWith $ mkManagerSettings tlsSettings Nothing
+  setGlobalManager manager
+#else
+configureHttpConnectionManager = return ()
+#endif
