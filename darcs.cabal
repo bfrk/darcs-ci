@@ -118,11 +118,6 @@ flag warn-as-error
   manual:      True
   description: Build with warnings-as-errors
 
-flag hie
-  default:     False
-  manual:      True
-  description: Build with hie flags
-
 -- ----------------------------------------------------------------------
 -- setup
 -- ----------------------------------------------------------------------
@@ -491,9 +486,6 @@ Library
     if flag(terminfo) && !os(windows)
       build-depends:  terminfo >= 0.4.0.2 && < 0.5
       cpp-options:    -DHAVE_TERMINFO
-
-    if flag(hie)
-      ghc-options:    -fwrite-ide-info -hiedir=.hie
 
     default-extensions:
         BangPatterns
