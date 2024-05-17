@@ -3,6 +3,8 @@
 
 . lib                           # Load some portability helpers.
 
+require_ghc 706
+
 darcs init      --repo R        # Create our test repos.
 darcs init      --repo S
 
