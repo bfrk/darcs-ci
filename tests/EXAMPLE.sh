@@ -36,7 +36,9 @@ cd R
 # change the working tree
 mkdir d e
 echo 'Example content.' > d/f
-darcs record -lam 'Add d/f and e.' --debug 2>../RLOG
+echo "content of _darcs/rebase:" >&2
+cat _darcs/rebase >&2
+darcs record -lam 'Add d/f and e.' --debug
 darcs mv d/f e/
 darcs record -am 'Move d/f to e/f.'
 # push patches from R to S
