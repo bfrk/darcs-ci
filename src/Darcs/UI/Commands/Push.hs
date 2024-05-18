@@ -284,7 +284,9 @@ applyViaSudo opts user repo bundle =
 
 applyViaLocal :: [DarcsFlag] -> String -> Doc -> IO ExitCode
 applyViaLocal opts repo bundle =
-  darcsProgram >>= \darcs -> pipeDoc darcs (darcsArgs opts repo) bundle
+  darcsProgram >>= \darcs -> do
+    debugMessage $ "darcs="++darcs
+    pipeDoc darcs (darcsArgs opts repo) bundle
 
 applyViaSsh :: [DarcsFlag] -> SshFilePath -> Doc -> IO ExitCode
 applyViaSsh opts repo =
