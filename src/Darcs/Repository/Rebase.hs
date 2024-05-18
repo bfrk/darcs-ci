@@ -193,9 +193,12 @@ createTentativeRebase r = writeRebaseFile tentativeRebasePath r (Items NilFL)
 
 revertTentativeRebase :: RepoPatch p => Repository rt p wU wR -> IO ()
 revertTentativeRebase repo = do
-  copyFile rebasePath tentativeRebasePath
-    `catchDoesNotExistError` createTentativeRebase repo
-  debugMessage "after revertTentativeRebase"
+  do
+    copyFile rebasePath tentativeRebasePath
+    debugMessage "after copyFile rebasePath tentativeRebasePath"
+   `catchDoesNotExistError` do
+      createTentativeRebase repo
+      debugMessage "after createTentativeRebase"
   debugMessage =<< readFile tentativeRebasePath
 
 finalizeTentativeRebase :: IO ()
