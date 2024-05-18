@@ -10,7 +10,7 @@ darcs init      --repo S
 
 cd R
 echo 'Example content.' > f
-darcs record -lam 'Add f.'
+darcs record -lam 'Add f.' --debug
 thedarcs=$(type -P darcs)
 PATH='' $thedarcs push ../S -a	--debug        # Try to push patches between repos.
 cd ..
