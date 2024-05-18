@@ -24,6 +24,11 @@ if os_is_windows; then
 fi
 }
 
+# trick: OS-detection (if needed)
+os_is_macos() {
+  echo $OS | grep -i mac
+}
+
 if os_is_windows; then
   # some installations of bash on Windows do not include \r by default
   # which breaks a lot of tests
