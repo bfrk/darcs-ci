@@ -11,10 +11,10 @@ thedarcs=$(type -P darcs)
 #(echo $thedarcs | grep -q osx) && exit 200
 
 darcs init      --repo R        # Create our test repos.
-darcs init      --repo S
+$thedarcs init      --repo S
 
 cd R
 echo 'Example content.' > f
 darcs record -lam 'Add f.'
-PATH='' $thedarcs push ../S -a --debug >&2 # Try to push patches between repos.
+PATH='' $thedarcs push ../S -a --debug # Try to push patches between repos.
 cd ..
