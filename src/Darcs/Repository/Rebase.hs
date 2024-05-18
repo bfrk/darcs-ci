@@ -76,6 +76,7 @@ import Darcs.Repository.Paths
 import Darcs.Util.Diff ( DiffAlgorithm(MyersDiff) )
 import Darcs.Util.English ( englishNum, Noun(..) )
 import Darcs.Util.Exception ( catchDoesNotExistError )
+import Darcs.Util.Global ( debugMessage )
 import Darcs.Util.Lock ( writeDocBinFile, readBinFile )
 import Darcs.Util.Parser ( parse )
 import Darcs.Util.Printer ( text, hsep, vcat )
@@ -191,9 +192,11 @@ createTentativeRebase :: RepoPatch p => Repository rt p wU wR -> IO ()
 createTentativeRebase r = writeRebaseFile tentativeRebasePath r (Items NilFL)
 
 revertTentativeRebase :: RepoPatch p => Repository rt p wU wR -> IO ()
-revertTentativeRebase repo =
+revertTentativeRebase repo = do
   copyFile rebasePath tentativeRebasePath
     `catchDoesNotExistError` createTentativeRebase repo
+  debugMessage "after revertTentativeRebase"
+  debugMessage =<< readFile tentativeRebasePath
 
 finalizeTentativeRebase :: IO ()
 finalizeTentativeRebase = renameFile tentativeRebasePath rebasePath
