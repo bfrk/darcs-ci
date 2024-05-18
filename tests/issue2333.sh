@@ -6,15 +6,15 @@
 require_ghc 706
 
 thedarcs=$(type -P darcs)
-# on macOS running $thedarcs fails with
+# on macOS with ghc >= 9.6 running $thedarcs with an empty PATH fails with
 # darcs: security: createProcess: posix_spawnp: does not exist (No such file or directory)
-(echo $thedarcs | grep -q osx) && exit 200
+#(echo $thedarcs | grep -q osx) && exit 200
 
 darcs init      --repo R        # Create our test repos.
 darcs init      --repo S
 
 cd R
 echo 'Example content.' > f
-darcs record -lam 'Add f.' --debug
-PATH='' $thedarcs push ../S -a	--debug        # Try to push patches between repos.
+darcs record -lam 'Add f.'
+PATH='' $thedarcs push ../S -a --debug >&2 # Try to push patches between repos.
 cd ..
