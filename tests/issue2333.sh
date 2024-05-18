@@ -12,5 +12,5 @@ cd R
 echo 'Example content.' > f
 darcs record -lam 'Add f.'
 thedarcs=$(type -P darcs)
-PATH='' $thedarcs push ../S -a	        # Try to push patches between repos.
+PATH='' $thedarcs push ../S -a	--debug        # Try to push patches between repos.
 cd ..
