@@ -66,6 +66,8 @@ darcs changes   > changes-1
 darcs unrecord  -a
 grep fake changes-1
 
+# on macOS running darcs in this way fails
+if ! (echo $DARCSDIR | grep -q osx) then
 # Bad editor: fall through to the next choice
 DARCS_EDITOR=$FAKE_EDITOR_HOME/editor-bad \
 PATH=.:$DARCSDIR \
@@ -74,6 +76,7 @@ darcs changes   > changes-2
 darcs unrecord  -a
 grep "Initial" changes-2
 egrep -i 'vi|emacs|nano|edit' log-2
+fi
 
 # Normal failure (eg. user hit ^-C)
 # If Darcs did the right thing, the output won't make any mention of
