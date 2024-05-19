@@ -32,20 +32,11 @@ rm -rf R S
 darcs init R
 darcs init S
 
-cat <<EOF > xxx.hs
-import System.Directory
-main = copyFile "nonexistent" "shouldnotexist"
-EOF
-ghc xxx.hs
-not ./xxx && not test -e "shouldnotexist"
-
 cd R
 # change the working tree
 mkdir d e
 echo 'Example content.' > d/f
-echo "content of _darcs/rebase:" >&2
-test -e _darcs/rebase && cat _darcs/rebase >&2
-darcs record -lam 'Add d/f and e.' --debug
+darcs record -lam 'Add d/f and e.' --debug 2>../RLOG
 darcs mv d/f e/
 darcs record -am 'Move d/f to e/f.'
 # push patches from R to S

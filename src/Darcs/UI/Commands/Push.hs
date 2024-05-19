@@ -94,7 +94,6 @@ import Darcs.Util.Printer
     )
 import Darcs.UI.Email ( makeEmail )
 import Darcs.Util.English (englishNum, Noun(..))
-import Darcs.Util.Global ( debugMessage )
 import Darcs.Util.Workaround ( getCurrentDirectory )
 import Darcs.Util.Tree( Tree )
 
@@ -267,9 +266,8 @@ pushPatchSelOpts flags = S.PatchSelectionOptions
     }
 
 remoteApply :: [DarcsFlag] -> String -> Doc -> IO ExitCode
-remoteApply opts repodir bundle = do
-    debugMessage "before remoteApply"
-    case applyAs ? opts of
+remoteApply opts repodir bundle
+    = case applyAs ? opts of
         Nothing
             | isSshUrl repodir -> applyViaSsh opts (splitSshUrl repodir) bundle
             | otherwise -> applyViaLocal opts repodir bundle
@@ -284,9 +282,7 @@ applyViaSudo opts user repo bundle =
 
 applyViaLocal :: [DarcsFlag] -> String -> Doc -> IO ExitCode
 applyViaLocal opts repo bundle =
-  darcsProgram >>= \darcs -> do
-    debugMessage $ "darcs="++darcs
-    pipeDoc darcs (darcsArgs opts repo) bundle
+  darcsProgram >>= \darcs -> pipeDoc darcs (darcsArgs opts repo) bundle
 
 applyViaSsh :: [DarcsFlag] -> SshFilePath -> Doc -> IO ExitCode
 applyViaSsh opts repo =

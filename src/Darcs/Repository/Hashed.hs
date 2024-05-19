@@ -40,8 +40,7 @@ import Darcs.Prelude
 import Control.Monad ( unless, when )
 import Data.List ( foldl' )
 import System.Directory
-    ( copyFile
-    , createDirectoryIfMissing
+    ( createDirectoryIfMissing
     , renameFile
     )
 import System.FilePath.Posix ( (</>) )
@@ -144,6 +143,7 @@ import Darcs.Util.Printer ( renderString )
 import Darcs.Util.Progress ( beginTedious, debugMessage, endTedious )
 import Darcs.Util.SignalHandler ( withSignalsBlocked )
 import Darcs.Util.Tree ( Tree )
+import Darcs.Util.Workaround ( copyFile )
 
 -- |revertTentativeChanges swaps the tentative and "real" hashed inventory
 -- files, and then updates the tentative pristine with the "real" inventory

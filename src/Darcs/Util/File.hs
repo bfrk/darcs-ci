@@ -30,6 +30,7 @@ import qualified Darcs.Util.HTTP as HTTP
 import Darcs.Util.Path ( FilePathLike, toFilePath )
 import Darcs.Util.Ssh ( copySSH )
 import Darcs.Util.URL ( isHttpUrl, isSshUrl, isValidLocalPath, splitSshUrl )
+import Darcs.Util.Workaround ( copyFile )
 
 import Control.Exception ( IOException, bracket, catch )
 import Control.Monad ( forM, unless, when, zipWithM_ )
@@ -37,8 +38,7 @@ import qualified Data.ByteString as B ( ByteString, readFile )
 import qualified Data.ByteString.Lazy as BL
 import Network.URI ( parseURI, uriScheme )
 import System.Directory
-    ( copyFile
-    , createDirectory
+    ( createDirectory
     , doesDirectoryExist
     , doesFileExist
     , listDirectory

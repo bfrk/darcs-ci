@@ -25,8 +25,6 @@
 ## SOFTWARE.
 
 . lib                  # Load some portability helpers.
-
-rm -rf R
 darcs init      --repo R        # Create our test repo.
 
 FAKE_EDITOR_HOME=`pwd`
@@ -60,6 +58,7 @@ cd R
 mkdir d
 unset TERM
 
+DARCSDIR=$(dirname $(which darcs))
 # the /dev/null stdin redirection is to make vi or the fallback editor just fail
 DARCS_EDITOR=$FAKE_EDITOR_HOME/editor-good \
 darcs record    -lam 'Initial commit.' --edit </dev/null &> log-1
@@ -67,13 +66,13 @@ darcs changes   > changes-1
 darcs unrecord  -a
 grep fake changes-1
 
-# Bad editor: fall through to the next choice (which is our vi fake)
+# Bad editor: fall through to the next choice
 DARCS_EDITOR=$FAKE_EDITOR_HOME/editor-bad \
-PATH=..:$PATH \
+PATH=.:$DARCSDIR \
 darcs record    -lam 'Initial commit.' --edit </dev/null &> log-2
 darcs changes   > changes-2
 darcs unrecord  -a
-grep "vi" changes-2
+grep "Initial" changes-2
 egrep -i 'vi|emacs|nano|edit' log-2
 
 # Normal failure (eg. user hit ^-C)

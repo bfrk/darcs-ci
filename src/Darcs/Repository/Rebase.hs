@@ -23,7 +23,7 @@ module Darcs.Repository.Rebase
 import Darcs.Prelude
 
 import Control.Monad ( unless, void, when )
-import System.Directory ( copyFile, renameFile )
+import System.Directory ( renameFile )
 import System.Exit ( exitFailure )
 import System.FilePath.Posix ( (</>) )
 
@@ -76,12 +76,12 @@ import Darcs.Repository.Paths
 import Darcs.Util.Diff ( DiffAlgorithm(MyersDiff) )
 import Darcs.Util.English ( englishNum, Noun(..) )
 import Darcs.Util.Exception ( catchDoesNotExistError )
-import Darcs.Util.Global ( debugMessage )
 import Darcs.Util.Lock ( writeDocBinFile, readBinFile )
 import Darcs.Util.Parser ( parse )
 import Darcs.Util.Printer ( text, hsep, vcat )
 import Darcs.Util.Printer.Color ( ePutDocLn )
 import Darcs.Util.URL ( isValidLocalPath )
+import Darcs.Util.Workaround ( copyFile )
 
 withManualRebaseUpdate
    :: RepoPatch p
@@ -192,14 +192,9 @@ createTentativeRebase :: RepoPatch p => Repository rt p wU wR -> IO ()
 createTentativeRebase r = writeRebaseFile tentativeRebasePath r (Items NilFL)
 
 revertTentativeRebase :: RepoPatch p => Repository rt p wU wR -> IO ()
-revertTentativeRebase repo = do
-  do
-    copyFile rebasePath tentativeRebasePath
-    debugMessage "after copyFile rebasePath tentativeRebasePath"
-   `catchDoesNotExistError` do
-      createTentativeRebase repo
-      debugMessage "after createTentativeRebase"
-  debugMessage =<< readFile tentativeRebasePath
+revertTentativeRebase repo =
+  copyFile rebasePath tentativeRebasePath
+    `catchDoesNotExistError` createTentativeRebase repo
 
 finalizeTentativeRebase :: IO ()
 finalizeTentativeRebase = renameFile tentativeRebasePath rebasePath

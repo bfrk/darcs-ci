@@ -11,29 +11,29 @@ jobs:
       matrix:
         os:
 #           - ubuntu-20.04
-#          - ubuntu-22.04
+          - ubuntu-22.04
 #           - macos-11
 #           - macos-12
-#          - macos-13
+          - macos-13
 #           - windows-2019
           - windows-2022
         ghc:
-#           - 8.4.4
-#           - 8.6.5
-#           - 8.8.2
-#           - 8.10.7
-#           - 9.0.2
-#           - 9.2.8
-#           - 9.4.8
+          - 8.4.4
+          - 8.6.5
+          - 8.8.2
+          - 8.10.7
+          - 9.0.2
+          - 9.2.8
+          - 9.4.8
           - 9.6.4
-#           - 9.8.2
+          - 9.8.2
         cabal:
           - '3.10'
     env:
       builddocs: ${{ matrix.ghc == '9.4.5' }}
-      runtests: ${{ matrix.ghc == '8.4.4' || matrix.ghc == '9.6.4' }}
-      tests-to-run: -t=issue1465_ortryrunning -t=issue2333 -t=EXAMPLE
-      testcmd: cabal run -- darcs-test -f=2
+      runtests: ${{ matrix.ghc == '8.4.4' || matrix.ghc == '9.8.2' }}
+      tests-to-run: # e.g. -t=EXAMPLE
+      testcmd: cabal run -- darcs-test -j=6 -f=123 -i=yn -c=yn --hide
       ACTIONS_ALLOW_UNSECURE_COMMANDS: true
       # avoid occasional timeouts in test scripts that access darcs.net:
       DARCS_CONNECTION_TIMEOUT: 15
@@ -106,4 +106,4 @@ jobs:
     - name: Run tests on Windows
       if: runner.os == 'Windows' && env.runtests == 'true'
       # running the tests for all three patch formats takes over an hour
-      run: ${{ env.testcmd }} ${{ env.tests-to-run }}
+      run: cabal run -- darcs-test -j=6 -f=2 -s=sn -i=yn ${{ env.tests-to-run }} --hide

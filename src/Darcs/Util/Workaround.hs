@@ -21,19 +21,21 @@ module Darcs.Util.Workaround
     , sigALRM
     , sigTERM
     , sigPIPE
+    , copyFile
     ) where
 
 import Darcs.Prelude
 
 #ifdef WIN32
 
-import qualified System.Directory ( getCurrentDirectory, canonicalizePath )
+import qualified System.Directory ( getCurrentDirectory, canonicalizePath, copyFile )
+import System.IO (openFile, FileMode(..) )
 
 #else
 
 import System.Posix.Signals(installHandler, raiseSignal, Handler(..), Signal,
                             sigINT, sigHUP, sigABRT, sigALRM, sigTERM, sigPIPE)
-import System.Directory ( getCurrentDirectory )
+import System.Directory ( getCurrentDirectory, copyFile )
 import System.Posix.Files (fileMode,getFileStatus, setFileMode,
                            setFileCreationMask,
                            ownerReadMode, ownerWriteMode, ownerExecuteMode,
@@ -101,6 +103,18 @@ getCurrentDirectory = do
   where
     rb '\\' = '/'
     rb c = c
+
+
+-- | 'System.Directory.copyFile' is broken on Windows from ghc-9.6 onwards,
+-- in that it does not fail when the source is non-existent.
+copyFile: FilePath -> FilePath -> IO ()
+copyFile src dst = do
+  -- slightly inefficient but an easy way to make it throw the
+  -- appropriate exception
+  h <- openFile ReadMode src
+  hClose h
+  System.Directory.copyFile src dst
+
 
 #else
 

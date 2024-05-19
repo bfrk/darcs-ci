@@ -62,7 +62,7 @@ commonBuildHook runHook pkg lbi hooks verbosity = do
     (&&) <$> doesFileExist "release/distributed-context"
          <*> doesFileExist "release/distributed-version"
   unless versionInfoExists $
-    callProcess "runghc" ["./release/gen-version-info.hs"]
+    callProcess "cabal" ["run", "./release/gen-version-info.hs"]
   (version, state) <- determineVersion verbosity pkg
   generateVersionModule verbosity lbi version state
   return $ runHook simpleUserHooks pkg lbi hooks

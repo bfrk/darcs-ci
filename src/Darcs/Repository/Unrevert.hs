@@ -31,8 +31,9 @@ import Darcs.Util.IsoDate ( getIsoDateTime )
 import Darcs.Util.Lock ( readBinFile, removeFileMayNotExist, writeDocBinFile )
 import Darcs.Util.Prompt ( promptYorn )
 import Darcs.Util.Tree ( Tree )
+import Darcs.Util.Workaround ( copyFile )
 
-import System.Directory ( copyFile, renameFile )
+import System.Directory ( renameFile )
 import System.Exit ( exitSuccess )
 
 finalizeTentativeUnrevert :: IO ()
