@@ -111,7 +111,7 @@ copyFile :: FilePath -> FilePath -> IO ()
 copyFile src dst = do
   -- slightly inefficient but an easy way to make it throw the
   -- appropriate exception
-  h <- openFile ReadMode src
+  h <- openFile src ReadMode
   hClose h
   System.Directory.copyFile src dst
 
