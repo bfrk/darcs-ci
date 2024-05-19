@@ -30,7 +30,7 @@ module Darcs.Repository.Pending
 import Darcs.Prelude
 
 import Control.Applicative
-import System.Directory ( renameFile )
+import System.Directory ( copyFile, renameFile )
 
 import Darcs.Patch ( PrimOf, PrimPatch, RepoPatch, commuteFL, readPatch )
 import Darcs.Patch.Commute ( Commute(..) )
@@ -69,7 +69,6 @@ import Darcs.Util.Exception ( catchDoesNotExistError, ifDoesNotExistError )
 import Darcs.Util.Lock ( writeDocBinFile )
 import Darcs.Util.Parser ( Parser )
 import Darcs.Util.Printer ( Doc, text, vcat, ($$) )
-import Darcs.Util.Workaround ( copyFile )
 
 
 tentativeSuffix :: String

@@ -23,7 +23,7 @@ module Darcs.Repository.Rebase
 import Darcs.Prelude
 
 import Control.Monad ( unless, void, when )
-import System.Directory ( renameFile )
+import System.Directory ( copyFile, renameFile )
 import System.Exit ( exitFailure )
 import System.FilePath.Posix ( (</>) )
 
@@ -81,7 +81,6 @@ import Darcs.Util.Parser ( parse )
 import Darcs.Util.Printer ( text, hsep, vcat )
 import Darcs.Util.Printer.Color ( ePutDocLn )
 import Darcs.Util.URL ( isValidLocalPath )
-import Darcs.Util.Workaround ( copyFile )
 
 withManualRebaseUpdate
    :: RepoPatch p

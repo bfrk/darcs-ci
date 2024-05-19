@@ -64,7 +64,7 @@ import System.FilePath( (</>) )
 import System.IO ( openFile, IOMode(WriteMode), hClose )
 
 import Darcs.Patch ( RepoPatch, listTouchedFiles )
-import Darcs.Patch.Apply ( ApplyState, Apply )
+import Darcs.Patch.Apply ( ApplyState(..) )
 import Darcs.Patch.Index.Types
     ( FileId(..)
     , PatchId
