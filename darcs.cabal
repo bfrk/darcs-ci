@@ -127,7 +127,7 @@ custom-setup
                    Cabal     >= 2.4 && < 3.11,
                    process   >= 1.2.3.0 && < 1.7,
                    filepath  >= 1.4.1 && < 1.5.0.0,
-                   directory >= 1.2.7 && < 1.4
+                   directory >= 1.2.7 && < 1.3.8
 
 -- ----------------------------------------------------------------------
 -- darcs library
@@ -443,7 +443,7 @@ Library
                       old-time          >= 1.1.0.3 && < 1.2,
                       time              >= 1.9 && < 1.15,
                       text              >= 1.2.1.3 && < 2.2,
-                      directory         >= 1.2.7 && < 1.4,
+                      directory         >= 1.2.7 && < 1.3.8,
                       temporary         >= 1.2.1 && < 1.4,
                       process           >= 1.2.3.0 && < 1.7,
                       array             >= 0.5.1.0 && < 0.6,
@@ -454,13 +454,22 @@ Library
                       network           >= 2.6 && < 3.3,
                       conduit           >= 1.3.0 && < 1.4,
                       http-conduit      >= 2.3 && < 2.4,
-                      -- constraining indirect dependency to work around problems
-                      -- connecting to hub.darcs.net - see https://bugs.darcs.net/issue2715
-                      tls               < 2.0.0,
                       http-types        >= 0.12.1 && < 0.12.5,
                       exceptions        >= 0.6 && < 0.11,
                       terminal-size     >= 0.3.4 && < 0.4,
-                      strict-identity   >= 0.1 && < 0.2,
+                      strict-identity   >= 0.1 && < 0.2
+
+    if impl(ghc >= 8.8)
+      cpp-options:    -DHAVE_CRYPTON_CONNECTION
+      build-depends:  crypton-connection >= 0.4 && < 0.5,
+                      data-default-class >= 0.1.2.0 && < 0.1.3,
+                      http-client-tls   >= 0.3.5 && < 0.4,
+                      tls               >= 2.0.0 && < 2.1
+    else
+      -- cannot use crypton-connection >= 0.4, so
+      -- constraining indirect dependency to work around problems
+      -- connecting to hub.darcs.net - see https://bugs.darcs.net/issue2715
+      build-depends:  tls               < 2.0.0
 
     if flag(warn-as-error)
       ghc-options:    -Werror

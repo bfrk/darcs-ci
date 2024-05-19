@@ -43,6 +43,7 @@ import Darcs.Util.SignalHandler ( withSignalsHandled )
 
 import Darcs.UI.External ( setDarcsEncodings )
 import Darcs.Util.Exec ( ExecException(..) )
+import Darcs.Util.HTTP ( configureHttpConnectionManager )
 import Darcs.Util.Path ( getCurrentDirectory )
 import Version ( version, context, weakhash )
 
@@ -68,6 +69,7 @@ main :: IO ()
 main = handleErrors . handleExecFail . withSignalsHandled . withAtexit $ do
     atexit reportBadSources
     setDarcsEncodings
+    configureHttpConnectionManager
     argv <- getArgs
     here <- getCurrentDirectory
     let runHelpCmd = helpCmd (here, here) [] []

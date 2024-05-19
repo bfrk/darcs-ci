@@ -1,9 +1,11 @@
+{-# LANGUAGE CPP #-}
 module Darcs.Util.HTTP
     ( Cachable(..)
     , copyRemote
     , copyRemoteLazy
     , speculateRemote
     , postUrl
+    , configureHttpConnectionManager
     ) where
 
 import Control.Concurrent.Async ( async, cancel, poll )
@@ -42,6 +44,18 @@ import Network.HTTP.Types.Header
     , hAccept
     , hContentLength
     )
+
+#ifdef HAVE_CRYPTON_CONNECTION
+import Data.Default.Class ( def )
+import qualified Network.Connection as NC
+import Network.HTTP.Client.TLS
+    ( mkManagerSettings
+    , newTlsManagerWith
+    , setGlobalManager
+    )
+import qualified Network.TLS as TLS
+#endif
+
 import Numeric ( showHex )
 import System.Directory ( renameFile )
 import System.Environment ( lookupEnv )
@@ -135,3 +149,25 @@ handleHttpAndUrlExn url action =
       fail $ "Invalid URI: " ++ url ++ ", reason: " ++ reason
     HttpExceptionRequest _ hec {- :: HttpExceptionContent -}
      -> fail $ "Error getting " ++ show url ++ ": " ++ show hec)
+
+-- | To be called from main program in order to set up a connection manager
+-- with changed TLS settings. Particularly, since tls-2.0 the default value for
+-- 'TLS.supportedExtendedMainSecret' was changed from 'TLS.AllowEMS' to
+-- 'TLS.RequireEMS', which is currently (2024-05-19) does not supported by
+-- hub.darcs.net.
+configureHttpConnectionManager :: IO ()
+#ifdef HAVE_CRYPTON_CONNECTION
+configureHttpConnectionManager = do
+  let tlsSettings =
+        case def of
+          s@NC.TLSSettingsSimple {} ->
+            s { NC.settingClientSupported =
+                  (NC.settingClientSupported s)
+                    { TLS.supportedExtendedMainSecret = TLS.AllowEMS }
+              }
+          _ -> error "Unexpected default value of TLSSettingsSimple"
+  manager <- newTlsManagerWith $ mkManagerSettings tlsSettings Nothing
+  setGlobalManager manager
+#else
+configureHttpConnectionManager = return ()
+#endif

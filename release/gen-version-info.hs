@@ -1,3 +1,6 @@
+{- cabal:
+    build-depends: base, process
+-}
 import System.Environment ( getArgs )
 import System.IO ( hPutStrLn, stderr )
 import System.IO.Error ( catchIOError )
