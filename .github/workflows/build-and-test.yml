@@ -32,7 +32,7 @@ jobs:
     env:
       builddocs: ${{ matrix.ghc == '9.4.5' }}
       runtests: true
-      tests-to-run: -t=EXAMPLE
+      tests-to-run: # -t=EXAMPLE
       testcmd: cabal run -- darcs-test -j=6 -f=123 -i=yn -c=yn --hide
       ACTIONS_ALLOW_UNSECURE_COMMANDS: true
       # avoid occasional timeouts in test scripts that access darcs.net:
