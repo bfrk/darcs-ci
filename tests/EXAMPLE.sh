@@ -32,6 +32,13 @@ rm -rf R S
 darcs init R
 darcs init S
 
+cat <<EOF > xxx.hs
+import System.Directory
+main = copyFile "nonexistent" "shouldnotexist"
+EOF
+ghc xxx.hs
+not ./xxx && not test -e "shouldnotexist"
+
 cd R
 # change the working tree
 mkdir d e
