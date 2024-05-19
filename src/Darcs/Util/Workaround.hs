@@ -29,7 +29,7 @@ import Darcs.Prelude
 #ifdef WIN32
 
 import qualified System.Directory ( getCurrentDirectory, canonicalizePath, copyFile )
-import System.IO (openFile, IOMode(..) )
+import System.IO ( hClose, openFile, IOMode(..) )
 
 #else
 
