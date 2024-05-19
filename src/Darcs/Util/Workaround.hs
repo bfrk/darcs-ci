@@ -107,7 +107,7 @@ getCurrentDirectory = do
 
 -- | 'System.Directory.copyFile' is broken on Windows from ghc-9.6 onwards,
 -- in that it does not fail when the source is non-existent.
-copyFile: FilePath -> FilePath -> IO ()
+copyFile :: FilePath -> FilePath -> IO ()
 copyFile src dst = do
   -- slightly inefficient but an easy way to make it throw the
   -- appropriate exception
