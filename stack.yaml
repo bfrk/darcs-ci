@@ -1,9 +1,8 @@
-resolver: lts-22.22
+resolver: lts-21.25
 
 packages:
 - .
 
 extra-deps:
 - strict-identity-0.1.0.0
-- crypton-connection-0.4.0
-- tls-2.0.5
+- safe-0.3.21
