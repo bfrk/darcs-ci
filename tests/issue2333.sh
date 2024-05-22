@@ -5,12 +5,8 @@
 
 require_ghc 706
 
-# work around issue2720
-cat <<EOF > security
-#!/bin/sh
-/usr/bin/security "$@"
-EOF
-chmod +x ./security
+# work around issue2720 (MacOS)
+ln -s /usr/bin/security .
 
 darcs init      --repo R        # Create our test repos.
 darcs init      --repo S
