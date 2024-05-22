@@ -77,8 +77,8 @@ PATH=..:$DARCSDIR \
 darcs record    -lam 'Initial commit.' --edit </dev/null &> log-2
 darcs changes   > changes-2
 darcs unrecord  -a
-grep "vi" changes-2
-egrep -i 'vi|emacs|nano|edit' log-2
+grep -w 'vi' changes-2
+grep -w 'vi' log-2
 
 # Normal failure (eg. user hit ^-C)
 # If Darcs did the right thing, the output won't make any mention of
