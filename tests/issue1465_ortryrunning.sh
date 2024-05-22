@@ -27,6 +27,13 @@
 . lib                  # Load some portability helpers.
 darcs init      --repo R        # Create our test repo.
 
+# work around issue2720
+cat <<EOF > security
+#!/bin/sh
+/usr/bin/security "$@"
+EOF
+chmod +x ./security
+
 FAKE_EDITOR_HOME=`pwd`
 cat <<FAKE > editor-good.hs
 import System.Environment
