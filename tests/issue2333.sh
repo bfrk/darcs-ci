@@ -6,7 +6,7 @@
 require_ghc 706
 
 # work around issue2720 (MacOS)
-ln -s /usr/bin/security .
+test -x /usr/bin/security && ln -s /usr/bin/security .
 
 darcs init      --repo R        # Create our test repos.
 darcs init      --repo S

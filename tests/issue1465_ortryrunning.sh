@@ -28,7 +28,7 @@
 darcs init      --repo R        # Create our test repo.
 
 # work around issue2720 (MacOS)
-ln -s /usr/bin/security .
+test -x /usr/bin/security && ln -s /usr/bin/security .
 
 FAKE_EDITOR_HOME=`pwd`
 cat <<FAKE > editor-good.hs
