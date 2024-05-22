@@ -28,7 +28,9 @@
 darcs init      --repo R        # Create our test repo.
 
 # work around issue2720 (MacOS)
-test -x /usr/bin/security && ln -s /usr/bin/security .
+if test -x /usr/bin/security; then
+  ln -s /usr/bin/security .
+fi
 
 FAKE_EDITOR_HOME=`pwd`
 cat <<FAKE > editor-good.hs
@@ -71,11 +73,11 @@ grep fake changes-1
 
 # Bad editor: fall through to the next choice
 DARCS_EDITOR=$FAKE_EDITOR_HOME/editor-bad \
-PATH=.:$DARCSDIR \
+PATH=..:$DARCSDIR \
 darcs record    -lam 'Initial commit.' --edit </dev/null &> log-2
 darcs changes   > changes-2
 darcs unrecord  -a
-grep "Initial" changes-2
+grep "vi" changes-2
 egrep -i 'vi|emacs|nano|edit' log-2
 
 # Normal failure (eg. user hit ^-C)

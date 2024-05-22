@@ -153,19 +153,14 @@ handleHttpAndUrlExn url action =
 -- | To be called from main program in order to set up a connection manager
 -- with changed TLS settings. Particularly, since tls-2.0 the default value for
 -- 'TLS.supportedExtendedMainSecret' was changed from 'TLS.AllowEMS' to
--- 'TLS.RequireEMS', which is currently (2024-05-19) does not supported by
+-- 'TLS.RequireEMS', which is currently (2024-05-19) not yet supported by
 -- hub.darcs.net.
 configureHttpConnectionManager :: IO ()
 #ifdef HAVE_CRYPTON_CONNECTION
 configureHttpConnectionManager = do
   let tlsSettings =
-        case def of
-          s@NC.TLSSettingsSimple {} ->
-            s { NC.settingClientSupported =
-                  (NC.settingClientSupported s)
-                    { TLS.supportedExtendedMainSecret = TLS.AllowEMS }
-              }
-          _ -> error "Unexpected default value of TLSSettingsSimple"
+        NC.TLSSettingsSimple False False False
+          def { TLS.supportedExtendedMainSecret = TLS.AllowEMS }
   manager <- newTlsManagerWith $ mkManagerSettings tlsSettings Nothing
   setGlobalManager manager
 #else
