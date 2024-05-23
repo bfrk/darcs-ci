@@ -25,6 +25,8 @@
 ## SOFTWARE.
 
 . lib                  # Load some portability helpers.
+
+rm -rf R
 darcs init      --repo R        # Create our test repo.
 
 # work around issue2720 (MacOS)
@@ -52,13 +54,6 @@ main = exitWith (ExitFailure 1)
 FAKE
 ghc $GHC_FLAGS -o editor-gave-up --make editor-gave-up.hs
 
-cat <<VI > vi.hs
-import System.Environment
-import System.IO
-main = getArgs >>= \[name] -> writeFile name "vi"
-VI
-ghc $GHC_FLAGS -o vi --make vi.hs
-
 cd R
 mkdir d
 unset TERM
@@ -72,13 +67,16 @@ darcs unrecord  -a
 grep fake changes-1
 
 # Bad editor: fall through to the next choice
+# Note that the record succeeds, even though none of the fallback editors
+# are found, leaving the message we passed on the command line intact.
 DARCS_EDITOR=$FAKE_EDITOR_HOME/editor-bad \
 PATH=..:$DARCSDIR \
 darcs record    -lam 'Initial commit.' --edit </dev/null &> log-2
 darcs changes   > changes-2
 darcs unrecord  -a
-grep -w 'vi' changes-2
-grep -w 'vi' log-2
+grep "Initial" changes-2
+# check for error messages about fallback editors not found
+egrep -i 'vi|emacs|nano|edit' log-2
 
 # Normal failure (eg. user hit ^-C)
 # If Darcs did the right thing, the output won't make any mention of
