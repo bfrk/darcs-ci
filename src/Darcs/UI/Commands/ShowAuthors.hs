@@ -15,6 +15,7 @@
 --  the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 --  Boston, MA 02110-1301, USA.
 
+{-# OPTIONS_GHC -Wno-x-data-list-nonempty-unzip #-}
 module Darcs.UI.Commands.ShowAuthors
     ( showAuthors, Spelling, compiledAuthorSpellings, canonizeAuthor, rankAuthors
     ) where
@@ -22,7 +23,6 @@ module Darcs.UI.Commands.ShowAuthors
 import Control.Arrow ( (&&&), (***) )
 import Data.Char ( toLower, isSpace )
 import Data.Function ( on )
-import Data.Functor ( unzip )
 import Data.List ( isInfixOf, sortBy, sort )
 import Data.List.NonEmpty ( group, groupBy )
 import qualified Data.List.NonEmpty as NE
@@ -32,7 +32,7 @@ import System.IO.Error ( catchIOError )
 import Text.ParserCombinators.Parsec hiding ( lower, count, Line )
 import Text.ParserCombinators.Parsec.Error
 
-import Darcs.Prelude hiding ( unzip )
+import Darcs.Prelude
 
 import Darcs.UI.Flags ( DarcsFlag, useCache, verbose )
 import Darcs.UI.Options ( oid, (?) )
@@ -135,7 +135,7 @@ rankAuthors spellings authors =
               reverse $ sortBy (comparing fst) .
               -- Combine duplicates from a list [(count, canonized name)]
               -- with duplicates canonized names (see next comment).
-              map ((sum *** NE.head) . unzip) .
+              map ((sum *** NE.head) . NE.unzip) .
               groupBy ((==) `on` snd) .
               sortBy  (comparing snd) .
               -- Because it would take a long time to canonize "foo" into
