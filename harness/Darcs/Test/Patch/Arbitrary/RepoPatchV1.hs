@@ -34,7 +34,7 @@ import Darcs.Patch.Witnesses.Sealed ( Sealed(Sealed) )
 
 
 import Darcs.Test.Patch.Arbitrary.Generic ( MightHaveDuplicate, ArbitraryPrim, PrimBased(..) )
-import Darcs.Test.Patch.Arbitrary.RepoPatch
+import Darcs.Test.Patch.Arbitrary.Mergeable
 import Darcs.Test.Patch.Merge.Checked ( CheckedMerge(..) )
 import Darcs.Test.Patch.RepoModel ( RepoState, ModelOf )
 import Darcs.Test.Patch.Types.Pair ( Pair(..) )
@@ -47,7 +47,7 @@ type Patch = RepoPatchV1 V1.Prim
 
 instance
   (ArbitraryPrim prim, PrimPatch prim, ApplyState prim ~ RepoState (ModelOf prim))
-  => ArbitraryRepoPatch (RepoPatchV1 prim)
+  => ArbitraryMergeable (RepoPatchV1 prim)
   where
 
     notRepoPatchV1 = Nothing

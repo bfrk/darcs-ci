@@ -28,7 +28,7 @@ import Darcs.Patch.Witnesses.Ordered
 import Darcs.Patch.Apply ( Apply, ApplyState )
 import Darcs.Patch.Effect ( Effect(..) )
 import Darcs.Patch.Format ( PatchListFormat )
-import Darcs.Patch.Merge ( Merge(..) )
+import Darcs.Patch.Merge ( CleanMerge, Merge(..) )
 import Darcs.Patch.Invert ( Invert(..) )
 import Darcs.Patch.Commute ( Commute(..) )
 import Darcs.Patch.FromPrim ( PrimOf )
@@ -125,7 +125,7 @@ type ShrinkPrim prim =
   )
 
 type TestablePrim prim =
-  ( Apply prim, Commute prim, Invert prim, Eq2 prim
+  ( Apply prim, CleanMerge prim, Commute prim, Invert prim, Eq2 prim, Show2 prim
   , PatchListFormat prim, ShowPatchBasic prim, ReadPatch prim
   , RepoModel (ModelOf prim), ApplyState prim ~ RepoState (ModelOf prim)
   , ArbitraryPrim prim
@@ -147,4 +147,3 @@ instance (Commute (OnlyPrim p), PrimBased p) => PrimBased (FL p) where
   type OnlyPrim (FL p) = FL (OnlyPrim p)
   primEffect = concatFL . mapFL_FL (primEffect @p)
   liftFromPrim = mapFL_FL liftFromPrim
-

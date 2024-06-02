@@ -82,6 +82,9 @@ instance Shrinkable Prim.Prim where
 deriving instance Shrinkable V1.Prim
 deriving instance Shrinkable V2.Prim
 
+instance RepoApply Prim1
+instance RepoApply Prim2
+
 ----------------------------------------------------------------------
 -- * QuickCheck generators
 
@@ -236,8 +239,11 @@ aModelShrinkFileContent repo = do
 
 
 -- | Generates any type of 'prim' patch, except binary and setpref patches.
-aPrim :: forall prim wX . (PrimPatch prim, ApplyState prim ~ RepoState V1Model)
-      => V1Model wX -> Gen (Sealed (WithEndState V1Model (prim wX)))
+aPrim
+  :: forall prim wX
+   . (PrimPatch prim, ApplyState prim ~ RepoState V1Model, RepoApply prim)
+  => V1Model wX
+  -> Gen (Sealed (WithEndState V1Model (prim wX)))
 aPrim repo
   = do mbFile <- maybeOf repoFiles
        mbEmptyFile <- maybeOf $ filter (isEmpty . snd) repoFiles
@@ -306,6 +312,7 @@ aPrimPair :: ( PrimPatch prim
              , ArbitraryState prim
              , ApplyState prim ~ RepoState V1Model
              , ModelOf prim ~ V1Model
+             , RepoApply prim
              )
           => V1Model wX
           -> Gen (Sealed (WithEndState V1Model (Pair prim wX)))

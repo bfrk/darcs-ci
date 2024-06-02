@@ -1,3 +1,29 @@
+Darcs 2.18.3, 26 May 2024
+
+  * relax upper bounds for some dependencies
+
+  * with GHC up to 9.8 all tests now succeed (including Windows and MacOS)
+
+  * resolve issue2714: cannot remove recursively
+
+  * resolve issue2715: hub.darcs.net does not support "Extended Main Secret"
+
+    We use a new addition to crypton-connection in order to change the default
+    setting back to old (tls < 2.0) default.
+
+  * resolve issue2721 by excluding certain versions of directory package
+
+    Versions 1.3.8 up to 1.3.8.4 of the directory package have a bug in their
+    implementation of copyFile on Windows.
+
+  * work around issue2720 (caused by x509-system indirect dependency, see
+    (see https://github.com/kazu-yamamoto/crypton-certificate/issues/9)
+
+  * make execution of release/gen-version-info.hs more robust
+
+    Using cabal run instead of runghc inside of Setup.hs ensures that we use the
+    same ghc version that cabal uses, avoiding dependency errors.
+
 Darcs 2.18.2, 24 Mar 2024
 
   * Fix deprecated head/tail warnings on GHC 9.8, making the build there

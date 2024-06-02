@@ -21,7 +21,7 @@ import Darcs.Patch.Witnesses.Maybe
 import Darcs.Patch.Witnesses.Sealed
 import Darcs.Patch.Witnesses.Unsafe
 import Darcs.Patch.Witnesses.Ordered
-import Darcs.Patch.Apply ( Apply, ApplyState )
+import Darcs.Patch.Apply ( ApplyState )
 import Darcs.Patch.Effect ( Effect(..) )
 import Darcs.Patch.Invert ( Invert(..) )
 import Darcs.Patch.FromPrim ( PrimPatchBase, PrimOf )
@@ -205,7 +205,7 @@ arbitraryMergeableSequence
    . ( RepoModel model
      , CheckedMerge p
      , PrimBased p
-     , Apply p, ApplyState p ~ RepoState model
+     , RepoApply p, ApplyState p ~ RepoState model
      )
   => (forall wA . model wA -> Gen (Sealed (WithEndState model (OnlyPrim p wA))))
   -> model wX
@@ -237,7 +237,7 @@ arbitraryMergeableSequence arbitrarySingle = go
 
 instance
   ( RepoModel model
-  , Apply p, ApplyState p ~ RepoState model
+  , RepoApply p, ApplyState p ~ RepoState model
   , model ~ ModelOf (OnlyPrim p)
   , model ~ ModelOf p
   , CheckedMerge p

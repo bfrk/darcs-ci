@@ -26,6 +26,7 @@ import Darcs.Test.Util.QuickCheck ( alpha, uniques, bSized )
 import Darcs.Test.Patch.RepoModel
 
 import Darcs.Patch.Apply( applyToTree )
+import Darcs.Patch.Info ( PatchInfo )
 import Darcs.Patch.Witnesses.Sealed ( Sealed, seal )
 import Darcs.Patch.Witnesses.Show
 
@@ -51,9 +52,10 @@ import Test.QuickCheck
 
 -- | A repository is an abstraction build in top of a 'Tree'.
 -- NB: Repository preferences are not supported yet.
-newtype V1Model wX = V1Model {
-                           repoTree :: Tree Fail
-                         }
+data V1Model wX = V1Model
+  { repoTree :: Tree Fail
+  , repoPatches :: [PatchInfo]
+  }
 
 -- | Repository items may be text files or directories.
 -- NB: Binary files are not supported yet.
@@ -103,10 +105,10 @@ lbs2content = map lbs2bs . BLC.lines
 -- * Constructors
 
 makeRepo :: [(Name, RepoItem)] -> V1Model wX
-makeRepo = V1Model . T.makeTree . map (second treeItem)
+makeRepo = flip V1Model [] . T.makeTree . map (second treeItem)
 
 emptyRepo :: V1Model wX
-emptyRepo = V1Model T.emptyTree
+emptyRepo = V1Model T.emptyTree []
 
 makeFile :: Content -> File
 makeFile = RepoItem . T.File . T.makeBlob . content2lbs
@@ -156,12 +158,12 @@ root :: V1Model wX -> Dir
 root = RepoItem . T.SubTree . repoTree
 
 find :: V1Model wX -> AnchoredPath -> Maybe RepoItem
-find (V1Model tree) path = RepoItem <$> T.find tree path
+find (V1Model tree _) path = RepoItem <$> T.find tree path
 
 -- | List repository items.
 -- NB: It does not include the root directory.
 list :: V1Model wX -> [(AnchoredPath, RepoItem)]
-list (V1Model tree) = map (second RepoItem) $ T.list tree
+list (V1Model tree _) = map (second RepoItem) $ T.list tree
 
 ----------------------------------------------------------------------
 -- ** Filtering
@@ -178,7 +180,7 @@ filterDirs = filter (isDir . snd)
 diffRepos :: V1Model wX -> V1Model wY -> (V1Model wU, V1Model wV)
 diffRepos repo1 repo2 =
   let (diff1,diff2) = unFail $ T.diffTrees hashedTree1 hashedTree2
-    in (V1Model diff1, V1Model diff2)
+    in (V1Model diff1 [], V1Model diff2 [])
   where
       hashedTree1, hashedTree2 :: Tree Fail
       hashedTree1 = unFail $ darcsUpdateHashes $ repoTree repo1
@@ -267,10 +269,11 @@ instance RepoModel V1Model where
   aSmallRepo = do filesNo <- frequency [(3, return 1), (1, return 2)]
                   dirsNo <- frequency [(3, return 1), (1, return 0)]
                   aRepo filesNo dirsNo
-  repoApply (V1Model tree) patch = V1Model <$> applyToTree patch tree
+  appliedPatchNames (V1Model _ patches) = patches
+  repoApply (V1Model tree patches) patch =
+    V1Model <$> applyToTree patch tree <*> pure (patches ++ patchNames patch)
   eqModel repo1 repo2 = let (diff1,diff2) = diffRepos repo1 repo2
                          in nullRepo diff1 && nullRepo diff2
-
 
 instance Arbitrary (Sealed V1Model) where
   arbitrary = seal <$> aSmallRepo

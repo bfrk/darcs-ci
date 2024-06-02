@@ -12,7 +12,7 @@ import Darcs.Test.Patch.Arbitrary.Generic
     , MightHaveDuplicate(..)
     , PrimBased(..)
     )
-import Darcs.Test.Patch.Arbitrary.RepoPatch
+import Darcs.Test.Patch.Arbitrary.Mergeable
 import Darcs.Test.Patch.Merge.Checked ( CheckedMerge(..) )
 import Darcs.Test.Patch.RepoModel ( RepoState, ModelOf )
 import Darcs.Test.Patch.WithState ( PropagateShrink )
@@ -30,7 +30,7 @@ instance ( ArbitraryPrim prim
          , PrimPatch prim
          , ApplyState prim ~ RepoState (ModelOf prim)
          ) =>
-         ArbitraryRepoPatch (RepoPatchV2 prim) where
+         ArbitraryMergeable (RepoPatchV2 prim) where
   notRepoPatchV1 = Just (NotRepoPatchV1 (\case {}))
 
 instance PrimPatch prim => CheckedMerge (RepoPatchV2 prim) where

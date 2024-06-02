@@ -1,4 +1,4 @@
-module Darcs.Test.Patch.Properties.RepoPatch
+module Darcs.Test.Patch.Properties.Mergeable
     ( propConsistentTreeFlattenings
     , propConsistentReorderings
     , propResolutionsDontConflict
@@ -18,20 +18,21 @@ import Darcs.Test.Patch.Arbitrary.PatchTree
 import Darcs.Test.Patch.Merge.Checked ( CheckedMerge )
 import Darcs.Test.Patch.Types.MergeableSequence ( MergeableSequence, mergeableSequenceToRL )
 import Darcs.Test.Patch.WithState
-import Darcs.Test.Patch.RepoModel ( RepoModel, repoApply, showModel, eqModel, RepoState
-                                  , Fail, maybeFail, ModelOf )
+import Darcs.Test.Patch.RepoModel
+  ( Fail, ModelOf, RepoApply, RepoModel, RepoState
+  , eqModel, maybeFail, repoApply, showModel
+  )
 import Darcs.Test.Util.TestResult ( TestResult, failed, rejected, succeeded )
 
 import Darcs.Util.Printer ( text, redText, ($$), vsep )
 
-import Darcs.Patch.Conflict ( Conflict(..), ConflictDetails(..), Unravelled )
-import Darcs.Patch.Apply ( Apply(..) )
-import Darcs.Patch.Merge ( Merge, mergeList )
+import Darcs.Patch.Conflict ( ConflictDetails(..), Unravelled )
+import Darcs.Patch.Merge ( CleanMerge, mergeList )
 import Darcs.Patch.Permutations ( permutationsRL, (=\~/=) )
-import Darcs.Patch.RepoPatch ( Commute, RepoPatch )
+import Darcs.Patch.RepoPatch
 import Darcs.Patch.Show ( displayPatch )
 
-import Darcs.Patch.Witnesses.Eq ( Eq2, isIsEq )
+import Darcs.Patch.Witnesses.Eq ( isIsEq )
 import Darcs.Patch.Witnesses.Ordered ( RL(..) )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(..), unseal, Sealed2(..) )
 import Darcs.Patch.Witnesses.Show ( Show2 )
@@ -56,13 +57,14 @@ propConsistentTreeFlattenings :: forall rp prim model.
                                  , RepoState model ~ ApplyState prim
                                  , ApplyState (rp prim) ~ ApplyState prim
                                  , Merge (rp prim)
-                                 , Apply (rp prim)
-                                 , Show2 (rp prim) )
+                                 , Show2 (rp prim)
+                                 , RepoApply (rp prim)
+                                 )
                               => FromPrimT rp prim
                               -> Sealed (WithStartState model (Tree prim))
                               -> TestResult
-propConsistentTreeFlattenings fromPrim (Sealed (WithStartState start t)) =
-  case flattenTree (mapTree fromPrim t) of
+propConsistentTreeFlattenings fromPrim' (Sealed (WithStartState start t)) =
+  case flattenTree (mapTree fromPrim' t) of
     Sealed (G2 flat') ->
       -- Limit the number of tree flattenings to something sane, as
       -- the length of the original list can grow exponentially.
@@ -75,14 +77,15 @@ propConsistentTreeFlattenings fromPrim (Sealed (WithStartState start t)) =
 
 -- | This property states that all reorderings of a sequence of patches,
 -- when applied to the same state, give the same result state.
-propConsistentReorderings :: ( RepoPatch p
-                             , RepoModel (ModelOf p)
-                             , RepoState (ModelOf p) ~ ApplyState p
-                             , CheckedMerge p
-                             , PrimBased p
-                             )
-                          => Sealed2 (WithStartState2 (MergeableSequence p))
-                          -> TestResult
+propConsistentReorderings
+  :: ( RepoModel (ModelOf p)
+     , RepoState (ModelOf p) ~ ApplyState p
+     , CheckedMerge p
+     , PrimBased p
+     , RepoApply p
+     )
+  => Sealed2 (WithStartState2 (MergeableSequence p))
+  -> TestResult
 propConsistentReorderings (Sealed2 (WithStartState2 start ms)) =
   case mapM (repoApply start) $ permutationsRL ps of
     Left e -> failed $ redText "could not apply all reorderings:" $$ text (show e)
@@ -104,7 +107,19 @@ propConsistentReorderings (Sealed2 (WithStartState2 start ms)) =
 
 -- | This property states that the standard conflict resolutions for a
 -- sequence of patches are independent of any reordering of the sequence.
-propResolutionsOrderIndependent :: RepoPatch p => RL p wX wY -> TestResult
+propResolutionsOrderIndependent
+  :: ( Commute p
+     , Conflict p
+     , ShowPatchBasic p
+     , PatchListFormat p
+     , PatchListFormat (PrimOf p)
+     , ShowPatchBasic (PrimOf p)
+     , Eq2 (PrimOf p)
+     , Show2 (PrimOf p)
+     , Commute (PrimOf p)
+     )
+  => RL p wX wY
+  -> TestResult
 propResolutionsOrderIndependent ps =
     check $ map withConflictParts pss
   where
@@ -143,7 +158,16 @@ listEqBy _ _ _ = False
 
 -- | This property states that the standard conflict resolutions for a
 -- sequence of patches do not themselves conflict with each other.
-propResolutionsDontConflict :: RepoPatch p => RL p wX wY -> TestResult
+propResolutionsDontConflict
+  :: ( Conflict p
+     , PatchListFormat p
+     , ShowPatchBasic p
+     , CleanMerge (PrimOf p)
+     , PatchListFormat (PrimOf p)
+     , ShowPatchBasic (PrimOf p)
+     )
+  => RL p wX wY
+  -> TestResult
 propResolutionsDontConflict patches =
   case mergeList $ catMaybes $ map conflictMangled $ resolveConflicts NilRL patches of
     Right _ -> succeeded

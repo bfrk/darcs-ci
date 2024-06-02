@@ -55,6 +55,8 @@ instance ShrinkModel Prim where
   -- no shrinking for now
   shrinkModelPatch _ = []
 
+instance RepoApply Prim
+
 ----------------------------------------------------------------------
 -- * QuickCheck generators
 

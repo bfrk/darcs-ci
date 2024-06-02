@@ -13,7 +13,7 @@ set -x
 darcs log -t $VERSION
 darcs log -t $VERSION | grep -q $VERSION
 
-runghc release/gen-version-info.hs $VERSION
+cabal run release/gen-version-info.hs $VERSION
 tarballpath=$(cabal sdist | tail -1)
 test -f $tarballpath
 
