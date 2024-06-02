@@ -15,6 +15,7 @@
 --  the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 --  Boston, MA 02110-1301, USA.
 
+{-# OPTIONS_GHC -Wno-unrecognised-warning-flags #-}
 {-# OPTIONS_GHC -Wno-x-data-list-nonempty-unzip #-}
 module Darcs.UI.Commands.ShowAuthors
     ( showAuthors, Spelling, compiledAuthorSpellings, canonizeAuthor, rankAuthors
