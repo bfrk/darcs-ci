@@ -15,6 +15,11 @@
 --  the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 --  Boston, MA 02110-1301, USA.
 
+-- to suppress an irrelevant warning GHC 9.10 and 9.12
+-- NE.unzip is shifting to being monomorphic but our usage already is
+{-# OPTIONS_GHC -Wno-x-data-list-nonempty-unzip #-}
+-- to suppress warnings about the above warning flag in other GHCs :-)
+{-# OPTIONS_GHC -Wno-unrecognised-warning-flags #-}
 module Darcs.UI.Commands.ShowAuthors
     ( showAuthors, Spelling, compiledAuthorSpellings, canonizeAuthor, rankAuthors
     ) where

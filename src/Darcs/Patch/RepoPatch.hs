@@ -1,3 +1,6 @@
+-- Darcs.Prelude import only needed for ~ for GHC 9.10+, so will generate
+-- a warning on older GHCs
+{-# OPTIONS_GHC -Wno-unused-imports #-}
 module Darcs.Patch.RepoPatch
     ( RepoPatch
     , AnnotateRP
@@ -23,6 +26,8 @@ module Darcs.Patch.RepoPatch
     , Unwind(..)
     ) where
 
+import Darcs.Prelude
+
 import Darcs.Patch.Annotate ( AnnotateRP )
 import Darcs.Patch.Apply ( Apply(..) )
 import Darcs.Patch.Commute ( Commute(..) )
@@ -30,7 +35,7 @@ import Darcs.Patch.Conflict ( Conflict(..) )
 import Darcs.Patch.Effect ( Effect(..) )
 import Darcs.Patch.FileHunk ( IsHunk(..) )
 import Darcs.Patch.Format ( PatchListFormat(..) )
-import Darcs.Patch.FromPrim ( PrimPatchBase(..), PrimOf(..), FromPrim(..), ToPrim(..) )
+import Darcs.Patch.FromPrim ( PrimPatchBase(..), PrimOf, FromPrim(..), ToPrim(..) )
 import Darcs.Patch.Inspect ( PatchInspect(..) )
 import Darcs.Patch.Merge ( Merge(..) )
 import Darcs.Patch.Read ( ReadPatch(..) )
