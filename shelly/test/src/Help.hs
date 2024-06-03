@@ -4,7 +4,11 @@ module Help (
 ) where
 
 import Shelly
+#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ < 706
+import Prelude hiding ( catch, FilePath )
+#else
 import Prelude hiding ( FilePath )
+#endif
 import Test.HUnit
 import Control.Monad.Trans ( MonadIO )
 
