@@ -40,12 +40,18 @@ import System.IO ( Handle, hFlush, stderr, stdout )
 import Control.Monad (when, (>=>))
 import Control.Monad.Base
 import Control.Monad.Trans.Control
+#if !MIN_VERSION_base(4,13,0)
+import Control.Applicative (Applicative, (<$>))
+#endif
 import Filesystem (isDirectory, listDirectory)
 import System.PosixCompat.Files( getSymbolicLinkStatus, isSymbolicLink )
 import Filesystem.Path.CurrentOS (FilePath, encodeString, relative)
 import qualified Filesystem.Path.CurrentOS as FP
 import qualified Filesystem as FS
 import Data.IORef (readIORef, modifyIORef, IORef)
+#if !MIN_VERSION_base(4,13,0)
+import Data.Monoid (mappend)
+#endif
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 import Control.Exception (SomeException, catch, throwIO, Exception)
@@ -65,8 +71,10 @@ newtype Sh a = Sh {
       unSh :: ReaderT (IORef State) IO a
   } deriving (Applicative, Monad, MonadIO, MonadReader (IORef State), Functor, Catch.MonadMask)
 
+#if MIN_VERSION_base(4,13,0)
 instance MonadFail Sh where
   fail = liftIO . fail
+#endif
 
 instance MonadBase IO Sh where
     liftBase = Sh . ReaderT . const

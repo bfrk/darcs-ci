@@ -14,7 +14,7 @@ cabal update && cabal install darcs
 ```
 
 with a recent cabal (version 3.2 or later is recommended). Any version of
-ghc from 8.8 up to 9.8 should work.
+ghc from 8.2 up to 9.8 should work.
 
 From inside a clone or a source dist, use
 

@@ -1,4 +1,5 @@
 -- | This module is a subset of the defunct regex-compat-tdfa.
+{-# LANGUAGE CPP #-}
 module Darcs.Util.Regex
     ( Regex
     , mkRegex
@@ -9,6 +10,9 @@ module Darcs.Util.Regex
 import Darcs.Prelude
 
 import Control.Exception ( throw )
+#if !MIN_VERSION_base(4,13,0)
+import Control.Monad.Fail
+#endif
 import Text.Regex.Base
     ( RegexContext(matchM)
     , RegexMaker(makeRegexOptsM)
@@ -23,7 +27,16 @@ newtype RegexFail a = RegexFail { runRegexFail :: Either String a }
   -- The subtlety here is that only in base-4.13.0 the fail method
   -- in class Monad was removed. For earlier versions, regex-tdfa
   -- calls the fail from class Monad, not the one from class MonadFail.
+#if MIN_VERSION_base(4,13,0)
   deriving (Functor, Applicative, Monad)
+#else
+  deriving (Functor, Applicative)
+
+instance Monad RegexFail where
+  RegexFail (Left e) >>= _ = RegexFail (Left e)
+  RegexFail (Right r) >>= k = k r
+  fail = RegexFail . Left
+#endif
 
 instance MonadFail RegexFail where
   fail = RegexFail . Left
