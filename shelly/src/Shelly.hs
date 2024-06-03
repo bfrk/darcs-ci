@@ -124,6 +124,10 @@ import qualified Data.Text as T
 import qualified Data.ByteString as BS
 import Data.ByteString (ByteString)
 
+#if !MIN_VERSION_base(4,13,0)
+import Data.Monoid (mempty, mappend, (<>))
+#endif
+
 import Filesystem.Path.CurrentOS hiding (concat, fromText, (</>), (<.>))
 import Filesystem hiding (canonicalizePath)
 import qualified Filesystem.Path.CurrentOS as FP
