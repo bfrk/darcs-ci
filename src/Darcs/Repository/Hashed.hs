@@ -38,6 +38,7 @@ module Darcs.Repository.Hashed
 import Darcs.Prelude
 
 import Control.Monad ( unless, when )
+import Data.List ( foldl' )
 import System.Directory
     ( copyFile
     , createDirectoryIfMissing

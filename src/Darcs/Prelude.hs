@@ -26,7 +26,6 @@ it to the Prelude import.
 module Darcs.Prelude
     ( module Prelude
     , module Control.Applicative
-    , module Data.List
     , module Data.Monoid
     , Semigroup(..)
     , module Data.Traversable
@@ -60,14 +59,9 @@ import Prelude hiding
     ,
       -- used by various code for no particularly good reason
       lookup, pred
-#if MIN_VERSION_base(4,20,0)
-    , -- because it's in the new Prelude but only in Data.List in older GHCs
-      foldl'
-#endif
     )
 
 import Control.Applicative ( Applicative(..), (<$>), (<*>) )
-import Data.List ( foldl' )
 import Data.Monoid ( Monoid(..) )
 import Data.Semigroup ( Semigroup(..) )
 import Data.Traversable ( traverse )
