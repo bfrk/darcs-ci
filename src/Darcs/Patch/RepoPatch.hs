@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 module Darcs.Patch.RepoPatch
     ( RepoPatch
     , AnnotateRP
@@ -24,10 +23,6 @@ module Darcs.Patch.RepoPatch
     , Unwind(..)
     ) where
 
-#if MIN_VERSION_base(4,20,0)
-import Darcs.Prelude
-#endif
-
 import Darcs.Patch.Annotate ( AnnotateRP )
 import Darcs.Patch.Apply ( Apply(..) )
 import Darcs.Patch.Commute ( Commute(..) )
@@ -35,7 +30,7 @@ import Darcs.Patch.Conflict ( Conflict(..) )
 import Darcs.Patch.Effect ( Effect(..) )
 import Darcs.Patch.FileHunk ( IsHunk(..) )
 import Darcs.Patch.Format ( PatchListFormat(..) )
-import Darcs.Patch.FromPrim ( PrimPatchBase(..), PrimOf, FromPrim(..), ToPrim(..) )
+import Darcs.Patch.FromPrim ( PrimPatchBase(..), PrimOf(..), FromPrim(..), ToPrim(..) )
 import Darcs.Patch.Inspect ( PatchInspect(..) )
 import Darcs.Patch.Merge ( Merge(..) )
 import Darcs.Patch.Read ( ReadPatch(..) )

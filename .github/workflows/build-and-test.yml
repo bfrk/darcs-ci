@@ -27,12 +27,11 @@ jobs:
           - 9.4.8
           - 9.6.4
           - 9.8.2
-          - 9.10.1
         cabal:
           - '3.10'
     env:
       builddocs: ${{ matrix.ghc == '9.4.5' }}
-      runtests: ${{ matrix.ghc == '8.4.4' || matrix.ghc == '9.10.1' }}
+      runtests: ${{ matrix.ghc == '8.4.4' || matrix.ghc == '9.8.2' }}
       tests-to-run: # e.g. -t=EXAMPLE
       testcmd: cabal run -- darcs-test -j=6 -f=123 -i=yn -c=yn --hide
       ACTIONS_ALLOW_UNSECURE_COMMANDS: true

@@ -1,5 +1,1 @@
 packages: .
-
-allow-newer: serialise:base
-allow-newer: cborg:base
-allow-newer: haskeline:base

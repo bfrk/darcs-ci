@@ -59,6 +59,7 @@ import System.Directory
     , removeDirectoryRecursive
     , removeFile
     , renameDirectory
+    , copyPermissions
     )
 import System.FilePath( (</>) )
 import System.IO ( openFile, IOMode(WriteMode), hClose )
@@ -526,6 +527,7 @@ storePatchIndex cdir inv_hash (PatchIndex pids fidspans fpspans infom) = do
               debugMessage "Patch index created"
               return tmpdir
   removeDirectoryRecursive cdir `catch` \(_ :: IOError) -> return ()
+  copyPermissions darcsdir tmpdir
   renameDirectory tmpdir cdir
 
 decodeFile :: Binary a => FilePath -> IO a
