@@ -1,5 +1,5 @@
 {-# LANGUAGE ScopedTypeVariables, DeriveDataTypeable, OverloadedStrings,
-             FlexibleInstances, IncoherentInstances, CPP,
+             FlexibleInstances, IncoherentInstances,
              TypeFamilies, ExistentialQuantification #-}
 
 -- | A module for shell-like programming in Haskell.
@@ -127,10 +127,6 @@ import System.Process( CmdSpec(..), StdStream(CreatePipe, UseHandle), CreateProc
 import qualified Data.Text as T
 import qualified Data.ByteString as BS
 import Data.ByteString (ByteString)
-
-#if !MIN_VERSION_base(4,13,0)
-import Data.Monoid (mempty, mappend, (<>))
-#endif
 
 import Filesystem.Path.CurrentOS hiding (concat, fromText, (</>), (<.>))
 import Filesystem hiding (canonicalizePath)

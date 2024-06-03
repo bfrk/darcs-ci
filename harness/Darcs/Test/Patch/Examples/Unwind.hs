@@ -8,7 +8,6 @@
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE PartialTypeSignatures #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE CPP #-}
 module Darcs.Test.Patch.Examples.Unwind where
 
 import Darcs.Prelude
@@ -38,9 +37,6 @@ import Darcs.Test.Patch.V1Model
 import Darcs.Test.Patch.WithState
 import Darcs.Test.TestOnly.Instance ()
 
-#if MIN_VERSION_base(4,12,0) && !MIN_VERSION_base(4,13,0)
-import Control.Monad.Fail
-#endif
 import Data.ByteString.Char8 ( pack )
 import qualified Data.ByteString.Lazy.Char8 as BLC
 import Data.Constraint
@@ -240,9 +236,7 @@ instance Applicative ErrorFail where
   liftA2 f (ErrorFail v1) (ErrorFail v2) = ErrorFail (f v1 v2)
 instance Monad ErrorFail where
   ErrorFail v >>= f = f v
-#if MIN_VERSION_base(4,12,0)
 instance MonadFail ErrorFail where
-#endif
   fail = error
 
 -- For now this code isn't used, it just demonstrates how example4 is broken in V1
