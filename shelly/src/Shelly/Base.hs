@@ -31,11 +31,7 @@ module Shelly.Base
     , addTrailingSlash
   ) where
 
-#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ < 706
-import Prelude hiding (FilePath, catch)
-#else
 import Prelude hiding (FilePath)
-#endif
 
 import Data.Text (Text)
 import System.Process( StdStream(..) )

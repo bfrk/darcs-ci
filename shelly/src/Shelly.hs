@@ -1,5 +1,5 @@
 {-# LANGUAGE ScopedTypeVariables, DeriveDataTypeable, OverloadedStrings,
-             FlexibleInstances, IncoherentInstances,
+             FlexibleInstances, IncoherentInstances, CPP,
              TypeFamilies, ExistentialQuantification #-}
 
 -- | A module for shell-like programming in Haskell.
@@ -98,11 +98,7 @@ import Shelly.Find
 import Control.Monad ( when, unless, void, forM, filterM, liftM2 )
 import Control.Monad.Trans ( MonadIO )
 import Control.Monad.Reader (ask)
-#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ < 706
-import Prelude hiding ( readFile, FilePath, catch)
-#else
 import Prelude hiding ( readFile, FilePath)
-#endif
 import Data.Char ( isAlphaNum, isSpace )
 import Data.Typeable
 import Data.IORef
@@ -312,7 +308,7 @@ runCommand handles st exe args = findExe exe >>= \fullExe ->
   where
     findExe :: FilePath -> Sh FilePath
     findExe
-#if defined(mingw32_HOST_OS) || (defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ < 708)
+#if defined(mingw32_HOST_OS)
       fp
 #else
       _fp
@@ -327,7 +323,7 @@ runCommand handles st exe args = findExe exe >>= \fullExe ->
           -- non-Windows < 7.8 has a bug for read-only file systems
           -- https://github.com/yesodweb/Shelly.hs/issues/56
           -- it would be better to specifically detect that bug
-#if defined(mingw32_HOST_OS) || (defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ < 708)
+#if defined(mingw32_HOST_OS)
           Left _ -> return fp
 #else
           Left err -> liftIO $ throwIO $ userError err
