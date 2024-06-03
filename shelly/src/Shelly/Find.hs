@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 -- | File finding utiliites for Shelly
 -- The basic 'find' takes a dir and gives back a list of files.
@@ -12,9 +11,6 @@ module Shelly.Find
 import Prelude hiding (FilePath)
 import Shelly.Base
 import Control.Monad (foldM)
-#if !MIN_VERSION_base(4,13,0)
-import Data.Monoid (mappend)
-#endif
 import System.PosixCompat.Files( getSymbolicLinkStatus, isSymbolicLink )
 import Filesystem (isDirectory)
 import Filesystem.Path.CurrentOS (encodeString)
