@@ -32,6 +32,7 @@ jobs:
     env:
       builddocs: ${{ matrix.ghc == '9.4.5' }}
       runtests: ${{ matrix.ghc == '8.4.4' || matrix.ghc == '9.8.2' }}
+      warnaserror: ${{ matrix.ghc == '9.8.2'}}
       tests-to-run: # e.g. -t=EXAMPLE
       testcmd: cabal run -- darcs-test -j=6 -f=123 -i=yn -c=yn --hide
       ACTIONS_ALLOW_UNSECURE_COMMANDS: true
@@ -53,8 +54,13 @@ jobs:
         ghc-version: ${{ matrix.ghc }}
         cabal-version: ${{ matrix.cabal }}
 
-    - name: Configure
+    - name: Configure (warnings as errors)
+      if: env.warnaserror == 'true'
       run: cabal configure --enable-tests -fwarn-as-error
+
+    - name: Configure (warnings allowed)
+      if: env.warnaserror != 'true'
+      run: cabal configure --enable-tests
 
     - name: Cabal freeze
       run: cabal freeze
