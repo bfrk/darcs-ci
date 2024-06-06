@@ -16,7 +16,7 @@
 --
 -- > {-# LANGUAGE OverloadedStrings #-}
 -- > {-# LANGUAGE ExtendedDefaultRules #-}
--- > {-# OPTIONS_GHC -fno-warn-type-defaults #-}
+-- > {-# OPTIONS_GHC -Wno-type-defaults #-}
 -- > import Shelly
 -- > import qualified Data.Text as T
 -- > default (T.Text)
@@ -211,7 +211,7 @@ instance (CmdArg arg, ShellCmd result) => ShellCmd ([arg] -> result) where
 --
 -- > {-# LANGUAGE OverloadedStrings #-}
 -- > {-# LANGUAGE ExtendedDefaultRules #-}
--- > {-# OPTIONS_GHC -fno-warn-type-defaults #-}
+-- > {-# OPTIONS_GHC -Wno-type-defaults #-}
 -- > import Shelly
 -- > import qualified Data.Text as T
 -- > default (T.Text)

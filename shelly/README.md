@@ -106,7 +106,7 @@ This includes setting line buffering if you are dealing with text and not binary
 ~~~~~ {.haskell}
     {-# LANGUAGE OverloadedStrings #-}
     {-# LANGUAGE ExtendedDefaultRules #-}
-    {-# OPTIONS_GHC -fno-warn-type-defaults #-}
+    {-# OPTIONS_GHC -Wno-type-defaults #-}
     import Shelly
     import Data.Text as T
     default (T.Text)

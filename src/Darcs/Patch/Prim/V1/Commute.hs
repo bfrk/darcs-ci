@@ -1,4 +1,4 @@
-{-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 module Darcs.Patch.Prim.V1.Commute () where
 
 import Darcs.Prelude

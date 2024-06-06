@@ -1,4 +1,4 @@
-{-# OPTIONS_GHC -fno-warn-missing-fields #-}
+{-# OPTIONS_GHC -Wno-missing-fields #-}
 module Main ( main, run, defaultConfig, Config(..) ) where
 
 import Darcs.Prelude

@@ -1,6 +1,3 @@
--- Darcs.Prelude import only needed for ~ for GHC 9.10+, so will generate
--- a warning on older GHCs
-{-# OPTIONS_GHC -Wno-unused-imports #-}
 module Darcs.Patch.RepoPatch
     ( RepoPatch
     , AnnotateRP

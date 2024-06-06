@@ -1,5 +1,5 @@
 {- | Conflict resolution for 'RepoPatchV3' -}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 module Darcs.Patch.V3.Resolution () where
 
 import qualified Data.Set as S

@@ -1,5 +1,5 @@
 {-# LANGUAGE CPP, OverloadedStrings, ExtendedDefaultRules, RecordWildCards #-}
-{-# OPTIONS_GHC -fno-warn-type-defaults #-}
+{-# OPTIONS_GHC -Wno-type-defaults #-}
 module Darcs.Test.Shell
     ( Format(..)
     , DiffAlgorithm(..)

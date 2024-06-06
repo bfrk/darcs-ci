@@ -1,5 +1,5 @@
 {-# LANGUAGE ViewPatterns #-}
-{-# OPTIONS_GHC -fno-warn-unused-imports #-}
+{-# OPTIONS_GHC -Wno-unused-imports #-}
 -- Copyright (C) 2009 Ganesh Sittampalam
 --
 -- Permission is hereby granted, free of charge, to any person

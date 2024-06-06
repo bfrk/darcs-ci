@@ -2,7 +2,7 @@
              FlexibleInstances, FlexibleContexts, IncoherentInstances,
              TypeFamilies, ExistentialQuantification, RankNTypes,
              ImpredicativeTypes #-}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 
 -- | A module for shell-like programming in Haskell.
 -- Shelly's focus is entirely on ease of use for those coming from shell scripting.
@@ -18,7 +18,7 @@
 --
 -- > {-# LANGUAGE OverloadedStrings #-}
 -- > {-# LANGUAGE ExtendedDefaultRules #-}
--- > {-# OPTIONS_GHC -fno-warn-type-defaults #-}
+-- > {-# OPTIONS_GHC -Wno-type-defaults #-}
 -- > import Shelly
 -- > import qualified Data.Text as T
 -- > default (T.Text)

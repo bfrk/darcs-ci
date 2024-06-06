@@ -1,4 +1,4 @@
-{-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 {-# LANGUAGE ViewPatterns, UndecidableInstances #-}
 module Darcs.Patch.Prim.V1.Show
     ( showHunk )

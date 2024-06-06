@@ -1,4 +1,4 @@
-{-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 {-# LANGUAGE OverloadedStrings, UndecidableInstances #-}
 module Darcs.Patch.Prim.FileUUID.Show
     ( displayHunk )
