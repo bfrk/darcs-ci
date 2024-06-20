@@ -343,7 +343,7 @@ aPrimPair repo
 
 type instance ModelOf Prim.Prim = V1Model
 
-instance ShrinkModel Prim.Prim where
+instance ShrinkModel V1Model Prim.Prim where
   shrinkModelPatch s = aModelShrink s
 
 -- Prim1
@@ -352,7 +352,7 @@ instance ArbitraryState Prim1 where
   arbitraryState = aPrim
   arbitraryStatePair = aPrimPair
 
-instance ShrinkModel Prim1 where
+instance ShrinkModel V1Model Prim1 where
   shrinkModelPatch s = map (mapSeal V1.Prim) $ shrinkModelPatch s
 
 instance PropagateShrink Prim1 Prim1 where
@@ -367,7 +367,7 @@ instance ArbitraryState Prim2 where
   arbitraryState = aPrim
   arbitraryStatePair = aPrimPair
 
-instance ShrinkModel Prim2 where
+instance ShrinkModel V1Model Prim2 where
   shrinkModelPatch s = map (mapSeal V2.Prim) $ shrinkModelPatch s
 
 instance PropagateShrink Prim2 Prim2 where

@@ -206,6 +206,7 @@ record = DarcsCommand
       = O.logfile
       ^ O.umask
       ^ O.setScriptsExecutable
+      ^ O.canonize
     allOpts = basicOpts `withStdOpts` advancedOpts
 
 -- | commit is an alias for record
@@ -271,7 +272,8 @@ doRecord repository cfg files pw@(pending :> working) = do
     debugMessage "I'm slurping the repository."
     debugMessage "About to select changes..."
     let da = O.diffAlgorithm ? cfg
-    (chs :> _ ) <- runInvertibleSelection (canonizeFL da $ pending +>+ working) $
+        maybeCanonize = if O.canonize ? cfg then canonizeFL da else id
+    (chs :> _ ) <- runInvertibleSelection (maybeCanonize $ pending +>+ working) $
                       selectionConfigPrim
                           First "record" (patchSelOpts cfg)
                           (Just (primSplitter (O.diffAlgorithm ? cfg)))

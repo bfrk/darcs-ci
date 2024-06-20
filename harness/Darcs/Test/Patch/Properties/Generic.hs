@@ -36,6 +36,7 @@ module Darcs.Test.Patch.Properties.Generic
     , PatchProperty
     , MergeProperty
     , SequenceProperty
+    , SequencePairProperty
     , propPrimPairCoverage
     ) where
 
@@ -99,6 +100,7 @@ type PatchProperty p = forall wA wB. p wA wB -> TestResult
 -- type PairProperty p = forall wA wB. (p :> p) wA wB -> TestResult
 type MergeProperty p = forall wA wB. (FL p :\/: FL p) wA wB -> TestResult
 type SequenceProperty p = forall wA wB. RL p wA wB -> TestResult
+type SequencePairProperty p = forall wA wB. (RL p :> RL p) wA wB -> TestResult
 
 -- | @A^^=A@
 invertInvolution :: (Invert p, Eq2 p, ShowPatchBasic p) => p wA wB -> TestResult

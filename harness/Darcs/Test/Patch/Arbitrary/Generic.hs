@@ -1,7 +1,6 @@
 {-# LANGUAGE UndecidableInstances #-}
 module Darcs.Test.Patch.Arbitrary.Generic
   ( ArbitraryPrim(..)
-  , ShrinkPrim
   , TestablePrim
   , PrimBased(..)
   , NullPatch(..)
@@ -119,11 +118,6 @@ class ( ArbitraryState prim
         default usesV1Model :: ModelOf prim ~ V1Model => Maybe (Dict (ModelOf prim ~ V1Model))
         usesV1Model = Just Dict
 
-type ShrinkPrim prim =
-  ( ShrinkModel prim
-  , PropagateShrink prim prim
-  )
-
 type TestablePrim prim =
   ( Apply prim, CleanMerge prim, Commute prim, Invert prim, Eq2 prim, Show2 prim
   , PatchListFormat prim, ShowPatchBasic prim, ReadPatch prim
@@ -139,7 +133,7 @@ class ( Effect p, Show2 (OnlyPrim p), ArbitraryState (OnlyPrim p)
       , ModelOf p ~ ModelOf (OnlyPrim p)
       )
     => PrimBased p where
-  type OnlyPrim p :: * -> * -> *
+  type OnlyPrim p :: Type -> Type -> Type
   primEffect :: OnlyPrim p wX wY -> FL (PrimOf p) wX wY
   liftFromPrim :: OnlyPrim p wX wY -> p wX wY
 

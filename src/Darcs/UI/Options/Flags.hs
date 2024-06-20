@@ -46,6 +46,7 @@ data DarcsFlag = Version | ExactVersion | ListCommands
                | Verify AbsolutePath | VerifySSL AbsolutePath
                | RemoteDarcsOpt String
                | EditDescription | NoEditDescription
+               | Canonize | NoCanonize
                | Toks String
                | EditLongComment | NoEditLongComment | PromptLongComment
                | KeepDate | NoKeepDate

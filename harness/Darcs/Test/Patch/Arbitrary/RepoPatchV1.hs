@@ -46,7 +46,7 @@ import Darcs.Test.Patch.WithState
 type Patch = RepoPatchV1 V1.Prim
 
 instance
-  (ArbitraryPrim prim, PrimPatch prim, ApplyState prim ~ RepoState (ModelOf prim))
+  (ArbitraryPrim prim, ApplyState prim ~ RepoState (ModelOf prim))
   => ArbitraryMergeable (RepoPatchV1 prim)
   where
 

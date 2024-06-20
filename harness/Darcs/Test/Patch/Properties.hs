@@ -93,7 +93,12 @@ import qualified Darcs.Test.Patch.Examples.Set1 as Ex1
 import qualified Darcs.Test.Patch.Examples.Set2 as Ex2
 
 import Darcs.Test.Patch.Properties.Check( Check(..) )
-import Darcs.Test.Patch.Properties.Generic ( PatchProperty, MergeProperty, SequenceProperty )
+import Darcs.Test.Patch.Properties.Generic
+    ( MergeProperty
+    , PatchProperty
+    , SequenceProperty
+    , SequencePairProperty
+    )
 import qualified Darcs.Test.Patch.Properties.Generic as PropG
 import qualified Darcs.Test.Patch.Properties.Mergeable as PropM
 import qualified Darcs.Test.Patch.Properties.RepoPatchV3 as PropR3
@@ -239,7 +244,7 @@ qc_V1P1 =
 qc_V2 :: forall prim wXx wYy.
          ( PrimPatch prim
          , Show1 (ModelOf prim)
-         , ShrinkModel prim
+         , ShrinkModel (ModelOf prim) prim
          , PropagateShrink prim prim
          , ArbitraryPrim prim
          , RepoState (ModelOf prim) ~ ApplyState prim
@@ -266,7 +271,7 @@ qc_V2 _ =
 qc_V3 :: forall prim wXx wYy.
          ( PrimPatch prim
          , Show1 (ModelOf prim)
-         , ShrinkModel prim
+         , ShrinkModel (ModelOf prim) prim
          , PropagateShrink prim prim
          , ArbitraryPrim prim
          , RepoState (ModelOf prim) ~ ApplyState prim
@@ -292,7 +297,7 @@ qc_Named_V3
   :: forall prim wX wY
    . ( PrimPatch prim
      , Show1 (ModelOf prim)
-     , ShrinkModel prim
+     , ShrinkModel (ModelOf prim) prim
      , PropagateShrink prim prim
      , ArbitraryPrim prim
      , RepoState (ModelOf prim) ~ ApplyState prim
@@ -323,7 +328,7 @@ mergeablePatchProperties
    . ( ArbitraryMergeable p
      , MergeablePatch p
      , Show1 (ModelOf p)
-     , ShrinkModel (PrimOf p)
+     , ShrinkModel (ModelOf p) (PrimOf p)
      , PrimBased p
      , RepoApply p
      , RepoApply (PrimOf p)
@@ -344,7 +349,7 @@ difficultPatchProperties
   :: forall p
    . ( ArbitraryMergeable p
      , MergeablePatch p
-     , ShrinkModel (PrimOf p)
+     , ShrinkModel (ModelOf p) (PrimOf p)
      , MightHaveDuplicate p
      , Show1 (ModelOf p)
      , PrimBased p
@@ -383,7 +388,7 @@ evenMoreDifficultPatchProperties
   :: forall p
    . ( ArbitraryMergeable p
      , MergeablePatch p
-     , ShrinkModel (PrimOf p)
+     , ShrinkModel (ModelOf p) (PrimOf p)
      , Show1 (ModelOf p)
      , PrimBased p
      , RepoApply p
@@ -392,7 +397,7 @@ evenMoreDifficultPatchProperties
   => [Test]
 evenMoreDifficultPatchProperties =
   [ testProperty "resolutions are invariant under reorderings"
-      (withSequence (PropM.propResolutionsOrderIndependent :: SequenceProperty p))
+      (withSequencePair (PropM.propResolutionsOrderIndependent :: SequencePairProperty p))
   ]
 
 pair_properties :: forall p gen

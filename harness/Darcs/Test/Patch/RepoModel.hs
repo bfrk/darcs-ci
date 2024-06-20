@@ -7,6 +7,7 @@ import Control.Exception ( SomeException )
 import Darcs.Patch.Apply ( Apply, ApplyState )
 import Darcs.Patch.Info ( PatchInfo )
 import Darcs.Patch.Witnesses.Ordered ( FL, RL, mapFL, mapRL )
+import Darcs.Patch.Witnesses.Show ( Show1 )
 
 import Test.QuickCheck ( Gen )
 
@@ -32,15 +33,14 @@ instance RepoApply p => RepoApply (FL p) where
 instance RepoApply p => RepoApply (RL p) where
   patchNames = concat . mapRL patchNames
 
-class RepoModel model where
-  type RepoState model :: (* -> *) -> *
+class Show1 model => RepoModel model where
+  type RepoState model :: (Type -> Type) -> Type
   showModel :: model x -> String
   eqModel :: model x -> model x -> Bool
   aSmallRepo :: Gen (model x)
-  appliedPatchNames :: model x -> [PatchInfo]
   repoApply :: (RepoApply p, ApplyState p ~ RepoState model) => model x -> p x y -> Fail (model y)
 
-type family ModelOf (p :: * -> * -> *) :: * -> *
+type family ModelOf (p :: Type -> Type -> Type) :: Type -> Type
 
 type instance ModelOf (FL p) = ModelOf p
 type instance ModelOf (RL p) = ModelOf p

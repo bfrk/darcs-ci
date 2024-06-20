@@ -62,8 +62,8 @@ general_patchTests
    . ( ArbitraryMergeable p, CheckedMerge p
      , RP.RepoPatch p
      , PrimBased p, Commute (OnlyPrim p), ArbitraryPrim (OnlyPrim p)
-     , ShrinkModel (PrimOf p)
-     , Show1 (ModelOf (PrimOf p)), Show2 p
+     , ShrinkModel (ModelOf p) (PrimOf p)
+     , Show1 (ModelOf p), Show2 p
      , RepoApply (PrimOf p)
      )
   => [Test]

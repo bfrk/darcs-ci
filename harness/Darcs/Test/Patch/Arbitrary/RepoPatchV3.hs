@@ -25,7 +25,7 @@ instance MightHaveDuplicate (RepoPatchV3 prim) where
 type instance ModelOf (RepoPatchV3 prim) = ModelOf prim
 
 instance
-  (ArbitraryPrim prim, PrimPatch prim, ApplyState prim ~ RepoState (ModelOf prim))
+  (ArbitraryPrim prim, ApplyState prim ~ RepoState (ModelOf prim))
   => ArbitraryMergeable (RepoPatchV3 prim)
   where
 

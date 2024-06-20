@@ -10,10 +10,10 @@ import Darcs.Util.Path ( AnchoredPath, encodeWhite, anchorPath )
 import Darcs.Util.Printer ( Doc, text, packedString )
 import Darcs.Util.Tree ( Tree )
 
--- | Given a state type (parameterized over a monad m :: * -> *), this gives us
+-- | Given a state type (parameterized over a monad m :: Type -> Type), this gives us
 -- the type of the key with which we can lookup an item (or object) in the
 -- state.
-type family ObjectIdOf (state :: (* -> *) -> *)
+type family ObjectIdOf (state :: (Type -> Type) -> Type)
 
 -- | We require from such a key (an 'ObjectId') that it has a canonical way
 -- to format itself to a 'Doc'. For historical reasons, this takes a parameter

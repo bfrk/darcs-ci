@@ -6,6 +6,7 @@ module Darcs.Test.Patch.Arbitrary.Mergeable
   , withTriple
   , withFork
   , withSequence
+  , withSequencePair
   , withAllSequenceItems
   , NotRepoPatchV1(..)
   , ArbitraryMergeable(..)
@@ -17,7 +18,11 @@ import Darcs.Test.Patch.WithState
 import Darcs.Test.Patch.RepoModel
 import Darcs.Test.Patch.Arbitrary.Generic ( ArbitraryPrim(..), PrimBased )
 import Darcs.Test.Patch.Merge.Checked ( CheckedMerge )
-import Darcs.Test.Patch.Types.MergeableSequence ( mergeableSequenceToRL, MergeableSequence(..) )
+import Darcs.Test.Patch.Types.MergeableSequence
+  ( MergeableSequence(..)
+  , WithSplit(..)
+  , mergeableSequenceToRL
+  )
 import Darcs.Test.Patch.Types.Pair ( Pair(..) )
 import Darcs.Patch.Witnesses.Sealed
 import Darcs.Patch.Witnesses.Ordered hiding ( Fork )
@@ -33,7 +38,7 @@ data NotRepoPatchV1 p = NotRepoPatchV1 (forall prim . Dict (p ~ RepoPatchV1 prim
 -- | Class to simplify type signatures and superclass constraints.
 class
   ( ArbitraryPrim (PrimOf p)
-  , ModelOf p ~ ModelOf (PrimOf p)
+  , RepoModel (ModelOf p)
   , ApplyState p ~ RepoState (ModelOf p)
   ) => ArbitraryMergeable p where
 
@@ -85,10 +90,16 @@ withSequence
 withSequence prop (Sealed2 (WithStartState2 _ ms))
   = prop (mergeableSequenceToRL ms)
 
+withSequencePair
+  :: (CheckedMerge p, PrimBased p)
+  => (forall wX wY. (RL p :> RL p) wX wY -> r)
+  -> Sealed2 (WithStartState2 (WithSplit (MergeableSequence p))) -> r
+withSequencePair prop (Sealed2 (WithStartState2 _ (WithSplit n ms)))
+  = prop (splitAtRL n (mergeableSequenceToRL ms))
+
 withAllSequenceItems
   :: (CheckedMerge p, PrimBased p, Monoid r)
   => (forall wX wY. p wX wY -> r)
   -> Sealed2 (WithStartState2 (MergeableSequence p)) -> r
 withAllSequenceItems prop (Sealed2 (WithStartState2 _ ms))
   = mconcat . mapRL prop . mergeableSequenceToRL $ ms
-

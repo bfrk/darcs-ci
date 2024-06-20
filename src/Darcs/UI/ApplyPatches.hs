@@ -48,7 +48,7 @@ import Darcs.Util.English ( presentParticiple )
 import Darcs.Util.Printer ( vcat, text )
 import Darcs.Util.Tree( Tree )
 
-data PatchProxy (p :: * -> * -> *) = PatchProxy
+data PatchProxy (p :: Type -> Type -> Type) = PatchProxy
 
 -- |This class is a hack to abstract over pull/apply and rebase pull/apply.
 class PatchApplier pa where

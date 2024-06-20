@@ -2,6 +2,9 @@ module Darcs.Test.UI.Commands.Test.IndexedApply
   ( IndexedApply(..)    
   ) where
 
+
+import Darcs.Prelude hiding ( Monad(..) )
+
 import Darcs.Util.IndexedMonad
 
 import Darcs.Patch.Witnesses.Ordered ( FL(..), RL(..) )
@@ -10,7 +13,7 @@ import Darcs.UI.Commands.Test.Impl ( PatchSeq(..) )
 
 -- our own indexed monad Apply class
 class IndexedApply p where
-  type ApplyState p :: * -> * -> * -> *
+  type ApplyState p :: Type -> Type -> Type -> Type
   apply :: Monad (ApplyState p) => p wX wY -> ApplyState p wX wY ()
   unapply :: Monad (ApplyState p) => p wX wY -> ApplyState p wY wX ()
 

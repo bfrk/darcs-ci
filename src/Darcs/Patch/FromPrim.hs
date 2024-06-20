@@ -13,7 +13,7 @@ import Darcs.Patch.Ident ( PatchId )
 import Darcs.Patch.Info ( PatchInfo )
 
 class PrimPatch (PrimOf p) => PrimPatchBase p where
-    type PrimOf (p :: (* -> * -> *)) :: (* -> * -> *)
+    type PrimOf (p :: Type -> Type -> Type) :: Type -> Type -> Type
 
 instance PrimPatchBase p => PrimPatchBase (FL p) where
     type PrimOf (FL p) = PrimOf p

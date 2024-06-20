@@ -476,11 +476,11 @@ Library
 
     ghc-options:      -Wall -funbox-strict-fields -fwarn-tabs
 
+    -- It's a deliberate choice to use NoMonoLocalBinds and tolerate this warning long-term,
+    -- as otherwise we'd need 10s of extra type signatures in our code.
+    -- See https://mail.haskell.org/pipermail/glasgow-haskell-users/2010-November/019464.html
     if impl(ghc >= 9.4.1)
       ghc-options:    -Wno-gadt-mono-local-binds
-
-    if impl(ghc >= 9.0.1)
-      ghc-options:    -Wno-star-is-type
 
     -- The terminfo package cannot be built on Windows.
     if flag(terminfo) && !os(windows)
@@ -682,9 +682,6 @@ test-suite darcs-test
 
   if impl(ghc >= 9.4.1)
     ghc-options:    -Wno-gadt-mono-local-binds
-
-  if impl(ghc >= 9.0.1)
-    ghc-options:    -Wno-star-is-type
 
   if flag(threaded)
     ghc-options:    -threaded

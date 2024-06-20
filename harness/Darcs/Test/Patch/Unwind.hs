@@ -50,8 +50,8 @@ testSuite
      , PrimPatchBase p
      , PrimBased p
      , ArbitraryPrim (OnlyPrim p)
-     , ShrinkModel (PrimOf p)
-     , Show1 (ModelOf (PrimOf p))
+     , ShrinkModel (ModelOf p) (PrimOf p)
+     , Show1 (ModelOf p)
      , Show2 p
      , CheckedMerge p
      , Commute (OnlyPrim p)

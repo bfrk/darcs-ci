@@ -106,9 +106,8 @@ the following state:
 
   @res@
 
-    A list of sets of @name@s, initially empty, with the @name@s of patches
-    involved in conflicts that are (partially) resolved. Used to post
-    process the result (see below).
+    A list of two-element sets of @name@s, representing resolved direct
+    conflicts. Used to post process the result (see below).
 
 We inspect any conflictor in the trailing 'RL', as well as any patch whose
 @name@ is in @todo@ throughout the history, terminating early if the
@@ -131,10 +130,10 @@ transitive conflict and not all patches involved may have been fully
 resolved. (Remember that the commute rules for V3 are such that a patch
 depends on a conflictor if it depends on /any/ of the patches involved in
 the conflict.) To make sure that the result is independent of the order of
-patches, we need to remember the set of directly conflicting patches (by
-adding it to @res@). When the traversal terminates, we use this information
-to join any components connected by these sets into larger components. See
-the discussion below for details.
+patches, we need to remember all direct conflicts that the patch is part of
+(by adding them to @res@). When the traversal terminates, we use this
+information to join any components connected by these sets into larger
+components. See the discussion below for details.
 
 In both cases, if the patch is conflicted, we insert any patch that the
 candidate conflicts with into @todo@ (and remove the patch itself). Note
@@ -181,22 +180,35 @@ findComponents context patches = go S.empty [] [] context patches NilFL where
   go todo done res cs (ps :<: p) passedby
     | isConflicted p || ident p `S.member` todo
     , Just (_ :> p') <- commuteFL (p :> passedby) =
-        go (updTodo p todo) (updDone p' done) res cs ps (p :>: passedby)
+        go todo' (updDone p' done) res cs ps (p :>: passedby)
     | otherwise =
-        go (updTodo p todo) done (updRes p res) cs ps (p :>: passedby)
+        go todo' done (updRes p res) cs ps (p :>: passedby)
+    where
+      todo' = S.map ctxId (conflicts p) <> (ident p -| todo)
   go todo done res _ NilRL _
     | S.null todo = sort $ map purgeDeps $ foldr joinOverlapping done res
   go todo done res (cs :<: p) NilRL passedby
     | ident p `S.member` todo
     , Just (_ :> p') <- commuteFL (p :> passedby) =
-        go (updTodo p todo) (updDone p' done) res cs NilRL (p :>: passedby)
+        go todo' (updDone p' done) res cs NilRL (p :>: passedby)
     | otherwise =
-        go (updTodo p todo) done (updRes p res) cs NilRL (p :>: passedby)
+        go todo' done (updRes p res) cs NilRL (p :>: passedby)
+    where
+      todo' = ident p -| todo
   go _ _ _ NilRL NilRL _ = error "autsch, hit the bottom"
 
-  updTodo p todo = S.map ctxId (conflicts p) <> (ident p -| todo)
   updDone p' done = joinOrAddNew (allConflicts p') done
-  updRes p res = S.map ctxId (allConflicts p) : res
+
+  -- Update the list of resolved direct conflicts, to be used in the last step
+  -- to join unresolved transitive conflict sets. Note that this list contains
+  -- only pairs i.e. two-element sets: for each conflicted patch p, we pair it
+  -- with any patch it conflicts with. See the discussion of the algorithm
+  -- above and tests/issue2727-resolutions-order-independent10.sh for an
+  -- example case, found by QuickCheck.
+  updRes p res = map (ident p `pair`) (conflictIds p) ++ res
+    where
+      pair a b = S.fromList [a, b]
+      conflictIds = S.toList . S.map ctxId . conflicts
 
   conflicts (Conflictor _ x _) = x
   conflicts _ = S.empty

@@ -25,7 +25,6 @@ import Darcs.Test.Util.QuickCheck ( alpha, uniques, bSized )
 import Darcs.Test.Patch.RepoModel
 
 import Darcs.Patch.Apply( applyToState )
-import Darcs.Patch.Info ( PatchInfo )
 import Darcs.Patch.Prim.FileUUID.Core( UUID(..), Object(..) )
 import Darcs.Patch.Prim.FileUUID.Apply( ObjectMap(..) )
 import Darcs.Patch.Witnesses.Sealed ( Sealed, seal )
@@ -44,10 +43,7 @@ import Test.QuickCheck
 ----------------------------------------------------------------------
 -- * Model definition
 
-data FileUUIDModel wX = FileUUIDModel
-  { _repoMap :: ObjectMap Fail
-  , _repoPatches :: [PatchInfo]
-  }
+newtype FileUUIDModel wX = FileUUIDModel { _repoMap :: ObjectMap Fail }
 
 ----------------------------------------
 -- Instances
@@ -90,10 +86,10 @@ rootId = UUID "ROOT"
 
 -- | The root directory of a repository.
 root :: FileUUIDModel wX -> (UUID, Object Fail)
-root (FileUUIDModel repo _) = (rootId, fromJust $ unFail $ getObject repo rootId)
+root (FileUUIDModel repo) = (rootId, fromJust $ unFail $ getObject repo rootId)
 
 repoObjects :: FileUUIDModel wX -> [(UUID, Object Fail)]
-repoObjects (FileUUIDModel repo _) =
+repoObjects (FileUUIDModel repo) =
     [(uuid, obj uuid) | uuid <- unFail $ listObjects repo]
   where
     obj uuid = fromJust $ unFail $ getObject repo uuid
@@ -192,7 +188,7 @@ aRepo maxFiles maxDirs = do
   let (dirids, ids') = splitAt dirsNo ids
       fileids = take filesNo ids'
   objectmap <- aDir (rootId : dirids) fileids
-  return $ FileUUIDModel (objectMap $ M.fromList objectmap) []
+  return $ FileUUIDModel $ objectMap $ M.fromList objectmap
 
 -- | Generate small repositories.
 -- Small repositories help generating (potentially) conflicting patches.
@@ -201,9 +197,7 @@ instance RepoModel FileUUIDModel where
   aSmallRepo = do filesNo <- frequency [(3, return 1), (1, return 2)]
                   dirsNo <- frequency [(3, return 1), (1, return 0)]
                   aRepo filesNo dirsNo
-  appliedPatchNames (FileUUIDModel _ patches) = patches
-  repoApply (FileUUIDModel state patches) patch =
-    FileUUIDModel <$> applyToState patch state <*> pure (patches ++ patchNames patch)
+  repoApply (FileUUIDModel state) patch = FileUUIDModel <$> applyToState patch state
   showModel = show
   eqModel r1 r2 = nonEmptyRepoObjects r1 == nonEmptyRepoObjects r2
 

@@ -33,7 +33,7 @@ import Darcs.Patch.RepoPatch
 import Darcs.Patch.Show ( displayPatch )
 
 import Darcs.Patch.Witnesses.Eq ( isIsEq )
-import Darcs.Patch.Witnesses.Ordered ( RL(..) )
+import Darcs.Patch.Witnesses.Ordered ( RL(..), (:>)(..) )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(..), unseal, Sealed2(..) )
 import Darcs.Patch.Witnesses.Show ( Show2 )
 
@@ -118,32 +118,39 @@ propResolutionsOrderIndependent
      , Show2 (PrimOf p)
      , Commute (PrimOf p)
      )
-  => RL p wX wY
+  => (RL p :> RL p) wX wY
   -> TestResult
-propResolutionsOrderIndependent ps =
-    check $ map withConflictParts pss
+propResolutionsOrderIndependent (ctx :> ps) =
+    check [withConflictParts cs qs | cs <- css, qs <- pss]
   where
-    withConflictParts qs =
-      (Sealed qs, map conflictParts $ resolveConflicts NilRL qs)
+    withConflictParts cs qs =
+      (Sealed (cs :> qs), map conflictParts $ resolveConflicts cs qs)
     pss = permutationsRL ps
+    css = permutationsRL ctx
     check [] = error "we should have at least one permutation!"
     check [_] = rejected
     check xs = eql xs
     eql [] = error "impossible"
     eql [_] = succeeded
-    eql ((ps1,r1):(ps2,r2):rs)
-      | listEqBy eqUnravelled r1 r2 = eql ((ps2,r2):rs)
+    eql ((cps1,r1):(cps2,r2):rs)
+      | listEqBy eqUnravelled r1 r2 = eql ((cps2,r2):rs)
       | otherwise =
           failed $ vsep
             [ redText "resolutions differ: r1="
             , text (show r1)
             , redText "r2="
             , text (show r2)
-            , text "for patches"
-            , unseal displayPatch ps1
+            , unseal displayPair cps1
             , text "versus"
-            , unseal displayPatch ps2
+            , unseal displayPair cps2
             ]
+    displayPair (as :> bs) =
+      vsep
+        [ text "for context"
+        , displayPatch as
+        , text "and patches"
+        , displayPatch bs
+        ]
 
 -- | Equality for 'Unravelled' is modulo order of patches.
 eqUnravelled :: (Commute p, Eq2 p) => Unravelled p wX -> Unravelled p wX -> Bool

@@ -212,6 +212,9 @@ module Darcs.UI.Options.All
     , ChangesFormat (..)
     , changesFormat
 
+    -- record
+    , canonize
+
     -- replace
     , tokens
     , forceReplace
@@ -1226,6 +1229,15 @@ changesFormat = withDefault Nothing
   , __machineReadable (Just MachineReadable)
   , RawNoArg [] ["number"] F.NumberPatches (Just NumberPatches) "number the changes"
   , RawNoArg [] ["count"] F.Count (Just CountPatches) "output count of changes" ]
+
+-- ** record, amend
+
+-- | This one is only for testing. It allows to reconstruct failing QC test cases
+-- for named patches.
+canonize :: PrimDarcsOption Bool
+canonize = withDefault True
+  [ RawNoArg [] ["canonize"] F.Canonize True "canonize changes before recording"
+  , RawNoArg [] ["no-canonize"] F.NoCanonize False "do not canonize changes before recording" ]
 
 -- ** replace
 

@@ -253,6 +253,7 @@ data PatchHeaderConfig = PatchHeaderConfig
   , author :: Maybe String
   , patchname :: Maybe String
   , askLongComment :: Maybe O.AskLongComment
+  , canonizeChanges :: Bool
   }
 
 patchHeaderConfig :: Config -> PatchHeaderConfig
@@ -263,6 +264,7 @@ patchHeaderConfig cfg = PatchHeaderConfig
   , author          = O.author ? cfg
   , patchname       = O.patchname ? cfg
   , askLongComment  = O.askLongComment ? cfg
+  , canonizeChanges = O.canonize ? cfg
   }
 
 -- | Update the metadata for a patch.
@@ -283,7 +285,8 @@ updatePatchHeader :: forall p wX wY wZ . (RepoPatch p, ApplyState p ~ Tree)
                   -> HijackT IO (Maybe String, PatchInfoAnd p wX wZ)
 updatePatchHeader verb ask_deps pSelOpts PatchHeaderConfig{..} oldp chs = do
 
-    let newchs = canonizeFL diffAlgorithm (patchcontents oldp +>+ chs)
+    let maybeCanonize = if canonizeChanges then canonizeFL diffAlgorithm else id
+    let newchs = maybeCanonize (patchcontents oldp +>+ chs)
 
     let old_pdeps = getdeps oldp
     newdeps <-

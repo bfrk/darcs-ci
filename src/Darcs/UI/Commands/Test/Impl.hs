@@ -61,7 +61,7 @@ import Darcs.Repository.ApplyPatches ( DefaultIO, runDefault )
 -- |This type is used to track the state of the testing tree.
 -- For example, 'Testing IO wX wY Int' requires that the testing
 -- tree start in state 'wX', and leaves it in state 'wY'.
-newtype Testing m (wX :: *) (wY :: *) a = Testing { unTesting :: m a }
+newtype Testing m (wX :: Type) (wY :: Type) a = Testing { unTesting :: m a }
 
 -- |Once we've finished tracking down a test failure, we no longer care
 -- about tracking the actual state of the testing tree. This witness
@@ -111,8 +111,8 @@ liftTesting m = TestingEnv $ ReaderT $ \_ -> m
 -- the only real implementation, the unit tests for testing are based on
 -- mock implementations.
 class Monad m => TestRunner m where
-  type ApplyPatchReqs m (p :: * -> * -> *) :: Constraint
-  type DisplayPatchReqs m (p :: * -> * -> *) :: Constraint
+  type ApplyPatchReqs m (p :: Type -> Type -> Type) :: Constraint
+  type DisplayPatchReqs m (p :: Type -> Type -> Type) :: Constraint
 
   -- |Output a message
   writeMsg :: String -> m wX wX ()
@@ -191,12 +191,12 @@ exitCodeToTestResult (ExitFailure 125) = Untestable
 exitCodeToTestResult (ExitFailure n) = Testable (Failure (TestFailure n))
 
 -- |A 'TestCmd' runs the test on a given repository state.
-data TestCmd = TestCmd (forall (wX :: *) . TestingIO wX wX (TestResult wX))
+data TestCmd = TestCmd (forall (wX :: Type) . TestingIO wX wX (TestResult wX))
 
 runTestCmd :: TestCmd -> TestingIO wX wX (TestResult wX)
 runTestCmd (TestCmd cmd) = cmd
 
-mkTestCmd :: (forall (wX :: *) . IO (TestResult wX)) -> TestCmd
+mkTestCmd :: (forall (wX :: Type) . IO (TestResult wX)) -> TestCmd
 mkTestCmd cmd = TestCmd (Testing cmd)
 
 -- |'PatchSeq' is a sequence of patches, implemented as a binary tree,
@@ -270,7 +270,7 @@ type StrategyResultSealed p =
 -- what should be done with the final result of the strategy. This for
 -- example allows a post-processing "minimise blame" pass to be run.
 -- The witnesses make it hard to wrap this up in a standard abstraction.
-data WithResult (m :: * -> * -> * -> *) p a =
+data WithResult (m :: Type -> Type -> Type -> Type) p a =
   WithResult
   { runWithResult
       :: forall wSuccess wFailure
