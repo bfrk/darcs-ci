@@ -51,9 +51,8 @@ echo three > file1
 darcs record -a -m resolve_file1
 # test this indeed resolves only the conflict in file1
 darcs mark-conflicts > LOG 2>&1
-grep 'Marking conflicts' LOG
-grep 'file2' LOG
-not grep 'file1' LOG
+grep 'Marking conflicts .*file2' LOG
+not grep 'Marking conflicts .*file1' LOG
 not darcs whatsnew file1
 # remove the markup
 darcs revert -a
@@ -61,8 +60,7 @@ darcs revert -a
 echo yyd | darcs record --ask-deps -m explicit
 # test resolution is still only partial
 darcs mark-conflicts > LOG 2>&1
-grep 'Marking conflicts' LOG
-grep 'file2' LOG
-not grep 'file1' LOG
+grep 'Marking conflicts .*file2' LOG
+not grep 'Marking conflicts .*file1' LOG
 not darcs whatsnew file1
 cd ..

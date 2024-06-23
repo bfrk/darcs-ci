@@ -53,9 +53,10 @@ cd R1
 darcs pull --allow-conflicts ../B3 -a
 darcs pull --allow-conflicts ../B1 -a
 darcs pull --allow-conflicts ../B2 -a
+not darcs whatsnew
 # patches
 darcs pull --mark-conflicts ../B4 -a >log 2>&1
-not darcs whatsnew >>log
+not darcs whatsnew
 cd ..
 
 rm -rf R2
@@ -65,8 +66,9 @@ cd R2
 darcs pull --allow-conflicts ../B2 -a
 darcs pull --allow-conflicts ../B3 -a
 darcs pull --allow-conflicts ../B1 -a
+not darcs whatsnew
 darcs pull --mark-conflicts ../B4 -a >log 2>&1
-not darcs whatsnew >>log
+not darcs whatsnew
 cd ..
 
 diff -u R1/log R2/log >&2

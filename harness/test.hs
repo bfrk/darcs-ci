@@ -12,6 +12,7 @@ import Darcs.Test.Shell
 import qualified Darcs.Test.UI
 import Darcs.Util.Exception ( die )
 
+import Control.Concurrent ( setNumCapabilities )
 import Control.Monad ( filterM, unless, when )
 import Data.List ( isPrefixOf, isSuffixOf, sort )
 import GHC.IO.Encoding ( textEncodingName )
@@ -222,6 +223,7 @@ run conf = do
 main :: IO ()
 main = do hSetBuffering stdout NoBuffering
           clp  <- cmdArgs_ defaultConfigAnn
+          setNumCapabilities (threads clp)
           run $
             if full clp then clp
               { formats  = "123"

@@ -285,7 +285,6 @@ qc_V3 _ =
   ]
   ++ mergeablePatchProperties @(RepoPatchV3 prim)
   ++ difficultPatchProperties @(RepoPatchV3 prim)
-  ++ evenMoreDifficultPatchProperties @(RepoPatchV3 prim)
 
 instance (ArbitraryPrim prim, ApplyState prim ~ RepoState (ModelOf prim)) =>
          ArbitraryMergeable (Named (RepoPatchV3 prim)) where
@@ -378,27 +377,12 @@ difficultPatchProperties =
       (withFork (PropG.mergeEitherWay :: MergeProperty p))
   , testProperty "merge commute"
       (withFork (PropG.mergeCommute :: MergeProperty p))
+  , testProperty "resolutions are invariant under reorderings"
+      (withSequencePair (PropM.propResolutionsOrderIndependent :: SequencePairProperty p))
   ]
   where
     com :: (p :> p) wA wB -> Maybe ((p :> p) wA wB)
     com = commute
-
--- | Properties that fail with Named patches even with RepoPatchV3 underneath.
-evenMoreDifficultPatchProperties
-  :: forall p
-   . ( ArbitraryMergeable p
-     , MergeablePatch p
-     , ShrinkModel (ModelOf p) (PrimOf p)
-     , Show1 (ModelOf p)
-     , PrimBased p
-     , RepoApply p
-     , RepoApply (PrimOf p)
-     )
-  => [Test]
-evenMoreDifficultPatchProperties =
-  [ testProperty "resolutions are invariant under reorderings"
-      (withSequencePair (PropM.propResolutionsOrderIndependent :: SequencePairProperty p))
-  ]
 
 pair_properties :: forall p gen
                  . ( Show gen, Arbitrary gen, MightHaveDuplicate p
