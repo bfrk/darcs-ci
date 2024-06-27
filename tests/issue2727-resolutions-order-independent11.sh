@@ -2,9 +2,6 @@
 
 . lib
 
-# with darcs-1 we get a crash, so test disabled
-skip-formats darcs-1
-
 rm -rf B
 darcs init B
 cd B

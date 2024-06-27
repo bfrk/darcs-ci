@@ -2,7 +2,8 @@
 
 . lib
 
-# With darcs-1 pulling vqqtzxvvzjgddgwlezwj into R1 crashes darcs!
+# With darcs-1 this test fails due to commutation bugs; it would crash had
+# we not made the algorithm more tolerant wrt such bugs.
 # With darcs-2 the final diff fails because (1) conflicting alternatives
 # aren't sorted and (2) it reports one alternative with an inverse pair of
 # hunk 'ztsvuthkcyyrmwfyytjn 1' mixed in. The latter would be eliminated when

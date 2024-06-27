@@ -6,6 +6,7 @@
 
 . lib
 
+# Crashes with darcs-1 ("precondition violated" in findConflicting)
 skip-formats darcs-1
 
 rm -rf B

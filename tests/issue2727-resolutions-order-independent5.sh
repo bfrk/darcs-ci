@@ -2,7 +2,9 @@
 
 . lib
 
-skip-formats darcs-1 darcs-2
+if grep myers .darcs/defaults; then
+  skip-formats darcs-1
+fi
 
 # so we always record non-canonized patches
 pwd="$PWD"
@@ -179,7 +181,7 @@ echo nnnnyd | darcs record --ask-deps -m intermediate
 # depend on fxhzfgiulmnzgaojznqo
 echo yyyd | darcs record --ask-deps -am fmujbnoeyizgucisozes
 darcs mark-conflicts >log 2>&1
-darcs whatsnew >>log
+darcs whatsnew >>log || not darcs whatsnew >>log
 cd ..
 
 rm -rf R2
@@ -193,7 +195,7 @@ darcs pull -a --allow-conflicts ../R1 -p angtickssosgnvqxpbgw
 # darcs pull -a --allow-conflicts ../R1 -p dofgshqaobnokmjqygyu
 darcs pull -a --allow-conflicts ../R1 -p fmujbnoeyizgucisozes
 darcs mark-conflicts >log 2>&1
-darcs whatsnew >>log
+darcs whatsnew >>log || not darcs whatsnew >>log
 cd ..
 
 # In R1 we see

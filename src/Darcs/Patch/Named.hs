@@ -49,7 +49,7 @@ import Data.List.Ordered ( nubSort )
 import qualified Data.Set as S
 
 import Darcs.Patch.CommuteFn ( MergeFn, commuterIdFL, mergerIdFL )
-import Darcs.Patch.Conflict ( Conflict(..), findConflicting )
+import Darcs.Patch.Conflict ( Conflict(..), findConflicting, isConflicted )
 import Darcs.Patch.Debug ( PatchDebug(..) )
 import Darcs.Patch.Effect ( Effect(effect) )
 import Darcs.Patch.FileHunk ( IsHunk(..) )
@@ -85,8 +85,8 @@ import Darcs.Patch.Viewing () -- for ShowPatch FL instances
 import Darcs.Patch.Witnesses.Eq ( Eq2(..) )
 import Darcs.Patch.Witnesses.Ordered
     ( (:>)(..), (:\/:)(..), (:/\:)(..)
-    , FL(..), RL(..), mapFL, mapRL, mapFL_FL, mapRL_RL
-    , (+<+), (+>+), concatRLFL, reverseFL
+    , FL(..), RL(..), mapFL, mapFL_FL, mapRL_RL
+    , (+<+), (+>+), concatRLFL, reverseFL, reverseRL
     , (+<<+), (+>>+), concatFL
     )
 import Darcs.Patch.Witnesses.Sealed ( Sealed, mapSeal )
@@ -274,7 +274,7 @@ instance ( Commute p
          , ShowPatch p
          ) =>
          Conflict (Named p) where
-  isConflicted (NamedP _ _ ps) = or (mapFL isConflicted ps)
+  numConflicts (NamedP _ _ ps) = sum (mapFL numConflicts ps)
   resolveConflicts context patches =
     case separate patches NilFL NilFL of
       resolved :> unresolved ->
@@ -378,27 +378,29 @@ instance ( Commute p
       -- explicitly depends on the ones we actually conflict with.
       conflictingNames ctx p =
         case findConflicting ctx p of
-          ctx' :> p' :> ps ->
-            onlyRealConflicts ctx' p' ps S.empty
+          _ :> p' :> ps -> onlyRealConflicts p' (reverseRL ps) S.empty
 
       -- This filters out patches that 'findConflicting' finds
       -- that are /only/ there because they explicitly depend on
       -- patches that are actually in conflict.
       onlyRealConflicts
-        :: (Commute q, Conflict q, Ident q, ShowPatch q)
-        => RL q wA wB
-        -> q wB wC
-        -> RL q wC wD
-        -> S.Set (PatchId q)
-        -> S.Set (PatchId q)
-      onlyRealConflicts _ _ NilRL r = r
-      onlyRealConflicts ctx p (qs :<: q) r =
-        case findConflicting (ctx :<: p +<+ qs) q of
-          _ :> _ :> qcs
-            | ident p `elem` mapRL ident qcs ->
-                onlyRealConflicts ctx p qs (ident q `S.insert` r)
-            | otherwise ->
-                onlyRealConflicts ctx p qs r
+        :: Named p wB wC
+        -> FL (Named p) wC wD
+        -> S.Set (PatchInfo)
+        -> S.Set (PatchInfo)
+      onlyRealConflicts _ NilFL r = r
+      onlyRealConflicts p (q :>: qs) r =
+        case commute (p :> q) of
+          Just (_ :> p')
+            | numConflicts p /= numConflicts p' ->
+                onlyRealConflicts p' qs (patch2patchinfo q `S.insert` r)
+            | otherwise -> onlyRealConflicts p' qs r
+          Nothing ->
+            -- This should be 'error "impossible"' but due to commutation
+            -- bugs in V1 and V2 we would run into those errors quite a lot.
+            -- So we act as if the rest (qs) are real conflicts. Which is
+            -- wrong but better than crashing darcs for those legacy formats.
+            S.fromList (mapFL patch2patchinfo qs) `S.union` r
 
 instance (PrimPatchBase p, Unwind p) => Unwind (Named p) where
   fullUnwind (NamedP _ _ ps) = squashUnwound (mapFL_FL fullUnwind ps)

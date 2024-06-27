@@ -8,7 +8,7 @@ import Darcs.Prelude
 import Data.List ( partition, sort )
 
 import Darcs.Patch.Commute ( commuteFL )
-import Darcs.Patch.Conflict ( Conflict(..), mangleOrFail )
+import Darcs.Patch.Conflict ( Conflict(..), isConflicted, mangleOrFail )
 import Darcs.Patch.Ident ( Ident(..), SignedId(..), StorableId(..) )
 import Darcs.Patch.Prim ( PrimPatch )
 import Darcs.Patch.Prim.WithName ( PrimWithName, wnPatch )
@@ -67,8 +67,8 @@ typically with fewer alternatives, it has some disadvantages in practice:
 
 instance (SignedId name, StorableId name, PrimPatch prim) =>
          Conflict (RepoPatchV3 name prim) where
-  isConflicted Conflictor{} = True
-  isConflicted Prim{} = False
+  numConflicts (Conflictor _ x _) = S.size x
+  numConflicts Prim{} = 0
   resolveConflicts context =
       map resolveOne . conflictingAlternatives context
     where
