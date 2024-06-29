@@ -24,7 +24,6 @@ import Darcs.Repository.Identify ( identifyRepositoryFor, ReadingOrWriting(..) )
 import Darcs.Repository.Pristine
     ( applyToTentativePristine
     , createPristineDirectoryTree
-    , writePristine
     )
 import Darcs.Repository.Hashed
     ( copyHashedInventory
@@ -136,7 +135,7 @@ import Darcs.Patch.Witnesses.Ordered
     )
 import Darcs.Patch.PatchInfoAnd ( PatchInfoAnd, extractHash )
 
-import Darcs.Util.Tree( Tree, emptyTree )
+import Darcs.Util.Tree( Tree )
 
 import Darcs.Util.Exception ( catchall )
 import Darcs.Util.English ( englishNum, Noun(..) )
@@ -389,7 +388,6 @@ copyRepoOldFashioned :: forall p wU wR. (RepoPatch p, ApplyState p ~ Tree)
                         -> IO ()
 copyRepoOldFashioned fromRepo _toRepo verb withWorkingDir = do
   _toRepo <- revertRepositoryChanges _toRepo
-  _ <- writePristine _toRepo emptyTree
   patches <- readPatches fromRepo
   let k = "Copying patch"
   beginTedious k

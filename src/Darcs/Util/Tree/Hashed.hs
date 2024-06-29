@@ -47,7 +47,7 @@ import Darcs.Util.Hash
     )
 import Darcs.Util.Parser
 import Darcs.Util.Path ( Name, decodeWhiteName, encodeWhiteName )
-import Darcs.Util.Progress ( debugMessage, finishedOneIO, withSizedProgress )
+import Darcs.Util.Progress ( debugMessage )
 import Darcs.Util.Tree
     ( Blob(..)
     , ItemType(..)
@@ -197,14 +197,13 @@ writeDarcsHashed tree' cache = do
   debugMessage "writeDarcsHashed"
   t <- darcsUpdateDirHashes <$> expand tree'
   let items = list t
-  withSizedProgress "Getting pristine" (length items) $ \k -> do
-    sequence_ [readAndWriteBlob k b | (_, File b) <- items]
-    let dirs = darcsFormatDir t : [darcsFormatDir d | (_, SubTree d) <- items]
-    mapM_ (dump k) dirs
+  sequence_ [readAndWriteBlob b | (_, File b) <- items]
+  let dirs = darcsFormatDir t : [darcsFormatDir d | (_, SubTree d) <- items]
+  mapM_ dump dirs
   return (fromHash (darcsTreeHash t))
   where
-    readAndWriteBlob k b = readBlob b >>= dump k
-    dump k x = fsCreateHashedFile cache x >>= finishedOneIO k . encodeValidHash
+    readAndWriteBlob b = readBlob b >>= dump
+    dump x = fsCreateHashedFile cache x
 
 -- | Create a hashed file from a 'Cache' and file content. In case the file
 -- exists it is kept untouched and is assumed to have the right content.
