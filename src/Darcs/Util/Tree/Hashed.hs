@@ -2,6 +2,7 @@
 --
 --  BSD3
 
+{-# OPTIONS_GHC -Wno-orphans #-} -- RULES pragma below
 -- | A few darcs-specific utility functions. These are used for reading and
 -- writing darcs and darcs-compatible hashed trees.
 module Darcs.Util.Tree.Hashed
@@ -29,6 +30,7 @@ import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString.Lazy as BL
 
 import Data.List ( sortBy )
+import qualified Data.List.NonEmpty as NE
 import Data.Maybe ( fromMaybe )
 
 import Darcs.Prelude
@@ -54,13 +56,11 @@ import Darcs.Util.Tree
     , Tree(..)
     , TreeItem(..)
     , addMissingHashes
-    , expand
     , itemHash
-    , list
     , listImmediate
     , makeTreeWithHash
     , readBlob
-    , updateSubtrees
+    , traverseBottomUp
     , updateTree
     )
 import Darcs.Util.Tree.Monad ( TreeIO, runTreeMonad )
@@ -124,10 +124,6 @@ kwDir = BC.pack "directory:"
 -- | Compute a darcs-compatible hash value for a tree-like structure.
 darcsTreeHash :: Tree m -> Hash
 darcsTreeHash = sha256 . darcsFormatDir
-
-darcsUpdateDirHashes :: Tree m -> Tree m
-darcsUpdateDirHashes = updateSubtrees update
-    where update t = t { treeHash = Just (darcsTreeHash t) }
 
 darcsUpdateHashes :: Monad m => Tree m -> m (Tree m)
 darcsUpdateHashes = updateTree update
@@ -193,17 +189,19 @@ readDarcsHashedNosize = readDarcsHashed' True
 
 -- | Write a Tree into a darcs-style hashed directory.
 writeDarcsHashed :: Tree IO -> Cache -> IO PristineHash
-writeDarcsHashed tree' cache = do
-  debugMessage "writeDarcsHashed"
-  t <- darcsUpdateDirHashes <$> expand tree'
-  let items = list t
-  sequence_ [readAndWriteBlob b | (_, File b) <- items]
-  let dirs = darcsFormatDir t : [darcsFormatDir d | (_, SubTree d) <- items]
-  mapM_ dump dirs
-  return (fromHash (darcsTreeHash t))
+writeDarcsHashed tree cache = NE.last <$> traverseBottomUp writeItem tree
   where
-    readAndWriteBlob b = readBlob b >>= dump
+    -- note that traverseBottomUp expands stubs before applying its argument
+    writeItem _ (SubTree t) = dump (darcsFormatDir t)
+    writeItem _ (File (Blob get _)) = get >>= dump
+    writeItem _ (Stub _ _) = error "unexpected Stub encountered"
     dump x = fsCreateHashedFile cache x
+
+-- The idea is that this should eliminate the overhead of the 'reverse' from
+-- 'traverseBottomUp' and the 'last' above.
+{-# RULES
+"last-reverse" forall x. NE.last (NE.reverse x) = NE.head x
+#-}
 
 -- | Create a hashed file from a 'Cache' and file content. In case the file
 -- exists it is kept untouched and is assumed to have the right content.

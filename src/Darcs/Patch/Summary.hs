@@ -30,8 +30,6 @@ import Darcs.Util.Printer
     , ($$)
     , (<+>)
     , empty
-    , minus
-    , plus
     , text
     , vcat
     )
@@ -178,8 +176,8 @@ summChunkToLine machineReadable (SummChunk detail c) =
      | otherwise       = text t <+> x <+> text "duplicate"
    --
    ad 0 = empty
-   ad a = plus <> text (show a)
+   ad a = text "+" <> text (show a)
    rm 0 = empty
-   rm a = minus <> text (show a)
+   rm a = text "-" <> text (show a)
    rp 0 = empty
    rp a = text "r" <> text (show a)

@@ -9,9 +9,8 @@ module Darcs.Util.Printer
     -- * 'Doc' type and structural combinators
       Doc(Doc,unDoc)
     , empty, (<>), (<?>), (<+>), ($$), ($+$), vcat, vsep, hcat, hsep
-    , minus, newline, plus, space, backslash, lparen, rparen
-    , parens, sentence
     -- * Constructing 'Doc's
+    , newline
     , text
     , hiddenText
     , invisibleText
@@ -78,41 +77,9 @@ spaceP   = Both " "  (BC.singleton ' ')
 newlineP :: Printable
 newlineP = S "\n"
 
--- | A 'Doc' representing a space (\" \")
-space :: Doc
-space = unsafeBoth " "  (BC.singleton ' ')
-
 -- | A 'Doc' representing a newline
 newline :: Doc
 newline = unsafeChar '\n'
-
--- | A 'Doc' representing a \"-\"
-minus :: Doc
-minus = unsafeBoth "-"  (BC.singleton '-')
-
--- | A 'Doc' representing a \"+\"
-plus :: Doc
-plus = unsafeBoth "+"  (BC.singleton '+')
-
--- | A 'Doc' representing a \"\\\"
-backslash :: Doc
-backslash = unsafeBoth "\\" (BC.singleton '\\')
-
--- | A 'Doc' that represents @\"(\"@
-lparen :: Doc
-lparen = unsafeBoth  "(" (BC.singleton '(')
-
--- | A 'Doc' that represents @\")\"@
-rparen :: Doc
-rparen = unsafeBoth ")" (BC.singleton ')')
-
--- | prop> parens d = lparen <> d <> rparen
-parens :: Doc -> Doc
-parens d = lparen <> d <> rparen
-
--- | Turn a 'Doc' into a sentence. This appends a ".".
-sentence :: Doc -> Doc
-sentence = (<> text ".")
 
 -- | Format a list of 'FilePath's as quoted text. It deliberately refuses to
 -- use English.andClauses but rather separates the quoted strings only with a

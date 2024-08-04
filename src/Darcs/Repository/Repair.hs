@@ -13,29 +13,28 @@ import System.Directory
     ( createDirectoryIfMissing
     , getCurrentDirectory
     , setCurrentDirectory
-    , withCurrentDirectory
     )
 
 import Darcs.Patch.PatchInfoAnd ( PatchInfoAnd, hopefully, info )
 import Darcs.Patch.Witnesses.Ordered
     ( FL(..)
+    , RL(..)
     , lengthFL
     , mapFL
     , nullFL
-    , reverseFL
     , reverseRL
     )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(..), unFreeLeft, unseal )
 import Darcs.Patch.Apply( ApplyState )
 import Darcs.Patch.Repair ( Repair(applyAndTryToFix) )
-import Darcs.Patch.Info ( displayPatchInfo )
+import Darcs.Patch.Info ( displayPatchInfo, makePatchname )
 import Darcs.Patch.Set ( Origin, PatchSet(..), Tagged(..), patchSet2FL )
 import Darcs.Patch ( RepoPatch, PrimOf, isInconsistent )
 
 import Darcs.Repository.Diff( treeDiff )
 import Darcs.Repository.Flags ( Verbosity(..), DiffAlgorithm )
 import Darcs.Repository.Hashed ( readPatches, writeAndReadPatch )
-import Darcs.Repository.InternalTypes ( Repository, repoCache, repoLocation )
+import Darcs.Repository.InternalTypes ( Repository, repoCache )
 import Darcs.Repository.Paths ( pristineDirPath )
 import Darcs.Repository.Pending ( readPending )
 import Darcs.Repository.Prefs ( filetypeFunction )
@@ -54,7 +53,7 @@ import Darcs.Util.Progress
     )
 import Darcs.Util.Lock( withDelayedDir )
 import Darcs.Util.Path( anchorPath, toFilePath )
-import Darcs.Util.Printer ( putDocLn, text, renderString )
+import Darcs.Util.Printer ( putDocLn, text )
 import Darcs.Util.Hash( showHash )
 import Darcs.Util.Tree( Tree, emptyTree, list, restrict, expand, itemHash, zipTrees )
 import Darcs.Util.Tree.Monad( TreeIO )
@@ -72,40 +71,41 @@ applyAndFixPatchSet r s = do
     liftIO $ tediousSize k $ lengthFL $ patchSet2FL s
     result <- case s of
       PatchSet ts ps -> do
-        (ts', ts_ok) <- applyAndFixTagged (reverseRL ts)
-        (ps', ps_ok) <- applyAndFixPatches (reverseRL ps)
-        return (PatchSet (reverseFL ts') (reverseFL ps'), ts_ok && ps_ok)
+        (ts', ok) <- applyAndFixTagged True NilRL (reverseRL ts)
+        (ps', ok') <- applyAndFixPatches ok NilRL (reverseRL ps)
+        return (PatchSet ts' ps', ok')
     liftIO $ endTedious k
     return result
   where
     k = "Replaying patch"
-    applyAndFixTagged :: FL (Tagged p) wX wY -> TreeIO (FL (Tagged p) wX wY, Bool)
-    applyAndFixTagged NilFL = return (NilFL, True)
-    applyAndFixTagged (Tagged ps t _ :>: ts) = do
-      (ps', ps_ok) <- applyAndFixPatches (reverseRL ps)
-      (ts', ts_ok) <- applyAndFixTagged ts
-      return (Tagged (reverseFL ps') t Nothing :>: ts', ps_ok && ts_ok)
+    applyAndFixTagged
+      :: Bool
+      -> RL (Tagged p) wX wY
+      -> FL (Tagged p) wY wZ
+      -> TreeIO (RL (Tagged p) wX wZ, Bool)
+    applyAndFixTagged ok done NilFL = return (done, ok)
+    applyAndFixTagged ok done (Tagged ps t _ :>: ts) = do
+      (ps', ps_ok) <- applyAndFixPatches ok NilRL (reverseRL ps)
+      applyAndFixTagged ps_ok (done :<: Tagged ps' t Nothing) ts
     applyAndFixPatches
-      :: FL (PatchInfoAnd p) wX wY -> TreeIO (FL (PatchInfoAnd p) wX wY, Bool)
-    applyAndFixPatches NilFL = return (NilFL, True)
-    applyAndFixPatches (p :>: ps) = do
+      :: Bool
+      -> RL (PatchInfoAnd p) wX wY
+      -> FL (PatchInfoAnd p) wY wZ
+      -> TreeIO (RL (PatchInfoAnd p) wX wZ, Bool)
+    applyAndFixPatches ok done NilFL = return (done, ok)
+    applyAndFixPatches ok done (p :>: ps) = do
       mp' <- applyAndTryToFix p
       case isInconsistent . hopefully $ p of
         Just err -> liftIO $ putDocLn err
         Nothing -> return ()
-      liftIO $ finishedOneIO k $ renderString $ displayPatchInfo $ info p
-      (ps', ps_ok) <- applyAndFixPatches ps
+      liftIO $ finishedOneIO k $ show $ makePatchname $ info p
       case mp' of
-        Nothing -> return (p :>: ps', ps_ok)
-        Just (e, p') ->
-          liftIO $ do
-            putStrLn e
-            -- FIXME While this is okay semantically, it means we can't
-            -- run darcs check in a read-only repo
-            p'' <-
-              withCurrentDirectory (repoLocation r) $
-              writeAndReadPatch (repoCache r) p'
-            return (p'' :>: ps', False)
+        Nothing -> do
+          p' <- liftIO $ writeAndReadPatch (repoCache r) p
+          applyAndFixPatches ok (done :<: p') ps
+        Just (e, p') -> do
+          liftIO $ putStrLn e
+          applyAndFixPatches False (done :<: p') ps
 
 data RepositoryConsistency p wR = RepositoryConsistency
   { fixedPristine :: Maybe (Tree IO, Sealed (FL (PrimOf p) wR))
