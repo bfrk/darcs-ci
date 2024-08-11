@@ -497,7 +497,7 @@ forbiddenNames :: [BS.ShortByteString]
 forbiddenNames = [BS.empty, BS.pack [c2w '.'], BS.pack [c2w '.', c2w '.']]
 
 hasPathSeparator :: BS.ShortByteString -> Bool
-hasPathSeparator = BS.elem (fromIntegral (fromEnum '/'))
+hasPathSeparator = B.elem (c2w '/') . BS.fromShort
 
 c2w :: Char -> Word8
 c2w = fromIntegral . fromEnum
