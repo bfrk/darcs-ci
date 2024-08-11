@@ -179,7 +179,7 @@ traverseItemTopDown
 traverseItemTopDown f = go where
   go p i@(File _) = do
     r <- f p i
-    return (NE.singleton r)
+    return (r :| [])
   go p (Stub mkTree _) = mkTree >>= go p . SubTree
   go p i@(SubTree t) = do
     r <- f p i

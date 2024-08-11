@@ -503,7 +503,8 @@ c2w :: Char -> Word8
 c2w = fromIntegral . fromEnum
 
 eqAnycase :: Name -> Name -> Bool
-eqAnycase (Name a) (Name b) = BS.map to_lower a == BS.map to_lower b
+eqAnycase (Name a) (Name b) =
+    B.map to_lower (BS.fromShort a) == B.map to_lower (BS.fromShort b)
   where
     to_lower :: Word8 -> Word8
     to_lower = fromIntegral . fromEnum . toLower . toEnum . fromIntegral
