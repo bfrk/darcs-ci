@@ -8,8 +8,10 @@ module Darcs.Util.File
     , copyTree
       -- * Fetching files
     , fetchFilePS
+    , fetchMmapFilePS
     , fetchFileLazyPS
     , gzFetchFilePS
+    , gzFetchMmapFilePS
     , speculateFileOrUrl
     , copyFileOrUrl
     , Cachable(..)
@@ -22,7 +24,7 @@ module Darcs.Util.File
     ) where
 
 import Darcs.Prelude
-import Darcs.Util.ByteString ( gzReadFilePS )
+import Darcs.Util.ByteString ( gzReadFilePS, gzReadMmapFilePS, mmapFilePS )
 import Darcs.Util.Exception ( catchall, ifDoesNotExistError )
 import Darcs.Util.Global ( defaultRemoteDarcsCmd )
 import Darcs.Util.HTTP ( Cachable(..) )
@@ -190,6 +192,10 @@ copyAndReadFile readfn fou cache = withTemp $ \t -> do
 fetchFilePS :: String -> Cachable -> IO B.ByteString
 fetchFilePS = copyAndReadFile B.readFile
 
+-- | Like 'fetchFilePS' but uses mmap, so use this only for hashed files.
+fetchMmapFilePS :: String -> Cachable -> IO B.ByteString
+fetchMmapFilePS = copyAndReadFile mmapFilePS
+
 -- | @fetchFileLazyPS fileOrUrl cache@ lazily reads the content of its argument
 -- (either a file or an URL). Warning: this function may constitute a fd leak;
 -- make sure to force consumption of file contents to avoid that. See
@@ -205,6 +211,11 @@ fetchFileLazyPS x c =
 -- | Like 'fetchFilePS' but transparently handle gzip compressed files.
 gzFetchFilePS :: String -> Cachable -> IO B.ByteString
 gzFetchFilePS = copyAndReadFile gzReadFilePS
+
+-- | Like 'fetchFilePS' but transparently handle gzip compressed files.
+-- Uses mmap, so use this only for hashed files.
+gzFetchMmapFilePS :: String -> Cachable -> IO B.ByteString
+gzFetchMmapFilePS = copyAndReadFile gzReadMmapFilePS
 
 -- | Initiate background file download for the given file path or URL
 -- to the given location.

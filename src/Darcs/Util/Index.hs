@@ -129,6 +129,7 @@ import Darcs.Util.Progress ( beginTedious, endTedious, finishedOneIO )
 import Control.Monad( when )
 import Control.Exception( catch, SomeException )
 
+import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC
 import Data.ByteString.Internal
     ( c2w, w2c
@@ -242,7 +243,7 @@ peekHash i = do
   return $ if h == nullHash then Nothing else Just (SHA256 h)
 
 nullHash :: BS.ShortByteString
-nullHash = BS.replicate size_hash 0
+nullHash = BS.toShort (B.replicate size_hash 0)
 
 type FileStatus = Maybe F.FileStatus
 

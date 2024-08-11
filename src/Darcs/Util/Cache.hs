@@ -59,8 +59,8 @@ import Darcs.Util.Exception ( catchall, handleOnly )
 import Darcs.Util.File
     ( Cachable(Cachable)
     , copyFileOrUrl
-    , fetchFilePS
-    , gzFetchFilePS
+    , fetchMmapFilePS
+    , gzFetchMmapFilePS
     , speculateFileOrUrl
     , withTemp
     )
@@ -399,10 +399,10 @@ fetchFileUsingCachePrivate fromWhere (Ca cache) hash = do
             debugMessage $
               "In fetchFileUsingCachePrivate I'm directly grabbing file contents from "
               ++ cacheFile
-            x <- gzFetchFilePS cacheFile Cachable
+            x <- gzFetchMmapFilePS cacheFile Cachable
             if not $ checkHash hash x
                 then do
-                    x' <- fetchFilePS cacheFile Cachable
+                    x' <- fetchMmapFilePS cacheFile Cachable
                     unless (checkHash hash x') $ do
                         hPutStrLn stderr $ "Hash failure in " ++ cacheFile
                         fail $ "Hash failure in " ++ cacheFile
@@ -414,12 +414,12 @@ fetchFileUsingCachePrivate fromWhere (Ca cache) hash = do
                 checkCacheReachability c
                 filterBadSources cs >>= ffuc
         | writable c = do
-            debugMessage $ "About to gzFetchFilePS from " ++ show cacheFile
-            x1 <- gzFetchFilePS cacheFile Cachable
-            debugMessage "gzFetchFilePS done."
+            debugMessage $ "About to gzFetchMmapFilePS from " ++ show cacheFile
+            x1 <- gzFetchMmapFilePS cacheFile Cachable
+            debugMessage "gzFetchMmapFilePS done."
             x <- if not $ checkHash hash x1
                      then do
-                        x2 <- fetchFilePS cacheFile Cachable
+                        x2 <- fetchMmapFilePS cacheFile Cachable
                         unless (checkHash hash x2) $ do
                             hPutStrLn stderr $ "Hash failure in " ++ cacheFile
                             removeFile cacheFile
