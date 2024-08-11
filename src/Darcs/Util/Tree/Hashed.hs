@@ -2,7 +2,6 @@
 --
 --  BSD3
 
-{-# OPTIONS_GHC -Wno-orphans #-} -- RULES pragma below
 -- | A few darcs-specific utility functions. These are used for reading and
 -- writing darcs and darcs-compatible hashed trees.
 module Darcs.Util.Tree.Hashed
@@ -60,7 +59,7 @@ import Darcs.Util.Tree
     , listImmediate
     , makeTreeWithHash
     , readBlob
-    , traverseBottomUp
+    , traverseBottomUpR
     , updateTree
     )
 import Darcs.Util.Tree.Monad ( TreeIO, runTreeMonad )
@@ -189,19 +188,13 @@ readDarcsHashedNosize = readDarcsHashed' True
 
 -- | Write a Tree into a darcs-style hashed directory.
 writeDarcsHashed :: Tree IO -> Cache -> IO PristineHash
-writeDarcsHashed tree cache = NE.last <$> traverseBottomUp writeItem tree
+writeDarcsHashed tree cache = NE.head <$> traverseBottomUpR writeItem tree
   where
     -- note that traverseBottomUp expands stubs before applying its argument
     writeItem _ (SubTree t) = dump (darcsFormatDir t)
     writeItem _ (File (Blob get _)) = get >>= dump
     writeItem _ (Stub _ _) = error "unexpected Stub encountered"
     dump x = fsCreateHashedFile cache x
-
--- The idea is that this should eliminate the overhead of the 'reverse' from
--- 'traverseBottomUp' and the 'last' above.
-{-# RULES
-"last-reverse" forall x. NE.last (NE.reverse x) = NE.head x
-#-}
 
 -- | Create a hashed file from a 'Cache' and file content. In case the file
 -- exists it is kept untouched and is assumed to have the right content.

@@ -22,7 +22,7 @@ module Darcs.Util.Tree
     , zipCommonFiles, zipFiles, zipTrees, diffTrees, diffTrees'
     , explodePath, explodePaths, locate, isDir
     , treeHas, treeHasDir, treeHasFile, treeHasAnycase
-    , traverseTopDown, traverseBottomUp
+    , traverseTopDown, traverseBottomUp, traverseBottomUpR
 
     -- * Files (Blobs).
     , readBlob
@@ -45,6 +45,7 @@ import Control.Exception( catch, IOException )
 import Darcs.Util.Path
 import Darcs.Util.Hash
 
+import Data.Bifunctor ( bimap )
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString as B
 import Data.List.NonEmpty ( NonEmpty(..) )
@@ -199,7 +200,17 @@ traverseItemBottomUp
   -> AnchoredPath
   -> TreeItem m
   -> m (NonEmpty a)
-traverseItemBottomUp f path item = NE.reverse <$> go [] path item where
+traverseItemBottomUp f path item = NE.reverse <$> traverseItemBottomUpR f path item
+
+-- | Thread a monadic computation through a 'TreeItem' in bottom up reverse
+-- alphabetic order and collect the results in the opposite order.
+traverseItemBottomUpR
+  :: Monad m
+  => (AnchoredPath -> TreeItem m -> m a)
+  -> AnchoredPath
+  -> TreeItem m
+  -> m (NonEmpty a)
+traverseItemBottomUpR f path item = go [] path item where
   go rs p i@(File _) = do
     r <- f p i
     return (r :| rs)
@@ -208,14 +219,18 @@ traverseItemBottomUp f path item = NE.reverse <$> go [] path item where
     rss <- forM (reverse $ listImmediate t) $ \(n,si) -> go rs (appendPath p n) si
     r <- f p i
     return (r :| concatMap NE.toList rss)
--- make sure that it gets inlined so that the reverse can be fused away
-{-# INLINE traverseItemBottomUp #-}
 
 -- | Thread a monadic computation through a 'Tree' in bottom up reverse
 -- alphabetic order and collect the results.
 traverseBottomUp
   :: Monad m => (AnchoredPath -> TreeItem m -> m a) -> Tree m -> m (NonEmpty a)
 traverseBottomUp f = traverseItemBottomUp f anchoredRoot . SubTree
+
+-- | Thread a monadic computation through a 'Tree' in bottom up reverse
+-- alphabetic order and collect the results in the opposite order.
+traverseBottomUpR
+  :: Monad m => (AnchoredPath -> TreeItem m -> m a) -> Tree m -> m (NonEmpty a)
+traverseBottomUpR f = traverseItemBottomUpR f anchoredRoot . SubTree
 
 -- | Like 'find' but monadic and thus able to expand 'Stub's on the way.
 locate :: Monad m => Tree m -> AnchoredPath -> m (Maybe (TreeItem m))
@@ -418,54 +433,18 @@ sortedUnion a@(x:xs) b@(y:ys) = case compare x y of
                                 GT -> y : sortedUnion a ys
 
 -- | Symmetric difference of 'Tree's. The resulting 'Tree's are always fully
--- expanded. It might be advantageous to feed the result into 'zipFiles' or
--- 'zipTrees'.
+-- expanded.
 --
--- It will never do any unneccessary expanding. Tree hashes are used to cut the
--- comparison as high up the Tree branches as possible.
+-- This function is used only for testing the underlying diffTrees'.
 diffTrees :: forall m. (Monad m) => Tree m -> Tree m -> m (Tree m, Tree m)
-diffTrees left right =
-            if treeHash left `match` treeHash right
-               then return (emptyTree, emptyTree)
-               else diff left right
-  where isFile = not . isDir
-        isEmpty = M.null .items
-        subtree :: TreeItem m -> m (Tree m)
-        subtree (Stub x _) = x
-        subtree (SubTree x) = return x
-        subtree (File _) = error "diffTrees tried to descend a File as a subtree"
-        maybeUnfold (Stub x _) = SubTree `fmap` (x >>= expand)
-        maybeUnfold (SubTree x) = SubTree `fmap` expand x
-        maybeUnfold i = return i
-        diff left' right' = do
-          is <- sequence [
-                   case v of
-                     This l -> do
-                       l' <- maybeUnfold l
-                       return (n, Just l', Nothing)
-                     That r -> do
-                       r' <- maybeUnfold r
-                       return (n, Nothing, Just r')
-                     These l r
-                         | itemHash l `match` itemHash r ->
-                             return (n, Nothing, Nothing)
-                         | isDir l && isDir r ->
-                             do x <- subtree l
-                                y <- subtree r
-                                (x', y') <- diffTrees x y
-                                if isEmpty x' && isEmpty y'
-                                   then return (n, Nothing, Nothing)
-                                   else return (n, Just $ SubTree x', Just $ SubTree y')
-                         | isFile l && isFile r ->
-                             return (n, Just l, Just r)
-                         | otherwise ->
-                             do l' <- maybeUnfold l
-                                r' <- maybeUnfold r
-                                return (n, Just l', Just r')
-                   | (n,v) <- M.toList $ align (items left') (items right') ]
-          let is_l = [ (n, l) | (n, Just l, _) <- is ]
-              is_r = [ (n, r) | (n, _, Just r) <- is ]
-          return (makeTree is_l, makeTree is_r)
+diffTrees left right = do
+  diffs <- diffTrees' diffItem left right
+  return $ foldr rebuild (emptyTree, emptyTree) diffs
+  where
+    diffItem p = return . bimap (p,) (p,)
+    rebuild (This (p,i)) (l,r) = (modifyTree l p (Just i), r)
+    rebuild (That (p,i)) (l,r) = (l, modifyTree r p (Just i))
+    rebuild (These (p,i) (q,j)) (l,r) = (modifyTree l p (Just i), modifyTree r q (Just j))
 
 diffTrees'
   :: forall m a

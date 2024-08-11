@@ -14,7 +14,7 @@
 --
 -- The index is a binary file that overlays a hashed tree over the working
 -- copy. This means that every working file and directory has an entry in the
--- index, that contains its path and hash and validity data. The validity data
+-- index, that contains its name and hash and validity data. The validity data
 -- is a timestamp plus the file size. The file hashes are sha256's of the
 -- file's content. It also contains the fileid to track moved files.
 --
@@ -61,14 +61,13 @@
 -- * aux: timestamp (for file) or offset to sibling (for dir), 8 bytes
 -- * fileid: inode or fhandle of the item, 8 bytes
 -- * hash: sha256 of content, 32 bytes
--- * descriptor length: >= 2 due to type and null, 4 bytes
--- * descriptor:
---   * type: 'D' or 'F', one byte
---   * path: flattened path, variable >= 0
+-- * name length: 4 bytes
+-- * type: 'D' or 'F', 1 byte
+-- * name: filename, variable >= 0
 -- * null: terminating null byte
 -- * alignment padding: 0 to 3 bytes
 --
--- Each 'Item' is 4 byte aligned. Thus the descriptor length must be
+-- Each 'Item' is 4 byte aligned. Thus the length must be
 -- rounded up to get the position of the next item using 'align'. Similar,
 -- when determining the aux (offset to sibling) for dir items.
 --
@@ -80,10 +79,10 @@
 --
 -- For files, the aux field holds a timestamp.
 --
--- Internally, the item is stored as a pointer to the first field (iBase)
--- from which we directly read off the first three fields (size, aux, fileid),
--- and a ByteString for the rest (iHashAndDescriptor), up to but not including
--- the terminating null byte.
+-- Internally, the item is stored as a pointer to the first field (iBase) which
+-- we directly use to read/write the first four fields (size, aux, fileid, hash),
+-- and the item type and name as separate fields since they are never going to
+-- be modified.
 --
 -- TODO
 --
@@ -91,10 +90,6 @@
 --
 -- We could as well use a single plain pointer for the item. The dumpIndex
 -- function demonstrates how this could be done.
---
--- Another possible improvement is to store only the Name of an item, not the
--- full path. We need to keep track of the current path anyway when traversing
--- the index.
 
 module Darcs.Util.Index
     ( openIndex
@@ -116,7 +111,7 @@ import Darcs.Prelude hiding ( readFile, writeFile, filter )
 import Darcs.Util.ByteString ( readSegment, decodeLocale )
 import qualified Darcs.Util.File ( getFileStatus )
 import Darcs.Util.Global ( debugMessage )
-import Darcs.Util.Hash ( Hash(..), mkHash, rawHash, sha256 )
+import Darcs.Util.Hash ( Hash(..), sha256 )
 import Darcs.Util.Tree
 import Darcs.Util.Tree.Hashed ( darcsTreeHash )
 import Darcs.Util.Path
@@ -124,6 +119,7 @@ import Darcs.Util.Path
     , realPath
     , anchoredRoot
     , Name
+    , unName
     , rawMakeName
     , appendPath
     , flatten
@@ -131,32 +127,26 @@ import Darcs.Util.Path
 import Darcs.Util.Progress ( beginTedious, endTedious, finishedOneIO )
 
 import Control.Monad( when )
-import Control.Exception( catch, throw, SomeException, Exception )
+import Control.Exception( catch, SomeException )
 
-import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC
-import Data.ByteString.Unsafe( unsafeHead, unsafeDrop )
 import Data.ByteString.Internal
-    ( c2w
-    , fromForeignPtr
+    ( c2w, w2c
     , nullForeignPtr
-    , toForeignPtr
     )
 import qualified Data.ByteString.Short.Internal as BS
 
 import Data.Int( Int64, Int32 )
 import Data.Word( Word8 )
 import Data.IORef( )
-import Data.Maybe( fromJust, isJust, isNothing )
-import Data.Typeable( Typeable )
+import Data.Maybe( fromJust, isNothing )
 
-import Foreign.Marshal.Utils ( copyBytes )
 import Foreign.Storable
 import Foreign.ForeignPtr( ForeignPtr, withForeignPtr, castForeignPtr )
 import Foreign.Ptr( Ptr, plusPtr )
 
 import System.IO ( hPutStrLn, stderr )
-import System.IO.MMap( mmapFileForeignPtr, mmapWithFilePtr, Mode(..) )
+import System.IO.MMap( mmapFileForeignPtr, Mode(..) )
 import System.Directory( doesFileExist, getCurrentDirectory )
 import System.Directory( renameFile )
 import System.FilePath( (<.>) )
@@ -164,7 +154,7 @@ import System.FilePath( (<.>) )
 import qualified System.Posix.Files as F ( fileID )
 import System.FilePath ( (</>) )
 import qualified System.Posix.Files as F
-    ( modificationTimeHiRes, fileSize, isDirectory, isSymbolicLink
+    ( modificationTimeHiRes, fileSize, isDirectory, isRegularFile, isSymbolicLink
     , FileStatus
     )
 import System.Posix.Types ( FileID, FileOffset )
@@ -183,11 +173,12 @@ import System.Posix.Types ( FileID, FileOffset )
 -- recursive Tree object, which is rather expensive... As a bonus, we can also
 -- efficiently implement subtree queries this way (cf. 'openIndex').
 data Item = Item { iBase :: !(Ptr ())
-                 , iHashAndDescriptor :: !B.ByteString
+                 , iType :: !ItemType
+                 , iName :: !(Maybe Name)
                  } deriving Show
 
-index_version :: B.ByteString
-index_version = BC.pack "HSI7"
+index_version :: BS.ShortByteString
+index_version = BS.toShort (BC.pack "HSI9")
 
 -- | Stored to the index to verify we are on the same endianness when reading
 -- it back. We will treat the index as invalid in this case so user code will
@@ -200,47 +191,42 @@ size_magic = 4 -- the magic word, first 4 bytes of the index
 size_endianness_indicator = 4 -- second 4 bytes of the index
 size_header = size_magic + size_endianness_indicator
 
-size_dsclen, size_hash, size_size, size_aux, size_fileid :: Int
+size_size, size_aux, size_fileid, size_hash, size_namelen :: Int
 size_size = 8 -- file/directory size (Int64)
 size_aux = 8 -- aux (Int64)
 size_fileid = 8 -- fileid (inode or fhandle FileID)
-size_dsclen = 4 -- this many bytes store the length of the descriptor
 size_hash = 32 -- hash representation
+size_namelen = 4 -- this many bytes store the length of the name
 size_type, size_null :: Int
 size_type = 1 -- ItemType: 'D' for directory, 'F' for file
-size_null = 1 -- null byte at the end of path
+size_null = 1 -- null byte at the end of name
 
-off_size, off_aux, off_hash, off_dsc, off_dsclen, off_fileid :: Int
+off_size, off_aux, off_fileid, off_hash, off_namelen, off_type, off_name :: Int
 off_size = 0
 off_aux = off_size + size_size
 off_fileid = off_aux + size_aux
-off_dsclen = off_fileid + size_fileid
-off_hash = off_dsclen + size_dsclen
-off_dsc = off_hash + size_hash
+off_hash = off_fileid + size_fileid
+off_namelen = off_hash + size_hash
+off_type = off_namelen + size_namelen
+off_name = off_type + size_type
 
-itemAllocSize :: AnchoredPath -> Int
-itemAllocSize apath = align 4 $
-  size_size + size_aux + size_fileid + size_dsclen + size_hash +
-  size_type + B.length (flatten apath) + size_null
+itemAllocSize :: Maybe Name -> Int
+itemAllocSize mname =
+  align 4 $
+    size_size + size_aux + size_fileid + size_hash + size_namelen +
+    size_type + nameLength mname + size_null
+
+nameLength :: Maybe Name -> Int
+nameLength Nothing = 0
+nameLength (Just name) = BS.length (unName name)
 
 itemSize :: Item -> Int
 itemSize i =
-  size_size + size_aux + size_fileid + size_dsclen +
-  (B.length $ iHashAndDescriptor i) + size_null
+  size_size + size_aux + size_fileid + size_hash + size_namelen +
+  size_type + (nameLength $ iName i) + size_null
 
 itemNext :: Item -> Int
 itemNext i = align 4 (itemSize i)
-
--- iDescriptor is:
---  * one byte for type of item ('D' or 'F')
---  * flattened path (w/o terminating null byte)
-iHash, iDescriptor :: Item -> B.ByteString
-iDescriptor = unsafeDrop size_hash . iHashAndDescriptor
-iHash = B.take size_hash . iHashAndDescriptor
-
--- The "drop 1" here gets rid of the item type.
-iPath :: Item -> FilePath
-iPath = decodeLocale . unsafeDrop 1 . iDescriptor
 
 iSize, iAux :: Item -> Ptr Int64
 iSize i = plusPtr (iBase i) off_size
@@ -249,8 +235,14 @@ iAux i = plusPtr (iBase i) off_aux
 iFileID :: Item -> Ptr FileID
 iFileID i = plusPtr (iBase i) off_fileid
 
-itemIsDir :: Item -> Bool
-itemIsDir i = unsafeHead (iDescriptor i) == c2w 'D'
+peekHash :: Item -> IO (Maybe Hash)
+peekHash i = do
+  -- Note that BS.createFromPtr copies the data
+  h <- BS.createFromPtr (iBase i `plusPtr` off_hash) size_hash
+  return $ if h == nullHash then Nothing else Just (SHA256 h)
+
+nullHash :: BS.ShortByteString
+nullHash = BS.replicate size_hash 0
 
 type FileStatus = Maybe F.FileStatus
 
@@ -263,11 +255,11 @@ modificationTime = maybe 0 (truncate . (*1e9) . F.modificationTimeHiRes)
 fileSize :: FileStatus -> FileOffset
 fileSize = maybe 0 F.fileSize
 
-fileExists :: FileStatus -> Bool
-fileExists = maybe False (const True)
-
 isDirectory :: FileStatus -> Bool
 isDirectory = maybe False F.isDirectory
+
+isRegularFile :: FileStatus -> Bool
+isRegularFile = maybe False F.isRegularFile
 
 fileID :: FileStatus -> FileID
 fileID = maybe 0 F.fileID
@@ -275,24 +267,20 @@ fileID = maybe 0 F.fileID
 -- | Lay out the basic index item structure in memory. The memory location is
 -- given by a ForeignPointer () and an offset. The path and type given are
 -- written out, and a corresponding Item is given back. The remaining bits of
--- the item can be filled out using 'update'.
-createItem :: ItemType -> AnchoredPath -> ForeignPtr () -> Int -> IO Item
-createItem typ apath fp off = do
-  let dsc =
-        B.concat
-          [ BC.singleton $ if typ == TreeType then 'D' else 'F'
-          , flatten apath -- this (currently) gives "." for anchoredRoot
-          , B.singleton 0
-          ]
-      (dsc_fp, dsc_start, dsc_len) = toForeignPtr dsc
-  withForeignPtr fp $ \p ->
-    withForeignPtr dsc_fp $ \dsc_p -> do
-      pokeByteOff p (off + off_dsclen) (fromIntegral dsc_len :: Int32)
-      copyBytes
-        (plusPtr p $ off + off_dsc)
-        (plusPtr dsc_p dsc_start)
-        (fromIntegral dsc_len)
-      peekItem fp off
+-- the item can be filled out using the various update functions.
+createItem :: ItemType -> Maybe Name -> ForeignPtr () -> Int -> IO Item
+createItem typ mname fp off = do
+  let namelen = nameLength mname
+  withForeignPtr fp $ \p -> do
+    pokeByteOff p (off + off_namelen) (fromIntegral namelen :: Int32)
+    pokeByteOff p (off + off_type) $
+      c2w $ case typ of TreeType -> 'D'; BlobType -> 'F'
+    case mname of
+      Just name ->
+        BS.copyToPtr (unName name) 0 (p `plusPtr` (off + off_name)) namelen
+      Nothing -> return ()
+    pokeByteOff p (off + off_name + namelen) (0 :: Word8)
+  peekItem fp off
 
 -- | Read the on-disk representation into internal data structure.
 --
@@ -301,24 +289,32 @@ createItem typ apath fp off = do
 peekItem :: ForeignPtr () -> Int -> IO Item
 peekItem fp off =
   withForeignPtr fp $ \p -> do
-    nl' :: Int32 <- peekByteOff p (off + off_dsclen)
-    when (nl' <= 2) $ fail "Descriptor too short in peekItem!"
-    let nl = fromIntegral nl'
-        dsc =
-          fromForeignPtr
-            (castForeignPtr fp)
-            (off + off_hash)
-            -- Note that iHashAndDescriptor does not include the terminating
-            -- null byte, so we have to subtract its size here.
-            (size_hash + nl - size_null)
-    return $! Item {iBase = plusPtr p off, iHashAndDescriptor = dsc}
+    let iBase = p `plusPtr` off
+    namelen :: Int32 <- peekByteOff iBase off_namelen
+    iType <- do
+      tc <- peekByteOff iBase off_type
+      case w2c tc of
+        'D' -> return TreeType
+        'F' -> return BlobType
+        _ -> fail $ "Corrupt index: item type is " ++ show tc ++ ", must be 'D' or 'F'"
+    iName <-
+      if namelen == 0 then
+        return Nothing
+      else do
+        rname <-
+          BS.createFromPtr
+            (iBase `plusPtr` off_name) (fromIntegral namelen)
+        case rawMakeName rname of
+          Left e -> fail e
+          Right n -> return (Just n)
+    return $! Item {..}
 
 -- | Update an existing 'Item' with new size and hash. The hash must be
 -- not be 'Nothing'.
 updateItem :: Item -> Int64 -> Hash -> IO ()
-updateItem item size hash =
-    do poke (iSize item) size
-       unsafePokeBS (iHash item) (rawHash hash)
+updateItem item size (SHA256 hash) = do
+  poke (iSize item) size
+  BS.copyToPtr hash 0 (iBase item `plusPtr` off_hash) (BS.length hash)
 
 updateFileID :: Item -> FileID -> IO ()
 updateFileID item fileid = poke (iFileID item) fileid
@@ -328,12 +324,6 @@ updateAux item aux = poke (iAux item) aux
 
 updateTime :: Item -> Int64 -> IO ()
 updateTime item mtime = updateAux item mtime
-
-iHash' :: Item -> Maybe Hash
-iHash' i = let ih = iHash i in if ih == nullHash then Nothing else Just (mkHash ih)
-
-nullHash :: B.ByteString
-nullHash = B.replicate size_hash 0
 
 -- | Gives a ForeignPtr to mmapped index, which can be used for reading and
 -- updates. The req_size parameter, if non-0, expresses the requested size of
@@ -345,6 +335,9 @@ mmapIndex indexpath req_size = do
         True -> req_size
         False | act_size >= size_header -> act_size - size_header
               | otherwise -> 0
+  -- TODO Use WriteCopy mode as a fallback if ReadWriteEx fails with a
+  -- permission error. This would let us handle read-only repos more
+  -- transparently.
   case size of
     0 -> return (castForeignPtr nullForeignPtr, size)
     _ -> do (x, _, _) <- mmapFileForeignPtr indexpath
@@ -365,209 +358,115 @@ type Index = IndexM IO
 -- | When we traverse the index, we keep track of some data about the
 -- current parent directory.
 data State = State
-  { dirlength :: !Int     -- ^ length in bytes of current path prefix,
-                          --   includes the trailing path separator
-  , path :: !AnchoredPath -- ^ path of the current directory
+  { path :: !AnchoredPath -- ^ path of the current directory
   , start :: !Int         -- ^ offset of current directory in the index
+  }
+
+data Result a = Result
+  { next :: !Int
+  -- ^ Position of the next item, in bytes.
+  , resitem :: !Item
+  -- ^ The item we traversed.
+  , goal :: a
+  -- ^ The actual ultimate result.
   }
 
 -- * Reading items from the index
 
-data Result = Result
+data ResultR = ResultR
   { changed :: !Bool
   -- ^ Whether item has changed since the last update to the index.
-  , next :: !Int
-  -- ^ Position of the next item, in bytes.
   , treeitem :: !(Maybe (TreeItem IO))
   -- ^ Nothing in case of the item doesn't exist in the tree
   -- or is filtered by a FilterTree. Or a TreeItem otherwise.
-  , resitem :: !Item
-  -- ^ The item extracted.
   }
 
-readItem :: String -> Index -> State -> IO Result
-readItem progressKey index state = do
-    item <- peekItem (mmap index) (start state)
-    res' <- if itemIsDir item
-                then readDir  item
-                else readFile item
-    finishedOneIO progressKey (iPath item)
-    return res'
-  where
-
-    readDir item = do
-      following <- fromIntegral <$> peek (iAux item)
-      st <- getFileStatus (iPath item)
-      let exists = fileExists st && isDirectory st
-      fileid <- peek $ iFileID item
-      when (fileid == 0) $ updateFileID item (fileID st)
-      let substate = substateof item state
-          want =
-            exists && (predicate index) (path substate) (Stub undefined Nothing)
-          oldhash = iHash' item
-          subs off =
-             case compare off following of
-               LT -> do
-                 result <- readItem progressKey index $ substate { start = off }
-                 rest <- subs $ next result
-                 return $! (nameof (resitem result) substate, result) : rest
-               EQ -> return []
-               GT ->
-                 fail $
-                   "Offset mismatch at " ++ show off ++
-                   " (ends at " ++ show following ++ ")"
-      inferiors <- if want then subs $ start substate
-                           else return []
-      let we_changed = or [ changed x | (_, x) <- inferiors ] || nullleaf
-          nullleaf = null inferiors && isNothing oldhash
-          tree' =
-            -- Note the partial pattern match on 'Just n' below is justified
-            -- as we are traversing sub items here, which means 'Nothing' is
-            -- impossible, see 'substateof' for details.
-            makeTree
-              [ (n, fromJust $ treeitem s)
-              | (Just n, s) <- inferiors, isJust $ treeitem s ]
-          treehash = if we_changed then Just (darcsTreeHash tree') else oldhash
-          tree = tree' { treeHash = treehash }
-      when (exists && we_changed) $
-          -- fromJust is justified because we_changed implies (isJust treehash)
-          updateItem item 0 (fromJust treehash)
-      return $ Result { changed = not exists || we_changed
-                      , next = following
-                      , treeitem = if want then Just $ SubTree tree
-                                           else Nothing
-                      , resitem = item }
-
-    readFile item = do
-           st <- getFileStatus (iPath item)
-           mtime <- fromIntegral <$> (peek $ iAux item)
-           size <- peek $ iSize item
-           fileid <- peek $ iFileID item
-           let mtime' = modificationTime st
-               size' = fromIntegral $ fileSize st
-               readblob = readSegment (basedir index </> (iPath item), Nothing)
-               exists = fileExists st && not (isDirectory st)
-               we_changed = mtime /= mtime' || size /= size'
-               hash = iHash' item
-           when (exists && we_changed) $
-                do hash' <- sha256 `fmap` readblob
-                   updateItem item size' hash'
-                   updateTime item mtime'
-                   when (fileid == 0) $ updateFileID item (fileID st)
-           return $ Result { changed = not exists || we_changed
-                           , next = start state + itemNext item
-                           , treeitem =
-                              if exists
-                                then Just $ File $ Blob readblob hash
-                                else Nothing
-                           , resitem = item }
-
-
-data CorruptIndex = CorruptIndex String deriving (Eq, Typeable)
-instance Exception CorruptIndex
-instance Show CorruptIndex where show (CorruptIndex s) = s
-
--- | Get the 'Name' of an 'Item' in the given 'State'. This fails for
--- the root 'Item' because it has no 'Name', so we return 'Nothing'.
-nameof :: Item -> State -> Maybe Name
-nameof item state
-  | iDescriptor item == BC.pack "D." = Nothing
-  | otherwise =
-      case rawMakeName $ B.drop (dirlength state + 1) $ iDescriptor item of
-        Left msg -> throw (CorruptIndex msg)
-        Right name -> Just name
+fsPath :: AnchoredPath -> FilePath
+fsPath = decodeLocale . flatten
 
 -- | 'Maybe' append a 'Name' to an 'AnchoredPath'.
 maybeAppendName :: AnchoredPath -> Maybe Name -> AnchoredPath
 maybeAppendName parent = maybe parent (parent `appendPath`)
 
--- | Calculate the next 'State' when entering an 'Item'. Works for the
--- top-level 'Item' i.e. the root directory only because we handle that
--- specially.
+-- | Calculate the next 'State' when entering an 'Item'.
 substateof :: Item -> State -> State
 substateof item state =
   state
     { start = start state + itemNext item
-    , path = path state `maybeAppendName` myname
-    , dirlength =
-        case myname of
-          Nothing ->
-            -- We are entering the root item. The current path prefix remains
-            -- empty, so its length (which must be 0) doesn't change.
-            dirlength state
-          Just _ ->
-            -- This works because the 'iDescriptor' is always one byte larger
-            -- than the actual name. So @dirlength state@ will also be greater
-            -- by 1, which accounts for the path separator when we strip the
-            -- directory prefix from the full path.
-            B.length (iDescriptor item)
+    , path = path state `maybeAppendName` iName item
     }
-  where
-    myname = nameof item state
 
 -- * Reading (only) file IDs from the index
-
--- FIXME this seems copy-pasted from the code above and then adapted
--- to the purpose. Should factor out the traversal of the index as a
--- higher order function.
-
-data ResultF = ResultF
-  { nextF :: !Int
-  -- ^ Position of the next item, in bytes.
-  , resitemF :: !Item
-  -- ^ The item extracted.
-  , _fileIDs :: [((AnchoredPath, ItemType), FileID)]
-  -- ^ The fileids of the files and folders inside,
-  -- in a folder item and its own fileid for file item).
-  }
 
 -- | Return a list containing all the file/folder names in an index, with
 -- their respective ItemType and FileID.
 listFileIDs :: Index -> IO ([((AnchoredPath, ItemType), FileID)])
-listFileIDs EmptyIndex = return []
-listFileIDs index =
-    do let initial = State { start = size_header
-                           , dirlength = 0
-                           , path = anchoredRoot }
-       res <- readItemFileIDs index initial
-       return $ _fileIDs res
+listFileIDs = traverseIndex job []
+  where
+    job path item subgoals = do
+      fileid <- peek $ iFileID item
+      let mygoal = ((path, iType item), fileid)
+      return $ mygoal : concatMap snd subgoals
 
-readItemFileIDs :: Index -> State -> IO ResultF
-readItemFileIDs index state = do
-  item <- peekItem (mmap index) (start state)
-  res' <- if itemIsDir item
-              then readDirFileIDs  index state item
-              else readFileFileID index state item
-  return res'
-
-readDirFileIDs :: Index -> State -> Item -> IO ResultF
-readDirFileIDs index state item =
-    do fileid <- peek $ iFileID item
-       following <- fromIntegral <$> peek (iAux item)
-       let substate = substateof item state
-           subs off =
+traverseIndex
+  :: (AnchoredPath -> Item -> [(Name,a)] -> IO a) -> a -> Index -> IO a
+traverseIndex _ z EmptyIndex = return z
+traverseIndex job _ index = goal <$> traverseItem initial
+  where
+    initial = State {start = size_header, path = anchoredRoot}
+    traverseItem state = do
+      item <- peekItem (mmap index) (start state)
+      let substate = substateof item state
+      case iType item of
+       TreeType -> do
+        following <- fromIntegral <$> peek (iAux item)
+        -- FIXME
+        -- The way we feed an undefined Stub to the predicate here looks fishy
+        -- but works in practice, since the predicate is a pure function and
+        -- thus would normally not evaluate the action that creates the tree. A
+        -- somewhat safer version would use @return emptyTree@ instead.
+        --
+        -- However, it /is/ a problem that we pass it a Stub in the first place
+        -- and not the actual item. Which means the predicate goes wrong if its
+        -- decision is based on the actual tree item and not only on the path.
+        -- This is pretty (w)hacky if you ask me. It works only because in
+        -- practice, the predicates we use are all based only on the path. We
+        -- should make this clear by removing its TreeItem argument.
+        let want = (predicate index) (path substate) (Stub undefined Nothing)
+            subs off =
               case compare off following of
                 LT -> do
-                  result <- readItemFileIDs index $ substate {start = off}
-                  rest <- subs $ nextF result
-                  return $! (nameof (resitemF result) substate, result) : rest
+                  result <- traverseItem (substate {start = off})
+                  rest <- subs $ next result
+                  return $! (iName (resitem result), result) : rest
                 EQ -> return []
-                GT ->
+                GT -> do
                   fail $
-                    "Offset mismatch at " ++ show off ++
-                    " (ends at " ++ show following ++ ")"
-       inferiors <- subs $ start substate
-       return $ ResultF { nextF = following
-                        , resitemF = item
-                        , _fileIDs = (((path substate, TreeType), fileid):concatMap (_fileIDs . snd) inferiors) }
-
-readFileFileID :: Index -> State -> Item -> IO ResultF
-readFileFileID _ state item =
-    do fileid' <- peek $ iFileID item
-       let myname = nameof item state
-       return $ ResultF { nextF = start state + itemNext item
-                        , resitemF = item
-                        , _fileIDs = [((path state `maybeAppendName` myname, BlobType), fileid')] }
+                    "Offset mismatch at " ++ show off ++ " (ends at " ++
+                        show following ++ ")"
+        -- FIXME If the item does not exist as a file or directory on disk,
+        -- we still traverse all its subitems recursively. Find a way to
+        -- avoid that w/o calling getFileStatus here and again in the job.
+        subgoals <- if want then subs (start substate) else return []
+        -- Note the partial pattern match on 'Just n' below is justified
+        -- as we are traversing sub items here, which means 'Nothing' is
+        -- impossible, see 'substateof' for details.
+        --
+        -- FIXME Why do we even wrap the returned item in a Maybe? It seems
+        -- we never actually distinguish between Just item and Nothing anywhere.
+        goal' <- job (path substate) item [(n,goal s) | (Just n, s) <- subgoals]
+        return $ Result
+          { next = following
+          , resitem = item
+          , goal = goal'
+          }
+       BlobType -> do
+        goal' <- job (path substate) item []
+        return $ Result
+          { next = start state + itemNext item
+          , resitem = item
+          , goal = goal'
+          }
 
 -- * Reading and writing 'Tree's from/to the index
 
@@ -581,60 +480,73 @@ openIndex indexpath = do
                                         , basedir = base
                                         , predicate = \_ _ -> True }
 
+-- | Traverse the 2nd (@reference@) 'Tree' and write its items to a new index.
+-- However, item hashes are taken from the 1st (@old@) 'Tree' (which actually
+-- comes from the old index, but this is not made clear by the API), while
+-- all other fields are taken from the current file status. So @reference@
+-- merely provides the tree shape i.e. the items it has.
+--
+-- Precondition: The @old@ Tree must have hashes for all its items.
+--
+-- TODO This is probably less efficient than directly copying items from the
+-- old index. See the TODO below in the code.
 formatIndex :: ForeignPtr () -> Tree IO -> Tree IO -> IO ()
 formatIndex mmap_ptr old reference =
-    do _ <- create (SubTree reference) (anchoredRoot) size_header
-       unsafePokeBS magic index_version
-       withForeignPtr mmap_ptr $ \ptr ->
+    do _ <- create (SubTree reference) (State anchoredRoot size_header)
+       withForeignPtr mmap_ptr $ \ptr -> do
+         BS.copyToPtr index_version 0 ptr (BS.length index_version)
          pokeByteOff ptr size_magic index_endianness_indicator
-    where magic = fromForeignPtr (castForeignPtr mmap_ptr) 0 4
-          create (File _) path' off =
-               do i <- createItem BlobType path' mmap_ptr off
+    where basename (AnchoredPath ns) =
+            case ns of
+              [] -> Nothing
+              _ -> Just (last ns)
+          create (File _) State{..} =
+               do i <- createItem BlobType (basename path) mmap_ptr start
                   -- TODO calling getFileStatus here is both slightly
                   -- inefficient and slightly race-prone
-                  st <- getFileStatus (iPath i)
+                  st <- getFileStatus (fsPath path)
                   updateFileID i (fileID st)
-                  case find old path' of
+                  case find old path of
                     Nothing -> return ()
                     Just ti -> do let hash = itemHash ti
                                       mtime = modificationTime st
                                       size = fileSize st
-                                  -- TODO prove that isNothing hash is impossible
+                                  -- isNothing hash is impossible by precondition
                                   updateItem i (fromIntegral size) (fromJust hash)
                                   updateTime i mtime
-                  return $ off + itemNext i
-          create (SubTree s) path' off =
-               do i <- createItem TreeType path' mmap_ptr off
-                  st <- getFileStatus (iPath i)
+                  return $ start + itemNext i
+          create (SubTree t) State{..} =
+               do i <- createItem TreeType (basename path) mmap_ptr start
+                  st <- getFileStatus (fsPath path)
                   updateFileID i (fileID st)
-                  case find old path' of
+                  case find old path of
                     Nothing -> return ()
                     Just ti ->
                       case itemHash ti of
                         Nothing -> return ()
                         Just h -> updateItem i 0 h
-                  let subs [] = return $ off + itemNext i
+                  let subs [] = return $ start + itemNext i
                       subs ((name,x):xs) = do
-                        let path'' = path' `appendPath` name
-                        noff <- subs xs
-                        create x path'' noff
-                  lastOff <- subs (listImmediate s)
+                        let subpath = path `appendPath` name
+                        substart <- subs xs
+                        create x State{path=subpath,start=substart}
+                  lastOff <- subs (listImmediate t)
                   poke (iAux i) (fromIntegral lastOff)
                   return lastOff
-          create (Stub _ _) path' _ =
-               fail $ "Cannot create index from stubbed Tree at " ++ show path'
+          create (Stub _ _) State{..} =
+               fail $ "Cannot create index from stubbed Tree at " ++ show path
 
 -- | Add and remove entries in the given 'Index' to make it match the given
 -- 'Tree'. If an object in the 'Tree' does not exist in the current working
 -- directory, its index entry will have zero hash, size, aux, and fileID. For
--- the hash this translates to 'Nothing', see 'iHash''.
+-- the hash this translates to 'Nothing', see 'peekHash'.
 updateIndexFrom :: FilePath -> Tree IO -> IO Index
 updateIndexFrom indexpath ref =
     do debugMessage "Updating the index ..."
        old_tree <- treeFromIndex =<< openIndex indexpath
        reference <- expand ref
-       let len_root = itemAllocSize anchoredRoot
-           len = len_root + sum [ itemAllocSize p | (p, _) <- list reference ]
+       let len_root = itemAllocSize Nothing
+           len = len_root + sum [ itemAllocSize (Just (last p)) | (AnchoredPath p, _) <- list reference ]
        exist <- doesFileExist indexpath
        -- Note that the file is still open via the mmaped pointer in
        -- the open index, and we /are/ going to write the index using
@@ -643,28 +555,79 @@ updateIndexFrom indexpath ref =
        -- would fail, so instead we rename it.
        when exist $ renameFile indexpath (indexpath <.> "old")
        (mmap_ptr, _) <- mmapIndex indexpath len
+       -- Precondition of formatIndex is given by the postcondition of treeFromIndex.
        formatIndex mmap_ptr old_tree reference
        debugMessage "Done updating the index, reopening it ..."
        openIndex indexpath
 
 -- | Read an 'Index', starting with the root, to create a 'Tree'.
+-- It is guaranteed that the resulting Tree has hashes for all its items.
 treeFromIndex :: Index -> IO (Tree IO)
-treeFromIndex EmptyIndex = return emptyTree
-treeFromIndex index =
-    do let initial = State { start = size_header
-                           , dirlength = 0
-                           , path = anchoredRoot }
-           -- This is not a typo! As a side-effect of reading a tree from the
-           -- index, it also gets updated and this is what can take a long time
-           -- since it may involve reading all files in the working tree that
-           -- are also in pristine+pending (to compute their hashes)
-           progressKey = "Updating the index"
-       beginTedious progressKey
-       res <- readItem progressKey index initial
-       endTedious progressKey
-       case treeitem res of
-         Just (SubTree tree) -> return $ filter (predicate index) tree
-         _ -> fail "Unexpected failure in treeFromIndex!"
+treeFromIndex index = do
+    beginTedious progressKey
+    let emptyR = ResultR { changed = False, treeitem = Just (SubTree emptyTree)}
+    res <- traverseIndex processItem emptyR index
+    endTedious progressKey
+    case treeitem res of
+      Just (SubTree tree) -> return $ filter (predicate index) tree
+      _ -> fail "Unexpected failure in treeFromIndex!"
+
+  where
+    -- This is not a typo! As a side-effect of reading a tree from the
+    -- index, it also gets updated and this is what can take a long time
+    -- since it may involve reading all files in the working tree that
+    -- are also in pristine+pending (to compute their hashes)
+    progressKey = "Updating the index"
+
+    processItem :: AnchoredPath -> Item -> [(Name, ResultR)] -> IO ResultR
+    processItem path item subgoals = do
+      let fpath = fsPath path
+      finishedOneIO progressKey fpath
+      st <- getFileStatus fpath
+      fileid <- peek $ iFileID item
+      when (fileid == 0) $ updateFileID item (fileID st)
+      oldhash <- peekHash item
+      case iType item of
+        TreeType -> do
+          let exists = isDirectory st
+              want = exists && (predicate index) path (Stub undefined Nothing)
+              inferiors = if want then subgoals else []
+              we_changed = isNothing oldhash || or [changed x | (_, x) <- inferiors]
+              tree' = makeTree [(n, s) | (n, ResultR _ (Just s)) <- inferiors]
+              -- fromJust is justified because isNothing oldhash implies we_changed
+              treehash = if we_changed then darcsTreeHash tree' else fromJust oldhash
+              tree = tree' {treeHash = Just treehash}
+          when (exists && we_changed) $ updateItem item 0 treehash
+          return $ ResultR
+            { changed = not exists || we_changed
+            , treeitem = if want then Just $ SubTree tree else Nothing
+            }
+        BlobType -> do
+          mtime <- fromIntegral <$> (peek $ iAux item)
+          size <- peek $ iSize item
+          let mtime' = modificationTime st
+              size' = fromIntegral $ fileSize st
+              -- This is the only place where basedir is used.
+              -- It is needed because --external-merge changes to a
+              -- temporary directory before writing the Tree there.
+              --
+              -- TODO We should save it as a hashed file and redirect the
+              -- readblob accordingly. This would automatically make it
+              -- independent of the current directory, providing a hashed
+              -- snapshot of the (known) working tree state.
+              readblob = readSegment (basedir index </> fpath, Nothing)
+              exists = isRegularFile st
+              we_changed = isNothing oldhash || mtime /= mtime' || size /= size'
+          when (exists && we_changed) $ do
+            hash' <- sha256 `fmap` readblob
+            updateItem item size' hash'
+            updateTime item mtime'
+          newhash <- peekHash item
+          return $ ResultR
+            { changed = not exists || we_changed
+            , treeitem =
+                if exists then Just $ File $ Blob readblob newhash else Nothing
+            }
 
 -- | Check that a given file is an index file with a format we can handle. You
 -- should remove and re-create the index whenever this is not true.
@@ -672,11 +635,21 @@ indexFormatValid :: FilePath -> IO Bool
 indexFormatValid path' =
   do
     (start, _, _) <- mmapFileForeignPtr path' ReadOnly (Just (0, size_header))
-    let magic = fromForeignPtr (castForeignPtr start) 0 4
-    endianness_indicator <- withForeignPtr start $ \ptr -> peekByteOff ptr 4
+    withForeignPtr start $ \ptr -> do
+      magic <- BS.createFromPtr ptr 4
+      endianness_indicator <- peekByteOff ptr 4
+      return $
+        index_version == magic && index_endianness_indicator == endianness_indicator
+  `catch` \(_::SomeException) -> return False
+
+checkIndexFormat :: Index -> IO Bool
+checkIndexFormat EmptyIndex = return True
+checkIndexFormat Index{..} =
+  withForeignPtr mmap $ \ptr -> do
+    magic <- BS.createFromPtr ptr 4
+    endianness_indicator <- peekByteOff ptr 4
     return $
       index_version == magic && index_endianness_indicator == endianness_indicator
-  `catch` \(_::SomeException) -> return False
 
 instance FilterTree IndexM IO where
     filter _ EmptyIndex = EmptyIndex
@@ -690,20 +663,6 @@ getFileID :: AnchoredPath -> IO (Maybe FileID)
 getFileID p = fmap F.fileID <$> getFileStatus (realPath p)
 
 -- * Low-level utilities
-
--- Wow, unsafe.
-unsafePokeBS :: BC.ByteString -> BC.ByteString -> IO ()
-unsafePokeBS to from =
-    do let (fp_to, off_to, len_to) = toForeignPtr to
-           (fp_from, off_from, len_from) = toForeignPtr from
-       when (len_to /= len_from) $ fail $ "Length mismatch in unsafePokeBS: from = "
-            ++ show len_from ++ " /= to = " ++ show len_to
-       withForeignPtr fp_from $ \p_from ->
-         withForeignPtr fp_to $ \p_to ->
-           copyBytes
-                  (plusPtr p_to off_to)
-                  (plusPtr p_from off_from)
-                  (fromIntegral len_to)
 
 align :: Integral a => a -> a -> a
 align boundary i = case i `rem` boundary of
@@ -731,38 +690,21 @@ data IndexEntry = IndexEntry
   }
 
 dumpIndex :: FilePath -> IO [IndexEntry]
-dumpIndex indexpath =
-  mmapWithFilePtr indexpath ReadOnly Nothing $ \(ptr, size) -> do
-    magic <- BS.createFromPtr ptr 4
-    when (magic /= BS.toShort index_version) $ fail "index format is invalid"
-    readEntries (size - size_header) (ptr `plusPtr` size_header)
+dumpIndex indexpath = do
+    index <- openIndex indexpath
+    valid <- checkIndexFormat index
+    if valid then
+      traverseIndex processItem [] index
+    else
+      fail "Index has invalid format"
   where
-    readEntries s _ | s < (next 0) = return []
-    readEntries s p = do
-      (entry, fwd) <- readEntry p
-      entries <- readEntries (s - fwd) (p `plusPtr` fwd)
-      return (entry : entries)
-    readEntry p = do
-      ieSize <- peekByteOff p off_size
-      ieAux <- peekByteOff p off_aux
-      ieFileID <- peekByteOff p off_fileid
-      ieHash <- do
-        h <- BS.createFromPtr (p `plusPtr` off_hash) size_hash
-        return $ if h == shortNullHash then Nothing else Just (SHA256 h)
-      dsclen :: Int32 <- peekByteOff p off_dsclen
-      ieType <- b2c <$> peekByteOff p off_dsc
-      path <-
-        BS.fromShort <$>
-        BS.createFromPtr (p `plusPtr` off_path) (fromIntegral dsclen - size_type - size_null)
-      iePath <-
-        either fail return $ AnchoredPath <$> mapM rawMakeName (BC.split '/' (fixRoot path))
-      return (IndexEntry {..}, next (B.length path))
-    b2c :: Word8 -> Char
-    b2c = toEnum . fromIntegral
-    off_path = off_dsc + size_type
-    next pathlen =
-      align 4 $ size_size + size_aux + size_fileid + size_hash + size_dsclen
-              + size_type + pathlen + size_null
-    fixRoot s | s == BC.pack "." = BC.empty
-    fixRoot s = s
-    shortNullHash = BS.toShort nullHash
+    processItem path item subgoals = do
+      ieSize <- peek $ iSize item
+      ieAux <- peek $ iAux item
+      ieFileID <- peek $ iFileID item
+      ieHash <- peekHash item
+      let ieType = case iType item of TreeType -> 'D'; BlobType -> 'F'
+          iePath = path
+          thisEntry = IndexEntry{..}
+          subEntries = concatMap snd subgoals
+      return $ thisEntry : subEntries

@@ -84,10 +84,7 @@ import qualified Codec.Compression.Zlib.Internal as ZI
 import Darcs.Util.Encoding ( decode, encode, decodeUtf8, encodeUtf8 )
 import Darcs.Util.Global ( addCRCWarning )
 
-#if mingw32_HOST_OS
-#else
 import System.IO.MMap( mmapFileByteString )
-#endif
 import System.Mem( performGC )
 
 ------------------------------------------------------------------------
@@ -277,7 +274,7 @@ gzReadStdin = do
 -- fed to (uncurry mmapFileByteString) or similar.
 type FileSegment = (FilePath, Maybe (Int64, Int))
 
--- | Read in a FileSegment into a Lazy ByteString. Implemented using mmap.
+-- | Read in a FileSegment into a Lazy ByteString.
 readSegment :: FileSegment -> IO BL.ByteString
 readSegment (f,range) = do
     bs <- tryToRead
@@ -310,9 +307,6 @@ readSegment (f,range) = do
 -- is modified.
 
 mmapFilePS :: FilePath -> IO B.ByteString
-#if mingw32_HOST_OS
-mmapFilePS = B.readFile
-#else
 mmapFilePS f =
   mmapFileByteString f Nothing
    `catchIOError` (\_ -> do
@@ -320,7 +314,6 @@ mmapFilePS f =
                      if size == 0
                         then return B.empty
                         else performGC >> mmapFileByteString f Nothing)
-#endif
 
 -- -------------------------------------------------------------------------
 -- fromPS2Hex
