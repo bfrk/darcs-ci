@@ -30,6 +30,7 @@ import Darcs.Util.Tree ( Tree )
 import Data.List ( intercalate, isPrefixOf )
 import Data.List ( stripPrefix )
 import Data.Maybe ( isNothing, fromMaybe )
+import qualified Data.ByteString as B ( readFile )
 
 import Darcs.UI.Commands
     ( DarcsCommand(..), withStdOpts
