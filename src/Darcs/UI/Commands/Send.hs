@@ -103,7 +103,7 @@ import Darcs.UI.External
     , editFile
     , checkDefaultSendmail
     )
-import Darcs.Util.ByteString ( mmapFilePS, isAscii )
+import Darcs.Util.ByteString ( isAscii )
 import qualified Data.ByteString.Char8 as BC (unpack)
 import Darcs.Util.File ( withOpenTemp )
 import Darcs.Util.Lock
@@ -358,7 +358,7 @@ sendBundle opts to_be_sent bundle fname wtds their_name = do
       let to = generateEmailToString thetargets
       generateEmail fh from to thesubject (getCc opts) body
       hClose fh
-      mmapFilePS fn
+      B.readFile fn
   forM_
     [p | PostHttp p <- thetargets]
     (\url -> do
