@@ -10,11 +10,13 @@ module Darcs.Test.Shell
 
 import Darcs.Prelude
 
+import Darcs.Repository.Prefs ( globalCacheDir )
+
 import Control.Exception ( SomeException )
 import Data.Data ( Data, Typeable )
 import Data.Text ( Text, pack, unpack )
 import qualified Data.Text as T
-import qualified Shelly ( FilePath, run )
+import qualified Shelly ( FilePath, run, liftIO )
 import Shelly
     ( Sh
     , catch_sh
@@ -104,6 +106,7 @@ runtest' ShellTest{..} srcdir =
   do
     wd <- pwd
     p  <- unpack <$> get_env_text "PATH"
+    maybeCacheDir <- Shelly.liftIO globalCacheDir
     let pathToUse =
           map (fromText . pack) $ takeDirectory darcspath : Native.splitSearchPath p
     let env =
@@ -113,6 +116,7 @@ runtest' ShellTest{..} srcdir =
           , ("TESTDATA", EnvFilePath (srcdir </> "tests" </> "data"))
           , ("TESTBIN", EnvFilePath (srcdir </> "tests" </> "bin"))
           , ("DARCS_TESTING_PREFS_DIR"   , EnvFilePath $ wd </> ".darcs")
+          , ("DARCS_TESTING_CACHE_DIR"   , EnvFilePath $ maybe (wd </> ".cache" </> "darcs") (fromText . pack) maybeCacheDir)
           , ("EMAIL"                     , EnvString "tester")
           , ("GIT_AUTHOR_NAME"           , EnvString "tester")
           , ("GIT_AUTHOR_EMAIL"          , EnvString "tester")
