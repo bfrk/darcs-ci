@@ -50,8 +50,6 @@ import Darcs.Patch.Witnesses.Unsafe ( unsafeCoerceP1, unsafeCoerceP )
 -- |A 'Sealed' type is a way of hide an existentially quantified type parameter,
 -- in this case wX, inside the type. Note that the only thing we can currently
 -- recover about the existentially quantified type wX is that it exists.
--- With https://github.com/ghc-proposals/ghc-proposals/pull/473
--- we could eliminate this and simply use @exists wY. a wY@.
 data Sealed a where
     Sealed :: a wX -> Sealed a
 
@@ -63,16 +61,12 @@ instance Eq2 a => Eq (Sealed (a wX)) where
                          | otherwise = False
 
 -- |The same as 'Sealed' but for two parameters (wX and wY).
--- With https://github.com/ghc-proposals/ghc-proposals/pull/473
--- we could eliminate this and simply use @exists wX wY. a wX wY@.
 data Sealed2 a where
     Sealed2 :: !(a wX wY) -> Sealed2 a
 
 seal2 :: a wX wY -> Sealed2 a
 seal2 = Sealed2
 
--- With https://github.com/ghc-proposals/ghc-proposals/pull/473
--- we could eliminate this and simply use @exists wX. a wX wY@.
 data FlippedSeal a wY where
     FlippedSeal :: !(a wX wY) -> FlippedSeal a wY
 
@@ -110,9 +104,6 @@ unseal f x = f (unsafeUnseal x)
 -- All this applies to Sealed2 too, and FlippedSeal if we ever need a lazy one (but
 -- the implementation of unsealFlipped has been strict for a long time without causing
 -- trouble).
---
--- All these difficulties would go away if we had
--- https://github.com/ghc-proposals/ghc-proposals/pull/473.
 
 mapSeal :: (forall wX . a wX -> b wX) -> Sealed a -> Sealed b
 mapSeal f = unseal (seal . f)

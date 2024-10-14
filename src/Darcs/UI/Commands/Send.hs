@@ -30,7 +30,6 @@ import Darcs.Util.Tree ( Tree )
 import Data.List ( intercalate, isPrefixOf )
 import Data.List ( stripPrefix )
 import Data.Maybe ( isNothing, fromMaybe )
-import qualified Data.ByteString as B ( readFile )
 
 import Darcs.UI.Commands
     ( DarcsCommand(..), withStdOpts
@@ -104,7 +103,7 @@ import Darcs.UI.External
     , editFile
     , checkDefaultSendmail
     )
-import Darcs.Util.ByteString ( isAscii )
+import Darcs.Util.ByteString ( mmapFilePS, isAscii )
 import qualified Data.ByteString.Char8 as BC (unpack)
 import Darcs.Util.File ( withOpenTemp )
 import Darcs.Util.Lock
@@ -127,7 +126,7 @@ import Darcs.UI.Completion ( prefArgs )
 import Darcs.UI.Commands.Util ( getUniqueDPatchName )
 import Darcs.Util.Printer
     ( Doc, formatWords, vsep, text, ($$), (<+>), putDoc, putDocLn
-    , quoted, renderPS, vcat
+    , quoted, renderPS, sentence, vcat
     )
 import Darcs.Util.English ( englishNum, Noun(..) )
 import Darcs.Util.Exception ( catchall )
@@ -359,7 +358,7 @@ sendBundle opts to_be_sent bundle fname wtds their_name = do
       let to = generateEmailToString thetargets
       generateEmail fh from to thesubject (getCc opts) body
       hClose fh
-      B.readFile fn
+      mmapFilePS fn
   forM_
     [p | PostHttp p <- thetargets]
     (\url -> do
@@ -599,7 +598,7 @@ selectionIsNull :: Doc
 selectionIsNull = text "You don't want to send any patches, and that's fine with me!"
 
 emailBackedUp :: String -> Doc
-emailBackedUp mf = "Email body left in" <+> text mf <> "."
+emailBackedUp mf = sentence $ "Email body left in" <+> text mf <> "."
 
 promptCharSetWarning :: String -> String
 promptCharSetWarning msg = "Warning: " ++ msg ++ "  Send anyway?"
@@ -614,8 +613,8 @@ aborted :: Doc
 aborted = "Aborted."
 
 success :: String -> String -> Doc
-success to cc =
-    "Successfully sent patch bundle to:" <+> text to <+> copies cc <> "."
+success to cc = sentence $
+    "Successfully sent patch bundle to:" <+> text to <+> copies cc
   where
     copies "" = ""
     copies x  = "and cc'ed" <+> text x
@@ -624,7 +623,7 @@ postingPatch :: String -> Doc
 postingPatch url = "Posting patch to" <+> text url
 
 wroteBundle :: FilePathLike a => a -> Doc
-wroteBundle a = "Wrote patch to" <+> text (toFilePath a) <> "."
+wroteBundle a = sentence $ "Wrote patch to" <+> text (toFilePath a)
 
 savedButNotSent :: String -> Doc
 savedButNotSent to =

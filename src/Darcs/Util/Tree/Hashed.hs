@@ -29,7 +29,6 @@ import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString.Lazy as BL
 
 import Data.List ( sortBy )
-import qualified Data.List.NonEmpty as NE
 import Data.Maybe ( fromMaybe )
 
 import Darcs.Prelude
@@ -55,11 +54,13 @@ import Darcs.Util.Tree
     , Tree(..)
     , TreeItem(..)
     , addMissingHashes
+    , expand
     , itemHash
+    , list
     , listImmediate
     , makeTreeWithHash
     , readBlob
-    , traverseBottomUpR
+    , updateSubtrees
     , updateTree
     )
 import Darcs.Util.Tree.Monad ( TreeIO, runTreeMonad )
@@ -123,6 +124,10 @@ kwDir = BC.pack "directory:"
 -- | Compute a darcs-compatible hash value for a tree-like structure.
 darcsTreeHash :: Tree m -> Hash
 darcsTreeHash = sha256 . darcsFormatDir
+
+darcsUpdateDirHashes :: Tree m -> Tree m
+darcsUpdateDirHashes = updateSubtrees update
+    where update t = t { treeHash = Just (darcsTreeHash t) }
 
 darcsUpdateHashes :: Monad m => Tree m -> m (Tree m)
 darcsUpdateHashes = updateTree update
@@ -188,12 +193,16 @@ readDarcsHashedNosize = readDarcsHashed' True
 
 -- | Write a Tree into a darcs-style hashed directory.
 writeDarcsHashed :: Tree IO -> Cache -> IO PristineHash
-writeDarcsHashed tree cache = NE.head <$> traverseBottomUpR writeItem tree
+writeDarcsHashed tree' cache = do
+  debugMessage "writeDarcsHashed"
+  t <- darcsUpdateDirHashes <$> expand tree'
+  let items = list t
+  sequence_ [readAndWriteBlob b | (_, File b) <- items]
+  let dirs = darcsFormatDir t : [darcsFormatDir d | (_, SubTree d) <- items]
+  mapM_ dump dirs
+  return (fromHash (darcsTreeHash t))
   where
-    -- note that traverseBottomUp expands stubs before applying its argument
-    writeItem _ (SubTree t) = dump (darcsFormatDir t)
-    writeItem _ (File (Blob get _)) = get >>= dump
-    writeItem _ (Stub _ _) = error "unexpected Stub encountered"
+    readAndWriteBlob b = readBlob b >>= dump
     dump x = fsCreateHashedFile cache x
 
 -- | Create a hashed file from a 'Cache' and file content. In case the file

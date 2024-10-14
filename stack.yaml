@@ -1,8 +1,4 @@
-resolver: lts-21.25
+resolver: lts-22.34
 
 packages:
 - .
-
-extra-deps:
-- strict-identity-0.1.0.0
-- safe-0.3.21

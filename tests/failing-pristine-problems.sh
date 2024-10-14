@@ -39,17 +39,15 @@ roothash=`darcs show pristine | grep ' ./$' | cut -d' ' -f1`
 wibblehash=`darcs show pristine | grep ' wibble$' | cut -d' ' -f1`
 
 rm _darcs/pristine.hashed/$roothash
-# also remove it from the cache
-find $HOME/.cache/darcs/pristine.hashed -name $roothash -exec rm -f {} \; || true
 
 not darcs check
 not darcs check
+# At the time of writing this test goes wrong at the line above
+# I'm not 100% certain if the rest of it is right.
 darcs repair | grep -v 'The repository is already consistent'
 darcs check
 
 rm _darcs/pristine.hashed/$wibblehash
-# also remove it from the cache
-find $HOME/.cache/darcs/pristine.hashed -name $wibblehash -exec rm -f {} \; || true
 
 not darcs check
 not darcs check

@@ -59,7 +59,6 @@ module Darcs.Util.Path
     -- anchored at a certain root (this is usually the Tree root). They are
     -- represented by a list of Names (these are just strict bytestrings).
     , Name
-    , unName
     , name2fp
     , makeName
     , rawMakeName
@@ -73,6 +72,7 @@ module Darcs.Util.Path
     , parent
     , parents
     , replaceParent
+    , catPaths
     , flatten
     , inDarcsdir
     , displayPath
@@ -92,7 +92,6 @@ import Darcs.Util.ByteString ( decodeLocale, encodeLocale )
 import Data.Binary
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC
-import qualified Data.ByteString.Short as BS
 import Data.Char ( chr, isSpace, ord, toLower )
 import Data.List ( inits, isPrefixOf, isSuffixOf, stripPrefix )
 import GHC.Stack ( HasCallStack )
@@ -385,17 +384,7 @@ getUniquePathName talkative buildMsg buildName = go (-1)
 -- AnchoredPath utilities
 --
 
--- The type of file and directory names that can appear as entries inside a
--- directory. Must not be empty, ".", or "..", and must not contain path
--- separators. Also must be a valid (relative) file path on the native platform
--- (TODO this is currently not checked).
-newtype Name = Name BS.ShortByteString deriving (Binary, Eq, Ord, Show)
-
-fromName :: Name -> B.ByteString
-fromName (Name s) = BS.fromShort s
-
-unName :: Name -> BS.ShortByteString
-unName (Name s) = s
+newtype Name = Name { unName :: B.ByteString } deriving (Binary, Eq, Show, Ord)
 
 -- | This is a type of "sane" file paths. These are always canonic in the sense
 -- that there are no stray slashes, no ".." components and similar. They are
@@ -403,8 +392,7 @@ unName (Name s) = s
 -- path works just as well. These are either constructed from individual name
 -- components (using "appendPath", "catPaths" and "makeName"), or converted
 -- from a FilePath ("unsafeFloatPath" -- but take care when doing that).
-newtype AnchoredPath = AnchoredPath [Name]
-  deriving (Binary, Eq, Show, Ord, Semigroup, Monoid)
+newtype AnchoredPath = AnchoredPath [Name] deriving (Binary, Eq, Show, Ord)
 
 -- | Check whether a path is a prefix of another path.
 isPrefix :: AnchoredPath -> AnchoredPath -> Bool
@@ -413,6 +401,12 @@ isPrefix :: AnchoredPath -> AnchoredPath -> Bool
 -- | Append an element to the end of a path.
 appendPath :: AnchoredPath -> Name -> AnchoredPath
 appendPath (AnchoredPath p) n = AnchoredPath $ p ++ [n]
+
+-- | Catenate two paths together. Not very safe, but sometimes useful
+-- (e.g. when you are representing paths relative to a different point than a
+-- Tree root).
+catPaths :: AnchoredPath -> AnchoredPath -> AnchoredPath
+catPaths (AnchoredPath p) (AnchoredPath n) = AnchoredPath (p ++ n)
 
 -- | Get parent (path) of a given path. foo/bar/baz -> foo/bar
 parent :: AnchoredPath -> Maybe AnchoredPath
@@ -426,23 +420,23 @@ parents (AnchoredPath xs) = map AnchoredPath $ inits $ init xs
 
 -- | Take a "root" directory and an anchored path and produce a full
 -- 'FilePath'. Moreover, you can use @anchorPath \"\"@ to get a relative
--- 'FilePath'. Note that @"" </> x == x@.
+-- 'FilePath'.
 anchorPath :: FilePath -> AnchoredPath -> FilePath
 anchorPath dir p = dir FilePath.</> decodeLocale (flatten p)
 {-# INLINE anchorPath #-}
 
 name2fp :: Name -> FilePath
-name2fp = decodeLocale . fromName
+name2fp (Name ps) = decodeLocale ps
 
 -- FIXME returning "." for the root is wrong
 flatten :: AnchoredPath -> BC.ByteString
 flatten (AnchoredPath []) = BC.singleton '.'
-flatten (AnchoredPath p) = BC.intercalate (BC.singleton '/') (map fromName p)
+flatten (AnchoredPath p) = BC.intercalate (BC.singleton '/') [n | (Name n) <- p]
 
 -- | Make a 'Name' from a 'String'. May fail if the input 'String'
 -- is invalid, that is, "", ".", "..", or contains a '/'.
 makeName :: String -> Either String Name
-makeName = rawMakeName . BS.toShort . encodeLocale
+makeName = rawMakeName . encodeLocale
 
 -- | Take a relative FilePath and turn it into an AnchoredPath. This is a
 -- partial function. Basically, by using unsafeFloatPath, you are testifying that the
@@ -466,7 +460,7 @@ floatPath path = do
       NativeFilePath.dropTrailingPathSeparator
 
 anchoredRoot :: AnchoredPath
-anchoredRoot = mempty
+anchoredRoot = AnchoredPath []
 
 -- | A view on 'AnchoredPath's.
 parentChild :: AnchoredPath -> Maybe (AnchoredPath, Name)
@@ -480,41 +474,34 @@ replaceParent (AnchoredPath xs) p =
     Nothing -> Nothing
     Just (_,x) -> Just (AnchoredPath (xs ++ [x]))
 
--- | Make a 'Name' from a 'BS.ShortByteString'.
-rawMakeName :: BS.ShortByteString -> Either String Name
+-- | Make a 'Name' from a 'B.ByteString'.
+rawMakeName :: B.ByteString -> Either String Name
 rawMakeName s
   | isBadName s =
-      Left $ "'"++decodeLocale (BS.fromShort s)++"' is not a valid AnchoredPath component name"
+      Left $ "'"++decodeLocale s++"' is not a valid AnchoredPath component name"
   | otherwise = Right (Name s)
 
-isBadName :: BS.ShortByteString -> Bool
+isBadName :: B.ByteString -> Bool
 isBadName n = hasPathSeparator n || n `elem` forbiddenNames
 
 -- It would be nice if we could add BC.pack "_darcs" to the list, however
 -- "_darcs" could be a valid file or dir name if not inside the top level
 -- directory.
-forbiddenNames :: [BS.ShortByteString]
-forbiddenNames = [BS.empty, BS.pack [c2w '.'], BS.pack [c2w '.', c2w '.']]
+forbiddenNames :: [B.ByteString]
+forbiddenNames = [BC.empty, BC.pack ".", BC.pack ".."]
 
-hasPathSeparator :: BS.ShortByteString -> Bool
-hasPathSeparator = B.elem (c2w '/') . BS.fromShort
-
-c2w :: Char -> Word8
-c2w = fromIntegral . fromEnum
+hasPathSeparator :: B.ByteString -> Bool
+hasPathSeparator = BC.elem '/'
 
 eqAnycase :: Name -> Name -> Bool
-eqAnycase (Name a) (Name b) =
-    B.map to_lower (BS.fromShort a) == B.map to_lower (BS.fromShort b)
-  where
-    to_lower :: Word8 -> Word8
-    to_lower = fromIntegral . fromEnum . toLower . toEnum . fromIntegral
+eqAnycase (Name a) (Name b) = BC.map toLower a == BC.map toLower b
 
 encodeWhiteName :: Name -> B.ByteString
-encodeWhiteName = encodeLocale . encodeWhite . decodeLocale . fromName
+encodeWhiteName = encodeLocale . encodeWhite . decodeLocale . unName
 
 decodeWhiteName :: B.ByteString -> Either String Name
 decodeWhiteName =
-  rawMakeName . BS.toShort . encodeLocale <=< decodeWhite . decodeLocale
+  rawMakeName . encodeLocale <=< decodeWhite . decodeLocale
 
 -- | The effect of renaming on paths.
 -- The first argument is the old path, the second is the new path,

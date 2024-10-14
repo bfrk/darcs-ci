@@ -31,6 +31,7 @@ import Darcs.Patch.Witnesses.Show
 
 import Darcs.Util.Path
 import Darcs.Util.Tree( Tree, TreeItem )
+import Darcs.Util.Tree.Hashed ( darcsUpdateHashes )
 import qualified Darcs.Util.Tree as T
 
 import Control.Arrow ( second )
@@ -119,6 +120,9 @@ emptyDir = RepoItem $ T.SubTree T.emptyTree
 ----------------------------------------------------------------------
 -- * Queries
 
+nullRepo :: V1Model wX -> Bool
+nullRepo = M.null . T.items . repoTree
+
 isFile :: RepoItem -> Bool
 isFile (RepoItem (T.File _)) = True
 isFile _other                = False
@@ -171,12 +175,15 @@ filterDirs = filter (isDir . snd)
 ----------------------------------------------------------------------
 -- * Comparing repositories
 
-diffRepos :: V1Model wX -> V1Model wY -> Bool
+diffRepos :: V1Model wX -> V1Model wY -> (V1Model wU, V1Model wV)
 diffRepos repo1 repo2 =
-    null $ unFail $
-      T.diffTrees' diffItem (repoTree repo1) (repoTree repo2)
+  let (diff1,diff2) = unFail $ T.diffTrees hashedTree1 hashedTree2
+    in (V1Model diff1, V1Model diff2)
   where
-    diffItem p _ = return p
+      hashedTree1, hashedTree2 :: Tree Fail
+      hashedTree1 = unFail $ darcsUpdateHashes $ repoTree repo1
+      hashedTree2 = unFail $ darcsUpdateHashes $ repoTree repo2
+
 
 ----------------------------------------------------------------------
 -- * Patch application
@@ -261,7 +268,8 @@ instance RepoModel V1Model where
                   dirsNo <- frequency [(3, return 1), (1, return 0)]
                   aRepo filesNo dirsNo
   repoApply (V1Model tree) patch = V1Model <$> applyToTree patch tree
-  eqModel repo1 repo2 = diffRepos repo1 repo2
+  eqModel repo1 repo2 = let (diff1,diff2) = diffRepos repo1 repo2
+                         in nullRepo diff1 && nullRepo diff2
 
 
 instance Arbitrary (Sealed V1Model) where

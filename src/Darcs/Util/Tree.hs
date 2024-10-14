@@ -19,10 +19,9 @@ module Darcs.Util.Tree
     -- * Tree access and lookup.
     , items, list, listImmediate, treeHash
     , lookup, find, findFile, findTree, itemHash, itemType
-    , zipCommonFiles, zipFiles, zipTrees, diffTrees, diffTrees'
+    , zipCommonFiles, zipFiles, zipTrees, diffTrees
     , explodePath, explodePaths, locate, isDir
     , treeHas, treeHasDir, treeHasFile, treeHasAnycase
-    , traverseTopDown, traverseBottomUp, traverseBottomUpR
 
     -- * Files (Blobs).
     , readBlob
@@ -31,7 +30,7 @@ module Darcs.Util.Tree
     , FilterTree(..), restrict
 
     -- * Manipulating trees.
-    , modifyTree, updateTree, partiallyUpdateTree, overlay
+    , modifyTree, updateTree, partiallyUpdateTree, updateSubtrees, overlay
     , addMissingHashes
 
     -- * Properties
@@ -45,20 +44,15 @@ import Control.Exception( catch, IOException )
 import Darcs.Util.Path
 import Darcs.Util.Hash
 
-import Data.Bifunctor ( bimap )
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString as B
-import Data.List.NonEmpty ( NonEmpty(..) )
-import qualified Data.List.NonEmpty as NE
 import qualified Data.Map as M
 
 import Data.Maybe( catMaybes, isNothing )
 import Data.Either( lefts, rights )
-import Data.List( sort )
+import Data.List( union, sort )
 import qualified Data.List
-import Control.Monad( filterM, forM, join )
-import Data.Semialign ( align )
-import Data.These ( These(..) )
+import Control.Monad( filterM, join )
 
 --------------------------------
 -- Tree, Blob and friends
@@ -168,70 +162,6 @@ list t_ = paths t_ (AnchoredPath [])
                     concat [ paths subt (appendPath p subn)
                              | (subn, SubTree subt) <- listImmediate t ]
 
--- | Thread a monadic computation through a 'TreeItem' in top down alphabetic
--- order and collect the results.
-traverseItemTopDown
-  :: Monad m
-  => (AnchoredPath -> TreeItem m -> m a)
-  -> AnchoredPath
-  -> TreeItem m
-  -> m (NonEmpty a)
-traverseItemTopDown f = go where
-  go p i@(File _) = do
-    r <- f p i
-    return (r :| [])
-  go p (Stub mkTree _) = mkTree >>= go p . SubTree
-  go p i@(SubTree t) = do
-    r <- f p i
-    rss <- forM (listImmediate t) $ \(n,si) -> go (appendPath p n) si
-    return (r :| concatMap NE.toList rss)
-
--- | Thread a monadic computation through a 'Tree' in top down alphabetic
--- order and collect the results.
-traverseTopDown
-  :: Monad m => (AnchoredPath -> TreeItem m -> m a) -> Tree m -> m (NonEmpty a)
-traverseTopDown f = traverseItemTopDown f anchoredRoot . SubTree
-
--- | Thread a monadic computation through a 'TreeItem' in bottom up reverse
--- alphabetic order and collect the results.
-traverseItemBottomUp
-  :: Monad m
-  => (AnchoredPath -> TreeItem m -> m a)
-  -> AnchoredPath
-  -> TreeItem m
-  -> m (NonEmpty a)
-traverseItemBottomUp f path item = NE.reverse <$> traverseItemBottomUpR f path item
-
--- | Thread a monadic computation through a 'TreeItem' in bottom up reverse
--- alphabetic order and collect the results in the opposite order.
-traverseItemBottomUpR
-  :: Monad m
-  => (AnchoredPath -> TreeItem m -> m a)
-  -> AnchoredPath
-  -> TreeItem m
-  -> m (NonEmpty a)
-traverseItemBottomUpR f path item = go [] path item where
-  go rs p i@(File _) = do
-    r <- f p i
-    return (r :| rs)
-  go rs p (Stub mkTree _) = mkTree >>= go rs p . SubTree
-  go rs p i@(SubTree t) = do
-    rss <- forM (reverse $ listImmediate t) $ \(n,si) -> go rs (appendPath p n) si
-    r <- f p i
-    return (r :| concatMap NE.toList rss)
-
--- | Thread a monadic computation through a 'Tree' in bottom up reverse
--- alphabetic order and collect the results.
-traverseBottomUp
-  :: Monad m => (AnchoredPath -> TreeItem m -> m a) -> Tree m -> m (NonEmpty a)
-traverseBottomUp f = traverseItemBottomUp f anchoredRoot . SubTree
-
--- | Thread a monadic computation through a 'Tree' in bottom up reverse
--- alphabetic order and collect the results in the opposite order.
-traverseBottomUpR
-  :: Monad m => (AnchoredPath -> TreeItem m -> m a) -> Tree m -> m (NonEmpty a)
-traverseBottomUpR f = traverseItemBottomUpR f anchoredRoot . SubTree
-
 -- | Like 'find' but monadic and thus able to expand 'Stub's on the way.
 locate :: Monad m => Tree m -> AnchoredPath -> m (Maybe (TreeItem m))
 locate tree (AnchoredPath names) = go names (SubTree tree)
@@ -280,7 +210,7 @@ explodePaths tree paths = concatMap (explodePath tree) paths
 -- prop> explodePath t p == Prelude.filter (p `isPrefix`) (map fst (list t))
 explodePath :: Tree m -> AnchoredPath -> [AnchoredPath]
 explodePath tree path =
-  path : maybe [] (map (mappend path . fst) . list) (findTree tree path)
+  path : maybe [] (map (catPaths path . fst) . list) (findTree tree path)
 
 expandUpdate
   :: (Monad m) => (AnchoredPath -> Tree m -> m (Tree m)) -> Tree m -> m (Tree m)
@@ -432,67 +362,59 @@ sortedUnion a@(x:xs) b@(y:ys) = case compare x y of
                                 EQ -> x : sortedUnion xs ys
                                 GT -> y : sortedUnion a ys
 
--- | Symmetric difference of 'Tree's. The resulting 'Tree's are always fully
--- expanded.
---
--- This function is used only for testing the underlying diffTrees'.
+-- | Cautiously extracts differing subtrees from a pair of Trees. It will never
+-- do any unneccessary expanding. Tree hashes are used to cut the comparison as
+-- high up the Tree branches as possible. The result is a pair of trees that do
+-- not share any identical subtrees. They are derived from the first and second
+-- parameters respectively and they are always fully expanded. It might be
+-- advantageous to feed the result into 'zipFiles' or 'zipTrees'.
 diffTrees :: forall m. (Monad m) => Tree m -> Tree m -> m (Tree m, Tree m)
-diffTrees left right = do
-  diffs <- diffTrees' diffItem left right
-  return $ foldr rebuild (emptyTree, emptyTree) diffs
-  where
-    diffItem p = return . bimap (p,) (p,)
-    rebuild (This (p,i)) (l,r) = (modifyTree l p (Just i), r)
-    rebuild (That (p,i)) (l,r) = (l, modifyTree r p (Just i))
-    rebuild (These (p,i) (q,j)) (l,r) = (modifyTree l p (Just i), modifyTree r q (Just j))
-
-diffTrees'
-  :: forall m a
-   . Monad m
-  => (AnchoredPath -> These (TreeItem m) (TreeItem m) -> m a)
-  -> Tree m
-  -> Tree m
-  -> m [a]
-diffTrees' diffItem left right
-  | treeHash left `match` treeHash right = return []
-  | otherwise = diff anchoredRoot left right
-  where
-    subtree :: TreeItem m -> m (Tree m)
-    subtree (Stub x _) = x
-    subtree (SubTree x) = return x
-    subtree (File _) = error "diffTrees tried to descend a File as a subtree"
-    diffThis p i = diffItem p (This i)
-    diffThat p i = diffItem p (That i)
-    diff :: AnchoredPath -> Tree m -> Tree m -> m [a]
-    diff p left' right' =
-      concat <$> sequence
-        [ let p' = appendPath p n in
-          case v of
-          This l -> NE.toList <$> traverseItemBottomUp diffThis p' l
-          That r -> NE.toList <$> traverseItemTopDown diffThat p' r
-          These l r
-            | itemHash l `match` itemHash r -> return []
-            | File (Blob bl _) <- l, File (Blob br _) <- r -> do
-              cl <- bl
-              cr <- br
-              if cl == cr then
-                return []
-              else do
-                -- don't waste the effort of reading the blobs
-                let l' = File (Blob (return cl) Nothing)
-                    r' = File (Blob (return cr) Nothing)
-                d <- diffItem p' (These l' r')
-                return [d]
-            | isDir l && isDir r -> do
-              x <- subtree l
-              y <- subtree r
-              diff p' x y
-            | otherwise -> do
-              l' <- NE.toList <$> traverseItemBottomUp diffThis p' l
-              r' <- NE.toList <$> traverseItemTopDown diffThat p' r
-              return (l' ++ r')
-        | (n, v) <- M.toList $ align (items left') (items right')
-        ]
+diffTrees left right =
+            if treeHash left `match` treeHash right
+               then return (emptyTree, emptyTree)
+               else diff left right
+  where isFile (File _) = True
+        isFile _ = False
+        notFile = not . isFile
+        isEmpty = null . listImmediate
+        subtree :: TreeItem m -> m (Tree m)
+        subtree (Stub x _) = x
+        subtree (SubTree x) = return x
+        subtree (File _) = error "diffTrees tried to descend a File as a subtree"
+        maybeUnfold (Stub x _) = SubTree `fmap` (x >>= expand)
+        maybeUnfold (SubTree x) = SubTree `fmap` expand x
+        maybeUnfold i = return i
+        immediateN t = [ n | (n, _) <- listImmediate t ]
+        diff left' right' = do
+          is <- sequence [
+                   case (lookup left' n, lookup right' n) of
+                     (Just l, Nothing) -> do
+                       l' <- maybeUnfold l
+                       return (n, Just l', Nothing)
+                     (Nothing, Just r) -> do
+                       r' <- maybeUnfold r
+                       return (n, Nothing, Just r')
+                     (Just l, Just r)
+                         | itemHash l `match` itemHash r ->
+                             return (n, Nothing, Nothing)
+                         | notFile l && notFile r ->
+                             do x <- subtree l
+                                y <- subtree r
+                                (x', y') <- diffTrees x y
+                                if isEmpty x' && isEmpty y'
+                                   then return (n, Nothing, Nothing)
+                                   else return (n, Just $ SubTree x', Just $ SubTree y')
+                         | isFile l && isFile r ->
+                             return (n, Just l, Just r)
+                         | otherwise ->
+                             do l' <- maybeUnfold l
+                                r' <- maybeUnfold r
+                                return (n, Just l', Just r')
+                     _ -> error "n lookups failed"
+                   | n <- immediateN left' `union` immediateN right' ]
+          let is_l = [ (n, l) | (n, Just l, _) <- is ]
+              is_r = [ (n, r) | (n, _, Just r) <- is ]
+          return (makeTree is_l, makeTree is_r)
 
 -- | Modify a Tree (by replacing, or removing or adding items).
 modifyTree :: (Monad m) => Tree m -> AnchoredPath -> Maybe (TreeItem m) -> Tree m
@@ -532,6 +454,14 @@ modifyTree t_ p_ i_ = snd $ go t_ p_ i_
 countmap :: forall a k. M.Map k a -> Int
 countmap = M.foldr (\_ i -> i + 1) 0
 
+updateSubtrees :: (Tree m -> Tree m) -> Tree m -> Tree m
+updateSubtrees fun t =
+    fun $ t { items = M.mapWithKey (curry $ snd . update) $ items t
+            , treeHash = Nothing }
+  where update (k, SubTree s) = (k, SubTree $ updateSubtrees fun s)
+        update (k, File f) = (k, File f)
+        update (_, Stub _ _) = error "Stubs not supported in updateTreePostorder"
+
 -- | Does /not/ expand the tree.
 updateTree :: (Monad m) => (TreeItem m -> m (TreeItem m)) -> Tree m -> m (Tree m)
 updateTree fun t = partiallyUpdateTree fun (\_ _ -> True) t
@@ -560,30 +490,31 @@ partiallyUpdateTree fun predi t' = go (AnchoredPath []) t'
 -- means that the overlay Tree should be a subset of the base Tree (although
 -- any extraneous items will be ignored by the implementation).
 overlay :: Applicative m => Tree m -> Tree m -> Tree m
-overlay base over = Tree {items = immediate, treeHash = Nothing}
+overlay base over = Tree {items = M.fromList immediate, treeHash = Nothing}
   where
-    immediate = M.differenceWith get (items base) (items over)
-    get (File _)  f@(File _)    = Just f
-    get (SubTree b) (SubTree o) = Just $ SubTree $ overlay b o
-    get (Stub b _ ) (SubTree o) = Just $ Stub (overlay <$> b <*> pure o) Nothing
-    get (SubTree b) (Stub o _ ) = Just $ Stub (overlay <$> pure b <*> o) Nothing
-    get (Stub b _ ) (Stub o _ ) = Just $ Stub (overlay <$> b <*> o) Nothing
-    -- item type mismatch between base and over
-    get _ _ = error "precondition violated"
+    immediate = [(n, get n) | (n, _) <- listImmediate base]
+    get n =
+      case (M.lookup n $ items base, M.lookup n $ items over) of
+        (Just (File _), Just f@(File _)) -> f
+        (Just (SubTree b), Just (SubTree o)) -> SubTree $ overlay b o
+        (Just (Stub b _), Just (SubTree o)) -> Stub (overlay <$> b <*> pure o) Nothing
+        (Just (SubTree b), Just (Stub o _)) -> Stub (overlay <$> pure b <*> o) Nothing
+        (Just (Stub b _), Just (Stub o _)) -> Stub (overlay <$> b <*> o) Nothing
+        (Just x, _) -> x
+        (_, _) -> error $ "Unexpected case in overlay at get " ++ show n ++ "."
 
 -- | Calculate and insert hashes for all 'TreeItem's contained in a 'Tree',
 -- including the argument 'Tree' itself. If necessary, this expands 'Stub's.
 addMissingHashes :: (Monad m) => (TreeItem m -> m Hash) -> Tree m -> m (Tree m)
-addMissingHashes hashit = updateTree update
-  where
-    update item@(SubTree (Tree is Nothing)) = do
-      hash <- hashit item
-      return $ SubTree (Tree is (Just hash))
-    update item@(File (Blob con Nothing)) = do
-      hash <- hashit item
-      return $ File (Blob con (Just hash))
-    update (Stub s Nothing) = update . SubTree =<< s
-    update x = return x
+addMissingHashes make = updateTree update
+    where update item@(SubTree t) = do
+              hash <- make item
+              return $ SubTree (t { treeHash = Just hash })
+          update item@(File (Blob con Nothing)) = do
+              hash <- make item
+              return $ File (Blob con (Just hash))
+          update (Stub s Nothing) = update . SubTree =<< s
+          update x = return x
 
 -- ---- Private utilities shared among multiple functions. --------
 

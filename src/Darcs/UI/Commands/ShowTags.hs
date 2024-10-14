@@ -22,21 +22,15 @@ module Darcs.UI.Commands.ShowTags
 import Darcs.Prelude
 
 import Control.Monad ( unless )
-import Data.Maybe ( fromMaybe, maybeToList )
+import Data.Maybe ( fromMaybe )
 import System.IO ( stderr, hPutStrLn )
 
-import Darcs.Patch.Match
-    ( MatchFlag(OnePattern)
-    , MatchableRP
-    , checkMatchSyntax
-    , matchAPatch
-    )
-import Darcs.Patch.Set ( PatchSet(..), patchSetTags, tagsCovering )
+import Darcs.Patch.Set ( PatchSet, patchSetTags )
 import Darcs.Repository ( readPatches, withRepositoryLocation, RepoJob(..) )
 import Darcs.UI.Commands ( DarcsCommand(..), withStdOpts, nodefaults, findRepository )
 import Darcs.UI.Completion ( noArgs )
 import Darcs.UI.Flags ( DarcsFlag, useCache, getRepourl )
-import Darcs.UI.Options ( oid, (?), (^) )
+import Darcs.UI.Options ( oid, (?) )
 import qualified Darcs.UI.Options.All as O
 import Darcs.Util.Path ( AbsolutePath )
 import Darcs.Util.Printer ( Doc, formatText )
@@ -68,7 +62,7 @@ showTags = DarcsCommand
     , commandOptions = showTagsOpts
     }
   where
-    showTagsBasicOpts = O.possiblyRemoteRepo ^ O.covering
+    showTagsBasicOpts = O.possiblyRemoteRepo
     showTagsOpts = showTagsBasicOpts `withStdOpts` oid
 
 tagsCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
@@ -76,12 +70,8 @@ tagsCmd _ opts _ = let repodir = fromMaybe "." (getRepourl opts) in
     withRepositoryLocation (useCache ? opts) repodir $ RepoJob $ \repo ->
         readPatches repo >>= printTags
   where
-    printTags :: MatchableRP p => PatchSet p wW wZ -> IO ()
-    printTags ps = do
-      checkMatchSyntax (maybeToList (fmap OnePattern (O.covering ? opts)))
-      case findTags ps of
-        Nothing -> fail "No patches matching the pattern have been found."
-        Just ts -> mapM_ process ts
+    printTags :: PatchSet p wW wZ -> IO ()
+    printTags = mapM_ process . patchSetTags
     process :: String -> IO ()
     process t = normalize t t False >>= putStrLn
     normalize :: String -> String -> Bool -> IO String
@@ -95,8 +85,3 @@ tagsCmd _ opts _ = let repodir = fromMaybe "." (getRepourl opts) in
         else do
             rest <- normalize t xs flag
             return $ x : rest
-    findTags :: MatchableRP p => PatchSet p wX wY -> Maybe [String]
-    findTags =
-      case O.covering ? opts of
-        Nothing -> Just . patchSetTags
-        Just pat -> tagsCovering (matchAPatch [OnePattern pat])

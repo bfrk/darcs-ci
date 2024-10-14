@@ -18,7 +18,6 @@ module Darcs.Util.ByteString
     (
     -- * IO with mmap or gzip
       gzReadFilePS
-    , gzReadMmapFilePS
     , mmapFilePS
     , gzWriteFilePS
     , gzWriteFilePSs
@@ -85,7 +84,10 @@ import qualified Codec.Compression.Zlib.Internal as ZI
 import Darcs.Util.Encoding ( decode, encode, decodeUtf8, encodeUtf8 )
 import Darcs.Util.Global ( addCRCWarning )
 
+#if mingw32_HOST_OS
+#else
 import System.IO.MMap( mmapFileByteString )
+#endif
 import System.Mem( performGC )
 
 ------------------------------------------------------------------------
@@ -226,23 +228,6 @@ gzReadFilePS :: FilePath -> IO B.ByteString
 gzReadFilePS f = do
     mlen <- isGZFile f
     case mlen of
-       Nothing -> B.readFile f
-       Just len ->
-            do -- Passing the length to gzDecompress means that it produces produces one chunk,
-               -- which in turn means that B.concat won't need to copy data.
-               -- If the length is wrong this will just affect efficiency, not correctness
-               let doDecompress buf = let (res, bad) = gzDecompress (Just len) buf
-                                      in do when bad $ addCRCWarning f
-                                            return res
-               compressed <- (BL.fromChunks . return) `fmap` B.readFile f
-               B.concat `fmap` doDecompress compressed
-
--- | Read an entire file, which may or may not be gzip compressed, directly
--- into a 'B.ByteString'.
-gzReadMmapFilePS :: FilePath -> IO B.ByteString
-gzReadMmapFilePS f = do
-    mlen <- isGZFile f
-    case mlen of
        Nothing -> mmapFilePS f
        Just len ->
             do -- Passing the length to gzDecompress means that it produces produces one chunk,
@@ -292,7 +277,7 @@ gzReadStdin = do
 -- fed to (uncurry mmapFileByteString) or similar.
 type FileSegment = (FilePath, Maybe (Int64, Int))
 
--- | Read in a FileSegment into a Lazy ByteString.
+-- | Read in a FileSegment into a Lazy ByteString. Implemented using mmap.
 readSegment :: FileSegment -> IO BL.ByteString
 readSegment (f,range) = do
     bs <- tryToRead
@@ -325,6 +310,9 @@ readSegment (f,range) = do
 -- is modified.
 
 mmapFilePS :: FilePath -> IO B.ByteString
+#if mingw32_HOST_OS
+mmapFilePS = B.readFile
+#else
 mmapFilePS f =
   mmapFileByteString f Nothing
    `catchIOError` (\_ -> do
@@ -332,6 +320,7 @@ mmapFilePS f =
                      if size == 0
                         then return B.empty
                         else performGC >> mmapFileByteString f Nothing)
+#endif
 
 -- -------------------------------------------------------------------------
 -- fromPS2Hex

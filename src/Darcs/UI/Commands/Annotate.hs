@@ -50,7 +50,7 @@ import qualified Darcs.Patch.Annotate as A
 import Darcs.Util.Tree( TreeItem(..) )
 import qualified Darcs.Util.Tree as T ( readBlob, list, expand )
 import Darcs.Util.Tree.Monad( findM, virtualTreeIO )
-import Darcs.Util.Path( AbsolutePath, AnchoredPath, displayPath )
+import Darcs.Util.Path( AbsolutePath, AnchoredPath, displayPath, catPaths )
 import Darcs.Util.Printer ( Doc, simplePrinters, renderString, text )
 import Darcs.Util.Exception ( die )
 
@@ -124,9 +124,9 @@ annotateCmd' opts fixed_path = withRepository (useCache ? opts) $ RepoJob $ \rep
     Just (SubTree s) -> do
       -- TODO the semantics and implementation of annotating of directories need to be revised
       s' <- T.expand s
-      let subs = map (mappend path . fst) $ T.list s'
-          showPath (n, File _) = BC.pack $ displayPath $ path <> n
-          showPath (n, _) = BC.concat [BC.pack $ displayPath $ path <> n, "/"]
+      let subs = map (catPaths path . fst) $ T.list s'
+          showPath (n, File _) = BC.pack $ displayPath $ path `catPaths` n
+          showPath (n, _) = BC.concat [BC.pack $ displayPath $ path `catPaths` n, "/"]
       (Sealed ans_patches) <- do
          if not usePatchIndex
             then return patches

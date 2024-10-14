@@ -301,14 +301,9 @@ xdgCacheDir = do
     `catchall` return Nothing
 
 globalCacheDir :: IO (Maybe FilePath)
-globalCacheDir = do
-    env <- getEnvironment
-    case lookup "DARCS_TESTING_CACHE_DIR" env of
-        Just d -> return (Just d)
-        Nothing
-            | windows   -> ((</> "cache2") `fmap`) `fmap` globalPrefsDir
-            | osx       -> ((</> "darcs") `fmap`) `fmap` osxCacheDir
-            | otherwise -> ((</> "darcs") `fmap`) `fmap` xdgCacheDir
+globalCacheDir | windows   = ((</> "cache2") `fmap`) `fmap` globalPrefsDir
+               | osx       = ((</> "darcs") `fmap`) `fmap` osxCacheDir
+               | otherwise = ((</> "darcs") `fmap`) `fmap` xdgCacheDir
 
 -- |tryMakeBoringRegexp attempts to create a Regex from a given String. The
 -- evaluation is forced, to ensure any malformed exceptions are thrown here,

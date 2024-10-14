@@ -235,9 +235,6 @@ module Darcs.UI.Options.All
     , EnumPatches (..)
     , enumPatches
 
-    -- show tags
-    , covering
-
     -- gzcrcs
     , GzcrcsAction (..)
     , gzcrcsActions
@@ -1306,13 +1303,6 @@ enumPatches = withDefault YesEnumPatches
     "include statistics requiring enumeration of patches"
   , RawNoArg [] ["no-enum-patches"] F.NoEnumPatches NoEnumPatches
     "don't include statistics requiring enumeration of patches" ]
-
--- ** show tags
-
-covering :: PrimDarcsOption (Maybe String)
-covering = singleStrArg [] ["covering"] F.Covering arg "PATTERN"
-    "show (only) tags covering the latest patch that matches PATTERN"
-  where arg (F.Covering s) = Just s; arg _ = Nothing
 
 -- ** gzcrcs
 

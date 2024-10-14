@@ -37,12 +37,12 @@ import qualified Data.ByteString      as B
 import qualified Data.ByteString.Lazy as BL
 import qualified Darcs.Util.Tree.Monad as TM
 import Darcs.Patch.Object ( ObjectIdOf )
+import Darcs.Util.StrictIdentity (StrictIdentity(..) )
 import Darcs.Util.Tree ( Tree )
 import Data.Maybe ( fromMaybe )
 import Darcs.Util.Path ( AnchoredPath, movedirfilename, isPrefix )
 import Control.Monad.Catch ( MonadThrow(..) )
 import Control.Monad.State.Strict
-import Control.Monad.StrictIdentity (StrictIdentity(..) )
 
 import GHC.Exts ( Constraint )
 
