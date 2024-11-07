@@ -29,7 +29,8 @@ jobs:
 #           - 9.8.2
           - 9.10.1
         cabal:
-          - '3.12'
+          - 3.10
+          - 3.12
     env:
       builddocs: ${{ matrix.ghc == '9.4.5' }}
       runtests: ${{ matrix.ghc == '8.4.4' || matrix.ghc == '9.10.1' }}
