@@ -23,11 +23,11 @@ unpack_testdata undo
 cd undo
 
 darcs changes | grep "UNDO"
-darcs changes --xml | grep "inverted='True'"
+darcs changes --xml | grep "inverted=\"True\""
 
 echo "empty" > Patch.lhs
 
 echo yy | darcs amend -a -p "get rid of"
 
 darcs changes | not grep "UNDO"
-darcs changes --xml | not grep "inverted='True'"
+darcs changes --xml | not grep "inverted=\"True\""

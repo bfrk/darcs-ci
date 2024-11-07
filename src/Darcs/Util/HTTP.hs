@@ -46,7 +46,7 @@ import Network.HTTP.Types.Header
     )
 
 #ifdef HAVE_CRYPTON_CONNECTION
-import Data.Default.Class ( def )
+import Data.Default ( def )
 import qualified Network.Connection as NC
 import Network.HTTP.Client.TLS
     ( mkManagerSettings

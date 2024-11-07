@@ -19,10 +19,10 @@ module Darcs.UI.Commands.ShowRepo ( showRepo ) where
 
 import Darcs.Prelude
 
-import Data.Char ( toLower, isSpace )
 import Data.List ( intercalate )
-import Control.Monad ( when, unless, liftM )
-import Text.Html ( tag, stringToHtml )
+import Data.Maybe ( catMaybes )
+import qualified Text.XML.Light as XML
+
 import Darcs.Util.Path ( AbsolutePath )
 import Darcs.UI.Flags ( DarcsFlag, useCache, hasXmlOutput, enumeratePatches )
 import Darcs.UI.Options ( (^), oid, (?) )
@@ -31,6 +31,9 @@ import Darcs.UI.Commands ( DarcsCommand(..), withStdOpts, nodefaults, amInReposi
 import Darcs.UI.Completion ( noArgs )
 import Darcs.Repository
     ( Repository
+    , RepoFormat
+    , PristineType
+    , Cache
     , repoFormat
     , repoLocation
     , repoPristineType
@@ -41,15 +44,16 @@ import Darcs.Repository
 import Darcs.Repository.Hashed( repoXor )
 import Darcs.Repository.PatchIndex ( isPatchIndexDisabled, doesPatchIndexExist )
 import Darcs.Repository.Prefs
-    ( Pref(Author, Defaultrepo, Prefs)
+    ( Pref(Author, Defaultrepo)
     , getMotd
     , getPreflist
+    , getPrefval
     )
 import Darcs.Patch ( RepoPatch )
 import Darcs.Patch.Set ( patchSet2RL )
 import Darcs.Patch.Witnesses.Ordered ( lengthRL )
-import qualified Data.ByteString.Char8 as BC  (unpack)
 import Darcs.Patch.Apply( ApplyState )
+import Darcs.Util.ByteString ( decodeLocale )
 import Darcs.Util.Printer ( Doc, text )
 import Darcs.Util.Tree ( Tree )
 
@@ -94,89 +98,119 @@ showRepo = DarcsCommand
     showRepoOpts = showRepoBasicOpts `withStdOpts` oid
 
 repoCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
-repoCmd _ opts _ =
-  let put_mode = if hasXmlOutput opts then showInfoXML else showInfoUsr
-  in withRepository (useCache ? opts) $
-     RepoJob $ \repository ->
-       actuallyShowRepo (putInfo put_mode) repository opts
+repoCmd _ opts _ = do
+  withRepository (useCache ? opts) $
+    RepoJob $ \r ->
+      getRepoInfo r opts >>= putStr .
+        if hasXmlOutput opts then
+          XML.ppElement . XML.unode "repository"
+        else
+          showRepoInfo
 
--- Some convenience functions to output a labelled text string or an
--- XML tag + value (same API).  If no value, output is suppressed
--- entirely.  Borrow some help from Text.Html to perform XML output.
+data RepoInfo = RepoInfo
+  { riFormat :: RepoFormat
+  , riRoot :: String
+  , riPristineType :: PristineType
+  , riCache :: Cache
+  , riPatchIndex :: String
+  , riTestPref :: Maybe String
+  , riBinariesfilePref :: Maybe String
+  , riBoringfilePref :: Maybe String
+  , riPredistPref :: Maybe String
+  , riAuthor :: Maybe String
+  , riDefaultRemote :: Maybe String
+  , riNumPatches :: Maybe Int
+  , riWeakHash :: Maybe String
+  , riMotd :: Maybe String
+  }
 
-type ShowInfo = String -> String -> String
-
-showInfoXML :: ShowInfo
-showInfoXML t i = show $ tag (safeTag t) $ stringToHtml i
-
-safeTag :: String -> String
-safeTag [] = []
-safeTag (' ':cs) = safeTag cs
-safeTag ('#':cs) = "num_" ++ safeTag cs
-safeTag (c:cs) = toLower c : safeTag cs
-
--- labelled strings: labels are right-aligned at 15 characters;
--- subsequent lines in multi-line output are indented accordingly.
-showInfoUsr :: ShowInfo
-showInfoUsr t i = replicate (15 - length t) ' ' ++ t ++ ": " ++
-                  intercalate ('\n' : replicate 17 ' ') (lines i) ++ "\n"
-
-type PutInfo = String -> String -> IO ()
-putInfo :: ShowInfo -> PutInfo
-putInfo m t i = unless (null i) (putStr $ m t i)
-
--- Primary show-repo operation.  Determines ordering of output for
--- sub-displays.  The `out' argument is one of the above operations to
--- output a labelled text string or an XML tag and contained value.
-
-actuallyShowRepo
+getRepoInfo
   :: (RepoPatch p, ApplyState p ~ Tree)
-  => PutInfo -> Repository rt p wU wR -> [DarcsFlag] -> IO ()
-actuallyShowRepo out r opts = do
-  when (hasXmlOutput opts) (putStr "<repository>\n")
-  out "Format" $ showInOneLine $ repoFormat r
-  let loc = repoLocation r
-  out "Root" loc
-  out "PristineType" $ show $ repoPristineType r
-  out "Cache" $ showInOneLine $ repoCache r
-  piExists <- doesPatchIndexExist loc
-  piDisabled <- isPatchIndexDisabled loc
-  out "PatchIndex" $
-    case (piExists, piDisabled) of
-      (_, True) -> "disabled"
-      (True, False) -> "enabled"
-      (False, False) -> "enabled, but not yet created"
-  showRepoPrefs out
-  when (enumeratePatches opts) (do numPatches r >>= (out "Num Patches" . show)
-                                   showXor out r)
-  showRepoMOTD out r
-  when (hasXmlOutput opts) (putStr "</repository>\n")
+  => Repository rt p wU wR -> [DarcsFlag] -> IO RepoInfo
+getRepoInfo r opts = do
+  let riFormat = repoFormat r
+  let riRoot = repoLocation r
+  let riPristineType = repoPristineType r
+  let riCache = repoCache r
+  piExists <- doesPatchIndexExist riRoot
+  piDisabled <- isPatchIndexDisabled riRoot
+  let riPatchIndex = showPatchIndexInfo (piExists, piDisabled)
+  riBinariesfilePref <- getPrefval "binariesfile"
+  riBoringfilePref <- getPrefval "boringfile"
+  riPredistPref <- getPrefval "predist"
+  riTestPref <- getPrefval "test"
+  let unlessnull x = if null x then Nothing else Just x
+  riAuthor <- showPrefList <$> getPreflist Author
+  riDefaultRemote <- showPrefList <$> getPreflist Defaultrepo
+  riNumPatches <-
+    if enumeratePatches opts then
+      Just . lengthRL . patchSet2RL <$> readPatches r
+    else
+      return Nothing
+  riWeakHash <-
+    if enumeratePatches opts then Just . show <$> repoXor r else return Nothing
+  riMotd <- unlessnull . decodeLocale <$> getMotd riRoot
+  return $ RepoInfo {..}
 
-showXor :: (RepoPatch p, ApplyState p ~ Tree)
-        => PutInfo -> Repository rt p wU wR -> IO ()
-showXor out repo = do
-  theXor <- repoXor repo
-  out "Weak Hash" (show theXor)
+instance XML.Node RepoInfo where
+  node qn RepoInfo {..} =
+    XML.node qn $
+      [ XML.unode "format" $ showInOneLine riFormat
+      , XML.unode "root" riRoot
+      , XML.unode "pristinetype" (show riPristineType)
+      , XML.unode "cache" (showInOneLine riCache)
+      , XML.unode "patchindex" riPatchIndex
+      ]
+      ++
+      catMaybes
+      [ XML.unode "testpref" <$> riTestPref
+      , XML.unode "binariesfilepref" <$> riBinariesfilePref
+      , XML.unode "boringfilepref" <$> riBoringfilePref
+      , XML.unode "predistpref" <$> riPredistPref
+      , XML.unode "author" <$> riAuthor
+      , XML.unode "defaultremote" <$> riDefaultRemote
+      , XML.unode "numpatches" . show <$> riNumPatches
+      , XML.unode "weakhash" <$> riWeakHash
+      , XML.unode "motd" <$> riMotd
+      ]
 
--- Most of the actual elements being displayed are part of the Show
--- class; that's fine for a Haskeller, but not for the common user, so
--- the routines below work to provide more human-readable information
--- regarding the repository elements.
+showRepoInfo :: RepoInfo -> String
+showRepoInfo RepoInfo{..} =
+  unlines $
+    [ out "Format" $ showInOneLine riFormat
+    , out "Root" riRoot
+    , out "PristineType" $ show riPristineType
+    , out "Cache" $ showInOneLine $ riCache
+    , out "PatchIndex" $ riPatchIndex
+    ]
+    ++ catMaybes
+    [ out "test Pref" <$> riTestPref
+    , out "binariesfile Pref" <$> riBinariesfilePref
+    , out "boringfile Pref" <$> riBoringfilePref
+    , out "predist Pref" <$> riPredistPref
+    , out "Author" <$> riAuthor
+    , out "Default Remote" <$> riDefaultRemote
+    , out "Num Patches" . show <$> riNumPatches
+    , out "Weak Hash" <$> riWeakHash
+    , out "MOTD" <$> riMotd
+    ]
+  where
+    -- labelled strings: labels are right-aligned at 15 characters;
+    -- subsequent lines in multi-line output are indented accordingly.
+    out t i =
+      replicate (15 - length t) ' ' ++ t ++ ": " ++
+        intercalate ('\n' : replicate 17 ' ') (lines i)
+
+showPatchIndexInfo :: (Bool, Bool) -> String
+showPatchIndexInfo pi =
+  case pi of
+    (_, True) -> "disabled"
+    (True, False) -> "enabled"
+    (False, False) -> "enabled, but not yet created"
 
 showInOneLine :: Show a => a -> String
 showInOneLine = intercalate ", " . lines . show
 
-showRepoPrefs :: PutInfo -> IO ()
-showRepoPrefs out = do
-    getPreflist Prefs >>= mapM_ prefOut
-    getPreflist Author >>= out "Author" . unlines
-    getPreflist Defaultrepo >>= out "Default Remote" . unlines
-  where prefOut = uncurry out . (\(p,v) -> (p++" Pref", dropWhile isSpace v)) . break isSpace
-
-showRepoMOTD :: PutInfo -> Repository rt p wU wR -> IO ()
-showRepoMOTD out repo = getMotd (repoLocation repo) >>= out "MOTD" . BC.unpack
-
--- Support routines to provide information used by the PutInfo operations above.
-
-numPatches :: (RepoPatch p, ApplyState p ~ Tree) => Repository rt p wU wR -> IO Int
-numPatches r = (lengthRL . patchSet2RL) `liftM` readPatches r
+showPrefList :: [String] -> Maybe String
+showPrefList [] = Nothing
+showPrefList ss = Just $ intercalate ", " ss

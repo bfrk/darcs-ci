@@ -22,9 +22,9 @@ module Darcs.Util.Printer
     , userchunk, packedString
     , prefix
     , hiddenPrefix
-    , insertBeforeLastline
     , prefixLines
     , invisiblePS, userchunkPS
+    , fromXml
     -- * Rendering to 'String'
     , renderString, renderStringWith
     -- * Rendering to 'ByteString'
@@ -60,6 +60,7 @@ import Data.String ( IsString(..) )
 import System.IO ( Handle, stdout )
 import qualified Data.ByteString as B ( ByteString, hPut, concat )
 import qualified Data.ByteString.Char8 as BC ( singleton )
+import qualified Text.XML.Light as XML
 
 import Darcs.Util.ByteString ( linesPS, decodeLocale, encodeLocale, gzWriteHandle )
 import Darcs.Util.Global ( debugMessage )
@@ -273,15 +274,6 @@ prefix s (Doc d) = Doc $ \st ->
 prefixLines :: Doc -> Doc -> Doc
 prefixLines prefixer prefixee =
   vcat $ map (prefixer <+>) $ map packedString $ linesPS $ renderPS prefixee
-
--- TODO try to find another way to do this, it's rather a violation
--- of the Doc abstraction
-insertBeforeLastline :: Doc -> Doc -> Doc
-insertBeforeLastline a b =
-  case reverse $ map packedString $ linesPS $ renderPS a of
-    (ll:ls) -> vcat (reverse ls) $$ b $$ ll
-    [] ->
-      error "empty Doc given as first argument of Printer.insert_before_last_line"
 
 lineColor :: Color -> Doc -> Doc
 lineColor c d = Doc $ \st -> case lineColorT (printers st) c d of
@@ -534,3 +526,6 @@ quoted s = text "\"" <> text (escape s) <> text "\""
     escape (c:cs) = if c `elem` ['\\', '"']
                        then '\\' : c : escape cs
                        else c : escape cs
+
+fromXml :: XML.Element -> Doc
+fromXml = text . XML.ppElement

@@ -41,7 +41,7 @@ darcs rec -am 'Move a -> b'
 
 darcs changes --xml b bb > changes.xml
 
-grep "original_name='./a'" < changes.xml
+grep 'original_name="./a"' < changes.xml
 # Ensure we've not used a prefix of the filename for the move.
 not grep "original_name='./ab'" < changes.xml
 
