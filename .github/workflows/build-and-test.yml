@@ -19,14 +19,14 @@ jobs:
           - windows-2022
         ghc:
           - 8.4.4
-#           - 8.6.5
-#           - 8.8.2
-#           - 8.10.7
-#           - 9.0.2
-#           - 9.2.8
-#           - 9.4.8
-#           - 9.6.4
-#           - 9.8.2
+          - 8.6.5
+          - 8.8.2
+          - 8.10.7
+          - 9.0.2
+          - 9.2.8
+          - 9.4.8
+          - 9.6.4
+          - 9.8.2
           - 9.10.1
         cabal:
           - '3.10'
@@ -72,8 +72,8 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ steps.setup-haskell-cabal.outputs.cabal-store }}
-        key: cabal-store-${{ matrix.os }}-ghc-${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}
-        restore-keys: cabal-store-${{ matrix.os }}-ghc-${{ matrix.ghc }}-
+        key: cabal-store-${{ matrix.os }}-cabal-${{ matrix.cabal }}-ghc-${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}
+        restore-keys: cabal-store-${{ matrix.os }}-cabal-${{ matrix.cabal }}-ghc-${{ matrix.ghc }}-
 
     - name: Build dependencies (with docs)
       if: env.builddocs == 'true'
@@ -88,7 +88,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: ${{ steps.setup-haskell-cabal.outputs.cabal-store }}
-        key: cabal-store-${{ matrix.os }}-ghc-${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}
+        key: cabal-store-${{ matrix.os }}-cabal-${{ matrix.cabal }}-ghc-${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}
 
     - name: Build
       run: cabal build
