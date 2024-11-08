@@ -4,7 +4,7 @@ on: push
 
 jobs:
   build-with-cabal:
-    name: ${{ matrix.os }} / ghc-${{ matrix.ghc }}
+    name: ${{ matrix.os }} / cabal-${{ matrix.cabal }} / ghc-${{ matrix.ghc }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -13,7 +13,6 @@ jobs:
           - ubuntu-20.04
           - ubuntu-22.04
           - ubuntu-24.04
-          - macos-11
           - macos-12
           - macos-13
           - macos-14
@@ -33,6 +32,9 @@ jobs:
         cabal:
           - '3.10'
           - '3.12'
+        exclude:
+          - os: macos
+            cabal: '3.12'
     env:
       builddocs: ${{ matrix.ghc == '9.4.5' }}
       runtests: ${{ matrix.ghc == '8.4.4' || matrix.ghc == '9.10.1' }}
