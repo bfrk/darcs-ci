@@ -33,7 +33,7 @@ import System.Environment
     ( getEnv
     , getExecutablePath
     )
-import System.Directory ( doesFileExist, findExecutable )
+import System.Directory ( copyFile, doesFileExist, findExecutable )
 import System.IO
     ( Handle
     , hClose
@@ -229,6 +229,7 @@ sendEmailDoc f t s cc scmd mbundle body =
   withOpenTemp $ \(h,fn) -> do
     generateEmail h f t s cc body
     hClose h
+    copyFile fn "last-email-body"
     withOpenTemp $ \(hat,at) -> do
       ftable' <- case mbundle of
                  Just (content,bundle) -> do

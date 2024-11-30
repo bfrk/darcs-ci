@@ -37,7 +37,7 @@ module Darcs.Repository.PatchIndex
 
 import Darcs.Prelude
 
-import Control.Exception ( catch )
+import Control.Exception ( catch, throw )
 import Control.Monad ( forM_, unless, when, (>=>) )
 import Control.Monad.State.Strict ( evalState, execState, State, gets, modify )
 
@@ -278,7 +278,14 @@ lookupFid :: AnchoredPath -> PIM FileId
 lookupFid fn = do
     maybeFid <- lookupFid' fn
     case maybeFid of
-        Nothing -> error $ "couldn't find " ++ displayPath fn ++ " in patch index"
+        Nothing ->
+            -- This error may be caused by broken patches, rather than a bug in
+            -- the patch index itself, for instance, broken move patches with
+            -- non-existing source or target. Thus we should not use 'error' here.
+            throw $ userError $
+                "Couldn't find " ++ displayPath fn ++ " in patch index.\n\
+                \Please run `darcs check`. If that reports issues mentioning " ++ displayPath fn ++ " \n\
+                \then running `darcs repair` probably fixes the problem."
         Just fid -> return fid
 
 -- | lookup current fid of filepatch, returning a Maybe to allow failure

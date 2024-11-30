@@ -28,7 +28,7 @@ import Darcs.Patch.Witnesses.Ordered
 import Darcs.Patch.Witnesses.Sealed ( Sealed(..), unFreeLeft, unseal )
 import Darcs.Patch.Apply( ApplyState )
 import Darcs.Patch.Repair ( Repair(applyAndTryToFix) )
-import Darcs.Patch.Info ( displayPatchInfo )
+import Darcs.Patch.Info ( displayPatchInfo, makePatchname )
 import Darcs.Patch.Set ( Origin, PatchSet(..), Tagged(..), patchSet2FL )
 import Darcs.Patch ( RepoPatch, PrimOf, isInconsistent )
 
@@ -54,7 +54,7 @@ import Darcs.Util.Progress
     )
 import Darcs.Util.Lock( withDelayedDir )
 import Darcs.Util.Path( anchorPath, toFilePath )
-import Darcs.Util.Printer ( putDocLn, text, renderString )
+import Darcs.Util.Printer ( putDocLn, text, renderString, ($$) )
 import Darcs.Util.Hash( showHash )
 import Darcs.Util.Tree( Tree, emptyTree, list, restrict, expand, itemHash, zipTrees )
 import Darcs.Util.Tree.Monad( TreeIO )
@@ -93,13 +93,13 @@ applyAndFixPatchSet r s = do
       case isInconsistent . hopefully $ p of
         Just err -> liftIO $ putDocLn err
         Nothing -> return ()
-      liftIO $ finishedOneIO k $ renderString $ displayPatchInfo $ info p
+      liftIO $ finishedOneIO k $ show $ makePatchname $ info p
       (ps', ps_ok) <- applyAndFixPatches ps
       case mp' of
         Nothing -> return (p :>: ps', ps_ok)
         Just (e, p') ->
           liftIO $ do
-            putStrLn e
+            putStrLn $ renderString $ (displayPatchInfo $ info p) $$ text e
             -- FIXME While this is okay semantically, it means we can't
             -- run darcs check in a read-only repo
             p'' <-

@@ -139,11 +139,11 @@ summChunkToXML (SummChunk detail c) =
     xfn = anchorPath ""
     cdata s = XML.Text (XML.blank_cdata {XML.cdData = s})
     xad 0 = []
-    xad a = [XML.Elem $ XML.unode "added_lines" (XML.Attr (XML.unqual "num=") (show a))]
+    xad a = [XML.Elem $ XML.unode "added_lines" (XML.Attr (XML.unqual "num") (show a))]
     xrm 0 = []
-    xrm a = [XML.Elem $ XML.unode "removed_lines" (XML.Attr (XML.unqual "num=") (show a))]
+    xrm a = [XML.Elem $ XML.unode "removed_lines" (XML.Attr (XML.unqual "num") (show a))]
     xrp 0 = []
-    xrp a = [XML.Elem $ XML.unode "replaced_tokens" (XML.Attr (XML.unqual "num=") (show a))]
+    xrp a = [XML.Elem $ XML.unode "replaced_tokens" (XML.Attr (XML.unqual "num") (show a))]
 
 summChunkToLine :: Bool -> SummChunk -> Doc
 summChunkToLine machineReadable (SummChunk detail c) =

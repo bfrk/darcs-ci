@@ -324,20 +324,24 @@ toXmlShort = toXml' False
 
 toXml' :: Bool -> PatchInfo -> XML.Element
 toXml' includeComments pi =
+  -- We do NOT use the high-level accessors piName, piAuthor, etc because
+  -- metadataToString does not necessarily produce valid unicode Strings. This
+  -- is important because most programs that take XML as input for further
+  -- processing simply fail otherwise.
   XML.unode "patch"
-    ( [ XML.Attr (XML.unqual "author") (piAuthor pi)
+    ( [ XML.Attr (XML.unqual "author") (unpackPSFromUTF8 (_piAuthor pi))
       , XML.Attr (XML.unqual "date") (piDateString pi)
       , XML.Attr (XML.unqual "local_date") (friendlyD $ _piDate pi)
       , XML.Attr (XML.unqual "inverted") (show $ _piLegacyIsInverted pi)
       , XML.Attr (XML.unqual "hash") (show $ makePatchname pi)
       ]
-    , [ XML.unode "name" $ piName pi ] ++ comments
+    , [ XML.unode "name" $ unpackPSFromUTF8 (_piName pi) ] ++ comments
     )
   where
     -- note that this is supposed to list junk as well, which is why piLog is not
     -- appropriate here
     comments
-      | includeComments = map (XML.unode "comment") (map metadataToString $ _piLog pi)
+      | includeComments = map (XML.unode "comment") (map unpackPSFromUTF8 $ _piLog pi)
       | otherwise = []
 
 -- escapeXML is duplicated in Patch.lhs and Annotate.lhs
