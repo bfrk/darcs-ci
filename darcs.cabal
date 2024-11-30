@@ -610,7 +610,8 @@ test-suite darcs-test
                     monad-control              >= 0.3.2 && < 1.1,
                     process,
                     system-filepath            >= 0.4.7 && < 0.5,
-                    system-fileio              < 0.4,
+                    -- exclude 0.3.16.5 which fails to build on Windows
+                    system-fileio              < 0.3.16.5 || > 0.3.16.5 && < 0.4,
                     time,
                     transformers-base,
                     unix-compat,
