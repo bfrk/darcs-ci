@@ -130,7 +130,7 @@ runtest' ShellTest{..} srcdir =
           -- https://www.joshkel.com/2018/01/18/symlinks-in-windows/
           , ("MSYS"                      , EnvString "winsymlinks:nativestrict")
 #ifdef WIN32
-          , ("OS",                       , EnvString "windows")
+          , ("OS"                        , EnvString "windows")
 #endif
           ]
     -- we write the variables to a shell script and source them from there in
