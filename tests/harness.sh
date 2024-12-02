@@ -3,9 +3,9 @@
 . ./lib
 
 # Print some stuff out for debugging if something goes wrong:
-echo $HOME >&2
-echo $PATH >&2
-echo $OS >&2
+env >&2
+exit 1
+
 which darcs
 command -v darcs
 
