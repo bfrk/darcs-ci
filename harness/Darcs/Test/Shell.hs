@@ -129,6 +129,9 @@ runtest' ShellTest{..} srcdir =
           , ("GHC_VERSION", EnvString $ show (__GLASGOW_HASKELL__ :: Int))
           -- https://www.joshkel.com/2018/01/18/symlinks-in-windows/
           , ("MSYS"                      , EnvString "winsymlinks:nativestrict")
+#ifdef WIN32
+          , ("OS",                       , EnvString "windows")
+#endif
           ]
     -- we write the variables to a shell script and source them from there in
     -- ./lib, so that it's easy to reproduce a test failure after running the
