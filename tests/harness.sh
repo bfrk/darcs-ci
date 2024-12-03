@@ -5,7 +5,8 @@
 # Print some stuff out for debugging if something goes wrong:
 cat ./env >&2
 echo HOME="$HOME"
-echo PWD="$PWD"
+pwd
+echo CWD="$CWD"
 which darcs >&2
 command -v darcs >&2
 
