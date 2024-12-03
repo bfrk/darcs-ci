@@ -61,9 +61,6 @@ extra-source-files:
   release/distributed-version
   release/distributed-context
 
-  -- bundled shelly (the bare minimum required)
-  shelly/LICENSE
-
   -- testsuite
   tests/data/*.tgz
   tests/data/README
@@ -574,7 +571,7 @@ test-suite darcs-test
   type:             exitcode-stdio-1.0
   default-language: Haskell2010
   main-is:          test.hs
-  hs-source-dirs:   harness, shelly/src
+  hs-source-dirs:   harness
 
   if os(windows)
     cpp-options:    -DWIN32
@@ -604,17 +601,7 @@ test-suite darcs-test
                     test-framework-leancheck   >= 0.0.1 && < 0.1,
                     vector,
                     zip-archive,
-                    -- additional dependencies needed by the shelly modules
-                    async,
-                    exceptions,
-                    monad-control              >= 0.3.2 && < 1.1,
-                    process,
-                    system-filepath            >= 0.4.7 && < 0.5,
-                    -- exclude 0.3.16.5 which fails to build on Windows
-                    system-fileio              < 0.3.16.5 || > 0.3.16.5 && < 0.4,
-                    time,
-                    transformers-base,
-                    unix-compat,
+                    shelly,
 
   -- the tests shell out to a built darcs binary, so we depend on it to make
   -- sure that it's built. It's not actually required for build, just at runtime,
@@ -680,9 +667,6 @@ test-suite darcs-test
                     Darcs.Test.UI.Commands.Test.Simple
                     Darcs.Test.Util.TestResult
                     Darcs.Test.Util.QuickCheck
-                    Shelly
-                    Shelly.Base
-                    Shelly.Find
 
   if flag(warn-as-error)
     ghc-options:    -Werror
