@@ -4,11 +4,10 @@
 
 # Print some stuff out for debugging if something goes wrong:
 cat ./env >&2
-env >&2
-exit 1
-
-which darcs
-command -v darcs
+echo HOME="$HOME"
+echo PWD="$PWD"
+which darcs >&2
+command -v darcs >&2
 
 # Check things that should be true when all the testscripts run
 
@@ -27,3 +26,4 @@ if echo $OS | grep -i windows; then
 else
     command -v darcs | fgrep "$DARCS"
 fi
+exit 1
