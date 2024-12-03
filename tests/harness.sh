@@ -3,6 +3,7 @@
 . ./lib
 
 # Print some stuff out for debugging if something goes wrong:
+cat ./env >&2
 env >&2
 exit 1
 
