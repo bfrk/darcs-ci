@@ -29,7 +29,6 @@ import Shelly
     , mkdir_p
     , onCommandHandles
     , pwd
-    , setenv
     , shelly
     , silently
     , sub
@@ -38,7 +37,7 @@ import Shelly
     , writefile
     , (</>)
     )
-import qualified System.FilePath as Native ( searchPathSeparator, splitSearchPath )
+import qualified System.FilePath as Native ( splitSearchPath )
 import System.FilePath ( makeRelative, takeBaseName, takeDirectory )
 import qualified System.FilePath.Posix as Posix ( searchPathSeparator )
 import System.IO ( hSetBinaryMode )
@@ -139,8 +138,6 @@ runtest' ShellTest{..} srcdir =
     writefile "env" $ T.unlines $ map
       (\(k, v) -> T.concat ["export ", k, "=", envItemForScript v])
       env
-    -- just in case the test script doesn't source ./lib:
-    mapM_ (\(k, v) -> setenv k (envItemForEnv v)) env
 
     mkdir ".darcs"
     writefile ".darcs/defaults" defaults
@@ -176,13 +173,6 @@ runtest' ShellTest{..} srcdir =
     ucf = case usecache of
       WithCache -> []
       NoCache   -> ["ALL no-cache"]
-
-    -- convert an 'EnvItem' to a string you can put in the environment directly
-    envItemForEnv :: EnvItem -> Text
-    envItemForEnv (EnvString   v) = pack v
-    envItemForEnv (EnvFilePath v) = toTextIgnore v
-    envItemForEnv (EnvSearchPath vs) =
-      T.intercalate (T.singleton Native.searchPathSeparator) $ map toTextIgnore vs
 
     -- convert an 'EnvItem' to a string that will evaluate to the right value
     -- when embedded in a bash script
