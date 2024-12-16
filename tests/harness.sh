@@ -3,12 +3,10 @@
 . ./lib
 
 # Print some stuff out for debugging if something goes wrong:
-cat ./env >&2
-echo HOME="$HOME" >&2
-pwd >&2
-echo CWD="$CWD" >&2
-which darcs >&2
-command -v darcs >&2
+echo $HOME
+echo $PATH
+which darcs
+command -v darcs
 
 # Check things that should be true when all the testscripts run
 

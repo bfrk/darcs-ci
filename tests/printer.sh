@@ -26,7 +26,6 @@ export LC_ALL=C
 test_line () {
     rm -f a
     echo $1 > a
-    darcs whatsnew >&2
     darcs whatsnew | grep -F $2
 }
 

@@ -78,7 +78,6 @@ EOF
 unset DARCSEMAIL
 unset EMAIL
 set
-cat interaction_script.txt >&2
 darcs record -i --skip-long-comment < interaction_script.txt
 grep_changes 'l33tkingž0r@example.org' 'patch author from interactive prompt'
 grep_changes '€uroh4xx0rz' 'patch name from interactive prompt'
