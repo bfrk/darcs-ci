@@ -17,5 +17,5 @@ darcs record -am'removed d' --skip-long-comment
 darcs move f d
 darcs record -am'moved f to d' --skip-long-comment
 darcs obliterate --last=3 --all
-darcs whatsnew -l
+not darcs whatsnew -l
 cd ..
