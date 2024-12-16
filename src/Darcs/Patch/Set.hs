@@ -31,6 +31,7 @@ module Darcs.Patch.Set
     , patchSetSnoc
     , patchSetSplit
     , patchSetDrop
+    , tagsCovering
     ) where
 
 import Darcs.Prelude
@@ -39,7 +40,8 @@ import qualified Data.Set as S
 
 import Darcs.Patch.Ident ( Ident(..), PatchId )
 import Darcs.Patch.Info ( PatchInfo, piTag )
-import Darcs.Patch.PatchInfoAnd ( PatchInfoAnd, info )
+import Darcs.Patch.Named ( getdeps )
+import Darcs.Patch.PatchInfoAnd ( PatchInfoAnd, hopefully, info )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(..) )
 import Darcs.Patch.Witnesses.Ordered
     ( FL, RL(..), (+<+), (+<<+), (:>)(..), reverseRL,
@@ -138,6 +140,38 @@ patchSetInventoryHashes (PatchSet ts _) = mapRL (\(Tagged _ _ mh) -> mh) ts
 -- | The tag names of /all/ tags of a given 'PatchSet'.
 patchSetTags :: PatchSet p wX wY -> [String]
 patchSetTags = catMaybes . mapRL (piTag . info) . patchSet2RL
+
+-- Find all tags that cover the latest patch matching the given matcher.
+--
+-- The algorithm: Go back until a matching patch is found. On the way, collect
+-- information about tags. For each tag remember name and explicit
+-- dependencies. Then go forward, and add every tag to the result that covers
+-- the patch or covers one of the tags found so far. As a special optimization,
+-- known clean tags always depend everything before them, so we don't have to
+-- check their explicit dependencies.
+tagsCovering
+  :: forall p wO wX
+   . (forall wA wB. PatchInfoAnd p wA wB -> Bool)
+  -> PatchSet p wO wX
+  -> Maybe [String]
+tagsCovering matcher = fmap (catMaybes . fmap piTag) . go []
+  where
+    go :: [(PatchInfo, Maybe[PatchInfo])] -> PatchSet p wO wY -> Maybe [PatchInfo]
+    go _ (PatchSet NilRL NilRL) = Nothing
+    go tags (PatchSet (ts :<: Tagged ps t _) NilRL)
+      | matcher t = Just $ checkCovered (info t) tags
+      | otherwise = go ((info t, Nothing) : tags) (PatchSet ts ps)
+    go tags (PatchSet ts (ps :<: p))
+      | matcher p = Just $ checkCovered (info p) tags
+      | Just _ <- piTag (info p) =
+        go ((info p, Just (getdeps (hopefully p))) : tags) (PatchSet ts ps)
+      | otherwise = go tags (PatchSet ts ps)
+
+    checkCovered i ((t,Nothing):ts) = t : checkCovered i ts
+    checkCovered i ((t,Just is):ts)
+      | i `elem` is = t : checkCovered i ts
+      | otherwise = checkCovered i ts
+    checkCovered _ [] = []
 
 inOrderTags :: PatchSet p wS wX -> [PatchInfo]
 inOrderTags (PatchSet ts _) = go ts

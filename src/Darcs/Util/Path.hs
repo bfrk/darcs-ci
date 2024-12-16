@@ -59,7 +59,6 @@ module Darcs.Util.Path
     -- anchored at a certain root (this is usually the Tree root). They are
     -- represented by a list of Names (these are just strict bytestrings).
     , Name
-    , name2fp
     , makeName
     , rawMakeName
     , eqAnycase
@@ -92,8 +91,10 @@ import Darcs.Util.ByteString ( decodeLocale, encodeLocale )
 import Data.Binary
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC
+import qualified Data.ByteString.Short as BS
 import Data.Char ( chr, isSpace, ord, toLower )
 import Data.List ( inits, isPrefixOf, isSuffixOf, stripPrefix )
+import GHC.Base ( unsafeChr )
 import GHC.Stack ( HasCallStack )
 import qualified System.Directory ( setCurrentDirectory )
 import System.Directory ( doesDirectoryExist, doesPathExist )
@@ -384,7 +385,14 @@ getUniquePathName talkative buildMsg buildName = go (-1)
 -- AnchoredPath utilities
 --
 
-newtype Name = Name { unName :: B.ByteString } deriving (Binary, Eq, Show, Ord)
+-- The type of file and directory names that can appear as entries inside a
+-- directory. Must not be empty, ".", or "..", and must not contain path
+-- separators. Also must be a valid (relative) file path on the native platform
+-- (TODO this is currently not checked).
+newtype Name = Name BS.ShortByteString deriving (Binary, Eq, Ord, Show)
+
+fromName :: Name -> B.ByteString
+fromName (Name s) = BS.fromShort s
 
 -- | This is a type of "sane" file paths. These are always canonic in the sense
 -- that there are no stray slashes, no ".." components and similar. They are
@@ -425,13 +433,10 @@ anchorPath :: FilePath -> AnchoredPath -> FilePath
 anchorPath dir p = dir FilePath.</> decodeLocale (flatten p)
 {-# INLINE anchorPath #-}
 
-name2fp :: Name -> FilePath
-name2fp (Name ps) = decodeLocale ps
-
 -- FIXME returning "." for the root is wrong
 flatten :: AnchoredPath -> BC.ByteString
 flatten (AnchoredPath []) = BC.singleton '.'
-flatten (AnchoredPath p) = BC.intercalate (BC.singleton '/') [n | (Name n) <- p]
+flatten (AnchoredPath p) = BC.intercalate (BC.singleton '/') (map fromName p)
 
 -- | Make a 'Name' from a 'String'. May fail if the input 'String'
 -- is invalid, that is, "", ".", "..", or contains a '/'.
@@ -479,7 +484,7 @@ rawMakeName :: B.ByteString -> Either String Name
 rawMakeName s
   | isBadName s =
       Left $ "'"++decodeLocale s++"' is not a valid AnchoredPath component name"
-  | otherwise = Right (Name s)
+  | otherwise = Right (Name (BS.toShort s))
 
 isBadName :: B.ByteString -> Bool
 isBadName n = hasPathSeparator n || n `elem` forbiddenNames
@@ -494,10 +499,13 @@ hasPathSeparator :: B.ByteString -> Bool
 hasPathSeparator = BC.elem '/'
 
 eqAnycase :: Name -> Name -> Bool
-eqAnycase (Name a) (Name b) = BC.map toLower a == BC.map toLower b
+eqAnycase (Name a) (Name b) = BS.map to_lower a == BS.map to_lower b
+  where
+    to_lower :: Word8 -> Word8
+    to_lower = fromIntegral . ord . toLower . unsafeChr . fromIntegral
 
 encodeWhiteName :: Name -> B.ByteString
-encodeWhiteName = encodeLocale . encodeWhite . decodeLocale . unName
+encodeWhiteName = encodeLocale . encodeWhite . decodeLocale . fromName
 
 decodeWhiteName :: B.ByteString -> Either String Name
 decodeWhiteName =

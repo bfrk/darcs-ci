@@ -1,4 +1,10 @@
-darcs initialize 
+#!/usr/bin/env bash
+
+. lib
+
+rm -rf R
+darcs initialize R
+cd R
 mkdir d
 darcs add d
 echo sometext > d/f
@@ -12,3 +18,4 @@ darcs move f d
 darcs record -am'moved f to d' --skip-long-comment
 darcs obliterate --last=3 --all
 darcs whatsnew -l
+cd ..
