@@ -27,4 +27,3 @@ if echo $OS | grep -i windows; then
 else
     command -v darcs | fgrep "$DARCS"
 fi
-exit 1
