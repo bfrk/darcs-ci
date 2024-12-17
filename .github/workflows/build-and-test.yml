@@ -31,6 +31,10 @@ jobs:
         cabal:
           - '3.10'
           - '3.12'
+      exclude:
+        # building text-2.1.2 fails with obscure assembler error
+        - os: windows-2022
+          ghc: 8.10.7
     env:
       builddocs: ${{ matrix.ghc == '9.4.5' }}
       runtests: ${{ matrix.ghc == '8.4.4' || matrix.ghc == '9.10.1' }}
