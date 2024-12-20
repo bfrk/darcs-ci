@@ -44,15 +44,15 @@ import Data.Maybe ( isJust )
 import Control.Monad.ST
 import Safe ( tailErr )
 import Test.HUnit ( assertBool, assertEqual, assertFailure )
-import Test.Framework.Providers.QuickCheck2 ( testProperty )
-import Test.Framework.Providers.HUnit ( testCase )
-import Test.Framework ( Test, testGroup )
+import Test.Tasty.QuickCheck ( testProperty )
+import Test.Tasty.HUnit ( testCase )
+import Test.Tasty ( TestTree, testGroup )
 import Test.QuickCheck
 import Test.QuickCheck.Instances.ByteString ()
 
 
-testSuite :: Test
-testSuite = testGroup ""
+testSuite :: [TestTree]
+testSuite =
  [ byteStringUtilsTestSuite
  , lcsTestSuite
  , commandLineTestSuite
@@ -66,14 +66,14 @@ testSuite = testGroup ""
 -- * Darcs.Util.ByteString
 -- ----------------------------------------------------------------------
 
-byteStringUtilsTestSuite :: Test
+byteStringUtilsTestSuite :: TestTree
 byteStringUtilsTestSuite = testGroup "Darcs.Util.ByteString"
   [ testCase "UTF-8 packing and unpacking preserves 'hello world'"
            (assertBool "" (unpackPSFromUTF8 (BC.pack "hello world") == "hello world"))
-  , testCase "Checking that hex packing and unpacking preserves 'hello world'"
+  , testCase "hex packing and unpacking preserves 'hello world'"
            (assertEqual "" (fmap BC.unpack (fromHex2PS $ fromPS2Hex $ BC.pack "hello world"))
                            (Right "hello world"))
-  , testProperty "Checking that hex conversion works" propHexConversion
+  , testProperty "hex conversion works" propHexConversion
   , testProperty "unlinesPS is left inverse of linesPS" prop_unlinesPS_linesPS_left_inverse
   , testProperty "linesPS is right inverse of unlinesPS" prop_linesPS_unlinesPS_right_inverse
   , testProperty "linesPS length property" prop_linesPS_length
@@ -133,13 +133,14 @@ prop_linesPS_unlinesPS_right_inverse x =
 -- Here are a few quick tests of the shiftBoundaries function.
 -- ----------------------------------------------------------------------
 
-lcsTestSuite :: Test
+lcsTestSuite :: TestTree
 lcsTestSuite = testGroup "LCS"
- [ testCase "lcs code" (mapM_ assertFailure showLcsTests)
+ [ testCase "known shifts" (mapM_ assertFailure showLcsTests)
  ]
 
 showLcsTests :: [String]
 showLcsTests = concatMap checkKnownShifts knownShifts
+
 checkKnownShifts :: ([Int],[Int],String,String,[Int],[Int])
                    -> [String]
 checkKnownShifts (ca, cb, sa, sb, ca', cb') = runST (

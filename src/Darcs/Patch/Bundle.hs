@@ -43,39 +43,33 @@ import qualified Data.ByteString.Char8 as BC
     , pack
     )
 
-import Darcs.Patch.Apply ( ApplyState, ObjectIdOfPatch )
-import Darcs.Patch.ApplyMonad ( ApplyMonadTrans )
 import Darcs.Patch.Bracketed ( Bracketed, unBracketedFL )
 import Darcs.Patch.Commute ( Commute, commuteFL )
 import Darcs.Patch.Depends ( contextPatches, splitOnTag )
-import Darcs.Patch.Format ( PatchListFormat )
+import Darcs.Patch.Format ( FormatPatch(..) )
 import Darcs.Patch.Info
     ( PatchInfo
-    , displayPatchInfo
+    , showPatchInfo
     , piTag
     , readPatchInfo
-    , showPatchInfo
+    , formatPatchInfo
     )
 import Darcs.Patch.Named ( Named, fmapFL_Named )
-import Darcs.Patch.Object ( ObjectId )
 import Darcs.Patch.PatchInfoAnd
     ( PatchInfoAnd
     , info
     , n2pia
-    , patchInfoAndPatch
     , unavailable
     )
 import Darcs.Patch.Permutations ( genCommuteWhatWeCanRL )
-import Darcs.Patch.Read ( readPatch' )
+import Darcs.Patch.Read ( readPatchFL' )
 import Darcs.Patch.RepoPatch ( RepoPatch )
-import Darcs.Patch.Show ( showPatch, showPatchWithContext )
 import Darcs.Patch.Set
     ( PatchSet(..)
     , SealedPatchSet
     , Origin
     , appendPSFL
     )
-import Darcs.Patch.Show ( ShowPatchBasic, ShowPatchFor(ForStorage) )
 import Darcs.Patch.Witnesses.Ordered
     ( (:>)(..)
     , FL(..)
@@ -93,26 +87,20 @@ import Darcs.Util.ByteString
     , mmapFilePS
     , betweenLinesPS
     )
-import Darcs.Util.Hash ( sha1PS, sha1Show )
-import Darcs.Util.Parser
-    ( Parser
-    , lexString
-    , lexWord
-    , optional
-    , parse
-    )
-import Darcs.Util.Printer
-    ( Doc
-    , ($$)
+import Darcs.Util.Format
+    ( Format
+    , ascii
+    , byteString
     , newline
-    , packedString
-    , renderPS
-    , renderString
-    , text
+    , protect
+    , toLazyByteString
     , vcat
     , vsep
+    , ($$)
     )
-
+import Darcs.Util.Hash ( sha1, sha1Show )
+import Darcs.Util.Parser ( Parser, lexString, lexWord, optional, parse )
+import Darcs.Util.Printer ( renderString )
 
 -- | A 'Bundle' is a context together with some patches. The context
 -- consists of unavailable patches.
@@ -133,37 +121,28 @@ interpretBundle ref (Bundle (context :> patches)) =
 -- | Create a b16 encoded SHA1 of a given a FL of named patches. This allows us
 -- to ensure that the patches in a received bundle have not been modified in
 -- transit.
-hashBundle :: (PatchListFormat p, ShowPatchBasic p) => FL (Named p) wX wY
-           -> B.ByteString
+hashBundle :: FormatPatch p => FL (Named p) wX wY -> B.ByteString
 hashBundle to_be_sent =
-    sha1Show $ sha1PS $ renderPS $
-        vcat (mapFL (showPatch ForStorage) to_be_sent) <> newline
+    sha1Show $ sha1 $ toLazyByteString $
+        vcat (mapFL formatPatch to_be_sent) <> newline
 
-makeBundle
-  :: (RepoPatch p, ApplyMonadTrans (ApplyState p) IO, ObjectId (ObjectIdOfPatch p))
-  => Maybe (ApplyState p IO)
-  -> PatchSet p wStart wX
-  -> FL (Named p) wX wY
-  -> IO Doc
-makeBundle mstate repo to_be_sent
-  | _ :> context <- contextPatches repo =
-    format context <$>
-      case mstate of
-        Just state -> showPatchWithContext ForStorage state to_be_sent
-        Nothing -> return (vsep $ mapFL (showPatch ForStorage) to_be_sent)
+makeBundle :: RepoPatch p => PatchSet p wStart wX -> FL (Named p) wX wY -> Format
+makeBundle repo to_be_sent =
+  case contextPatches repo of
+    _ :> context -> format context $ vsep $ mapFL formatPatch to_be_sent
   where
     format context patches =
-      text ""
-      $$ text "New patches:"
-      $$ text ""
+      protect (ascii "")
+      $$ ascii "New patches:"
+      $$ protect (ascii "")
       $$ patches
-      $$ text ""
-      $$ text "Context:"
-      $$ text ""
-      $$ vcat (mapRL (showPatchInfo ForStorage . info) context)
-      $$ text "Patch bundle hash:"
-      $$ packedString (hashBundle to_be_sent)
-      $$ text ""
+      $$ protect (ascii "")
+      $$ ascii "Context:"
+      $$ protect (ascii "")
+      $$ vcat (mapRL (formatPatchInfo . info) context)
+      $$ ascii "Patch bundle hash:"
+      $$ byteString (hashBundle to_be_sent)
+      $$ protect (ascii "")
 
 hashFailureMessage :: String
 hashFailureMessage =
@@ -215,8 +194,8 @@ bundleHashName = BC.pack "Patch bundle hash:"
 unavailablePatchesFL :: [PatchInfo] -> FL (PatchInfoAnd p) wX wY
 unavailablePatchesFL = foldr ((:>:) . piUnavailable) (unsafeCoercePEnd NilFL)
   where
-    piUnavailable i = patchInfoAndPatch i . unavailable $
-      "Patch not stored in patch bundle:\n" ++ renderString (displayPatchInfo i)
+    piUnavailable i = unavailable i $
+      "Patch not stored in patch bundle:\n" ++ renderString (showPatchInfo i)
 
 pContext :: Parser [PatchInfo]
 pContext = lexString contextName >> many readPatchInfo
@@ -225,7 +204,7 @@ contextName :: B.ByteString
 contextName = BC.pack "Context:"
 
 pPatches :: RepoPatch p => Parser (Sealed (FL (Named (Bracketed p)) wX))
-pPatches = lexString patchesName >> readPatch'
+pPatches = lexString patchesName >> readPatchFL'
 
 patchesName :: B.ByteString
 patchesName = BC.pack "New patches:"

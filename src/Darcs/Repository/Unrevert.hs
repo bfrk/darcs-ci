@@ -28,7 +28,7 @@ import Darcs.Repository.Paths ( tentativeUnrevertPath, unrevertPath )
 import Darcs.Util.Exception ( catchDoesNotExistError, ifDoesNotExistError )
 import Darcs.Util.Global ( debugMessage )
 import Darcs.Util.IsoDate ( getIsoDateTime )
-import Darcs.Util.Lock ( readBinFile, removeFileMayNotExist, writeDocBinFile )
+import Darcs.Util.Lock ( readBinFile, removeFileMayNotExist, writeFormatBinFile )
 import Darcs.Util.Prompt ( promptYorn )
 import Darcs.Util.Tree ( Tree )
 
@@ -54,8 +54,8 @@ writeUnrevert recorded ps = do
   date <- getIsoDateTime
   info <- patchinfo date "unrevert" "anon" []
   let np = infopatch info ps
-  bundle <- makeBundle Nothing recorded (np :>: NilFL)
-  writeDocBinFile tentativeUnrevertPath bundle
+  let bundle = makeBundle recorded (np :>: NilFL)
+  writeFormatBinFile tentativeUnrevertPath bundle
 
 readUnrevert :: RepoPatch p
              => PatchSet p Origin wR
@@ -92,8 +92,8 @@ removeFromUnrevertContext ref ps =
               Nothing -> unrevert_impossible
               Just common -> do
                 debugMessage "Have now found the new context..."
-                bundle' <- makeBundle Nothing common (hopefully unrevert' :>: NilFL)
-                writeDocBinFile tentativeUnrevertPath bundle'
+                let bundle' = makeBundle common (hopefully unrevert' :>: NilFL)
+                writeFormatBinFile tentativeUnrevertPath bundle'
       _ -> return () -- TODO I guess this should be an error call
     debugMessage "Done adjusting the context of the unrevert changes"
   where

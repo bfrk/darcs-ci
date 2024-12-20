@@ -243,28 +243,34 @@ class PropagateShrink prim p where
   -- Given a test patch (of type @p@) and a shrinking fixup (of type @prim@),
   -- try to propagate the shrinking fixup past the test patch.
   -- The @Maybe2 p@ return type allows the fixup to eliminate the shrinking
-  -- patch entirely, and vice versa the @Maybe2 prim@ allows the shrinking fixup
+  -- patch entirely, and vice versa the @FL prim@ allows the shrinking fixup
   -- to disappear (for example it might be cancelled out by something in the test
   -- patch).
-  -- We don't use @FL p@, because that would only really be useful for a "stuck"
-  -- fixup - one that doesn't eliminate or commute - and that implies that
-  -- the state shrink isn't actually shrinking the real test case.
-  propagateShrink :: (prim :> p) wX wY -> Maybe ((Maybe2 p :> Maybe2 prim) wX wY)
+  -- In the result type we use @FL prim@ for the propagated shrinking fixups
+  -- (instead of the more restrictive @Maybe2 prim@) because for
+  -- MergeableSequence this makes propagateShrink succeed in more cases.
+  propagateShrink :: (prim :> p) wX wY -> Maybe ((Maybe2 p :> FL prim) wX wY)
 
 propagateShrinkKeep
   :: PropagateShrink prim p
   => (prim :> p) wX wY
-  -> Maybe ((p :> Maybe2 prim) wX wY)
+  -> Maybe ((p :> FL prim) wX wY)
 propagateShrinkKeep inp = do
-  Just2 p' :> mprim' <- propagateShrink inp
-  return (p' :> mprim')
+  Just2 p' :> prims' <- propagateShrink inp
+  return (p' :> prims')
 
-propagateShrinkMaybe
+propagateShrinks
   :: PropagateShrink prim p
-  => (Maybe2 prim :> p) wX wY
-  -> Maybe ((Maybe2 p :> Maybe2 prim) wX wY)
-propagateShrinkMaybe (Nothing2 :> p) = Just (Just2 p :> Nothing2)
-propagateShrinkMaybe (Just2 prim :> p) = propagateShrink (prim :> p)
+  => (FL prim :> p) wX wY
+  -> Maybe ((Maybe2 p :> FL prim) wX wY)
+propagateShrinks (NilFL :> p) = Just (Just2 p :> NilFL)
+propagateShrinks (prim :>: prims :> p) = do
+  mp' :> prims' <- propagateShrinks (prims :> p)
+  case mp' of
+    Nothing2 -> return (Nothing2 :> prim :>: prims')
+    Just2 p' -> do
+      mp'' :> prims'' <- propagateShrink (prim :> p')
+      return (mp'' :> prims'' +>+ prims')
 
 -- |Shrink a test case wrapped with 'WithStartState2' by shrinking the start state
 -- of the test case with 'ShrinkModel' and then propagating the shrink through the
@@ -318,28 +324,35 @@ instance
     shrinkState @s @prim @p w
 
 propagatePrim
-  :: (Eq2 prim, PrimCoalesce prim, Invert prim, Commute prim)
-  => (prim :> prim) wX wY -> Maybe ((Maybe2 prim :> Maybe2 prim) wX wY)
+  :: PrimCoalesce prim
+  => (prim :> prim) wX wY -> Maybe ((Maybe2 prim :> FL prim) wX wY)
 propagatePrim (p1 :> p2)
-  | IsEq <- invert p1 =\/= p2 = Just (Nothing2 :> Nothing2)
-  | Just (p2' :> p1') <- commute (p1 :> p2) = Just (Just2 p2' :> Just2 p1')
-  | Just p' <- primCoalesce p1 p2 = Just (Just2 p' :> Nothing2)
+  -- The order of guards here means we prefer commutation over coalescing. In
+  -- most cases coalescing prims don't commute and, vice versa, commuting prims
+  -- don't coalesce, so it makes no difference. I think for Prim.V1 the only
+  -- exception is adjacent hunks that both add and remove lines. In this case,
+  -- commutation simplifies more, so the choice here is justified.
+  | IsEq <- invert p1 =\/= p2 = Just (Nothing2 :> NilFL)
+  | Just (p2' :> p1') <- commute (p1 :> p2) = Just (Just2 p2' :> p1' :>: NilFL)
+  | Just p' <- primCoalesce p1 p2 = Just (Just2 p' :> NilFL)
   | otherwise = Nothing
 
 instance (PropagateShrink prim p, PropagateShrink prim q)
   => PropagateShrink prim (p :> q) where
 
   propagateShrink (prim :> (p :> q)) = do
-    Just2 mp' :> mprim' <- propagateShrink (prim :> p)
-    Just2 mq' :> mprim'' <- propagateShrinkMaybe (mprim' :> q)
-    return (Just2 (mp' :> mq') :> mprim'')
+    Just2 mp' :> prims' <- propagateShrink (prim :> p)
+    Just2 mq' :> prims'' <- propagateShrinks (prims' :> q)
+    return (Just2 (mp' :> mq') :> prims'')
 
 instance PropagateShrink prim p => PropagateShrink prim (FL p) where
-  propagateShrink (prim :> NilFL) = Just (Just2 NilFL :> Just2 prim)
+  propagateShrink (prim :> NilFL) = return (Just2 NilFL :> prim :>: NilFL)
   propagateShrink (prim :> (p :>: ps)) = do
-    mp' :> mprim' <- propagateShrink (prim :> p)
-    Just2 ps' :> mprim'' <- propagateShrinkMaybe (mprim' :> ps)
-    let result = case mp' of
-          Nothing2 -> ps'
-          Just2 p' -> p' :>: ps'
-    return (Just2 result :> mprim'')
+    mp' :> prims' <- propagateShrink (prim :> p)
+    mps' :> prims'' <- propagateShrinks (prims' :> ps)
+    let result = case (mp', mps') of
+          (Nothing2, Nothing2) -> NilFL
+          (Nothing2, Just2 ps') -> ps'
+          (Just2 p', Nothing2) -> p' :>: NilFL
+          (Just2 p', Just2 ps') -> p' :>: ps'
+    return (Just2 result :> prims'')

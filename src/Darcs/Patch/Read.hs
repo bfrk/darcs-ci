@@ -17,46 +17,57 @@
 
 module Darcs.Patch.Read
     ( ReadPatch(..)
+    , ReadPatches(..)
     , readPatch
+    , readPatchFL
+    , standardReadPatchFL'
+    , legacyReadPatchFL'
     , readPatchPartial
-    , bracketedFL
-    , peekfor
-    , readFileName
+    , readBracketedFL
     ) where
 
 import Darcs.Prelude
 
 import Control.Applicative ( (<|>) )
-import Control.Monad ( mzero, (<=<) )
 import qualified Data.ByteString as B ( ByteString )
-import qualified Data.ByteString.Char8 as BC ( ByteString, pack, stripPrefix )
-import GHC.Stack ( HasCallStack )
 
 import Darcs.Patch.Bracketed ( Bracketed(..), unBracketedFL )
-import Darcs.Patch.Format
-    ( FileNameFormat(..)
-    , ListFormat(..)
-    , PatchListFormat(..)
-    )
 import Darcs.Util.Parser
     ( Parser
     , checkConsumes
-    , choice
     , lexChar
-    , lexString
-    , lexWord
     , parse
     , parseAll
     )
-import Darcs.Patch.Witnesses.Ordered ( FL(..), RL, reverseFL )
+import Darcs.Patch.Witnesses.Ordered ( FL(..) )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(..), mapSeal )
 
-import Darcs.Util.ByteString ( decodeLocale, unpackPSFromUTF8 )
-import Darcs.Util.Path ( AnchoredPath, decodeWhite, floatPath )
 
 -- | This class is used to decode patches from their binary representation.
 class ReadPatch p where
-    readPatch' :: Parser (Sealed (p wX))
+  readPatch' :: Parser (Sealed (p wX))
+
+class ReadPatch p => ReadPatches p where
+  readPatchFL' :: Parser (Sealed (FL p wX))
+  readPatchFL' = standardReadPatchFL'
+
+-- | Read a sequence of patches with optional (arbitrarily nested, round or
+-- curly) bracketing.
+legacyReadPatchFL' :: ReadPatch p => Parser (Sealed (FL p wX))
+-- This is slightly tricky. Note how the standardReadPatchFL' here reads
+-- a plain (unbracketed) sequence of zero or more Bracketed patches.
+legacyReadPatchFL' = mapSeal unBracketedFL <$> standardReadPatchFL'
+
+standardReadPatchFL' :: ReadPatch p => Parser (Sealed (FL p wX))
+standardReadPatchFL' = do
+  -- checkConsumes is needed to make sure that something is read,
+  -- to avoid stack overflow when parsing FL (FL p)
+  mp <- (Just <$> checkConsumes readPatch') <|> return Nothing
+  case mp of
+    Just (Sealed p) -> do
+      Sealed ps <- standardReadPatchFL'
+      return $ Sealed (p :>: ps)
+    Nothing -> return $ Sealed NilFL
 
 readPatchPartial :: ReadPatch p => B.ByteString -> Either String (Sealed (p wX), B.ByteString)
 readPatchPartial = parse readPatch'
@@ -64,74 +75,34 @@ readPatchPartial = parse readPatch'
 readPatch :: ReadPatch p => B.ByteString -> Either String (Sealed (p wX))
 readPatch = parseAll readPatch'
 
+readPatchFL :: ReadPatches p => B.ByteString -> Either String (Sealed (FL p wX))
+readPatchFL = parseAll readPatchFL'
+
 instance ReadPatch p => ReadPatch (Bracketed p) where
-    readPatch' = mapSeal Braced <$> bracketedFL readPatch' '{' '}'
+    readPatch' = mapSeal Braced <$> readBracketedFL readPatch' '{' '}'
                    <|>
-                 mapSeal Parens <$> bracketedFL readPatch' '(' ')'
+                 mapSeal Parens <$> readBracketedFL readPatch' '(' ')'
                    <|>
                  mapSeal Singleton <$> readPatch'
 
-instance (ReadPatch p, PatchListFormat p) => ReadPatch (FL p) where
-    readPatch'
-        | ListFormatV1 <- patchListFormat :: ListFormat p
-            = mapSeal unBracketedFL <$> readPatch'
-        -- in the V2 format case, we only need to support () on reading, not {}
-        -- for simplicity we just go through the same code path.
-        | ListFormatV2 <- patchListFormat :: ListFormat p
-            = mapSeal unBracketedFL <$> readPatch'
-        | otherwise
-            = read_patches
-     where read_patches :: Parser (Sealed (FL p wX))
-           read_patches = do --tracePeek "starting FL read"
-                             -- checkConsumes is needed to make sure that something is read,
-                             -- to avoid stack overflow when parsing FL (FL p)
-                             mp <- (Just <$> checkConsumes readPatch') <|> return Nothing
-                             case mp of
-                               Just (Sealed p) -> do --tracePeek "found one patch"
-                                                     Sealed ps <- read_patches
-                                                     return $ Sealed (p:>:ps)
-                               Nothing -> return $ Sealed NilFL
---           tracePeek x = do y <- peekInput
---                            traceDoc (greenText x $$ greenText (show $ sal_to_string y)) return ()
+-- | This instance is needed to parse patch bundles
+instance ReadPatch p => ReadPatches (Bracketed p)
 
-instance (ReadPatch p, PatchListFormat p) => ReadPatch (RL p) where
-    readPatch' = mapSeal reverseFL <$> readPatch'
-
-{-# INLINE bracketedFL #-}
-bracketedFL :: forall p wX .
-               (forall wY . Parser (Sealed (p wY))) -> Char -> Char -> Parser (Sealed (FL p wX))
-bracketedFL parser pre post =
-    peekforc pre bfl mzero
-        where bfl :: forall wZ . Parser (Sealed (FL p wZ))
-              bfl = peekforc post (return $ Sealed NilFL)
-                                  (do Sealed p <- parser
-                                      Sealed ps <- bfl
-                                      return $ Sealed (p:>:ps))
-
-{-# INLINE peekforc #-}
-peekforc :: Char -> Parser a -> Parser a -> Parser a
-peekforc c ifstr ifnot = choice [ lexChar c >> ifstr
-                                , ifnot ]
-
-peekfor :: BC.ByteString -> Parser a -> Parser a -> Parser a
-peekfor ps ifstr ifnot = choice [ do lexString ps
-                                     ifstr
-                                , ifnot ]
-{-# INLINE peekfor #-}
-
--- See also Darcs.Patch.Show.formatFileName.
-readFileName :: HasCallStack => FileNameFormat -> Parser AnchoredPath
-readFileName fmt = do
-  raw <- lexWord
-  case BC.stripPrefix (BC.pack "./") raw of
-    Nothing -> fail $ "invalid file path"
-    Just raw' ->
-      case convert fmt raw' of
-        Left e -> fail e
-        Right r -> return r
+-- | Given a 'Parser' for single patch, parse a (plain) sequence of such
+-- patches, nested between the given (required) start and end tokens.
+{-# INLINE readBracketedFL #-}
+readBracketedFL
+  :: forall p wX
+   . (forall wY . Parser (Sealed (p wY)))
+  -> Char
+  -> Char
+  -> Parser (Sealed (FL p wX))
+readBracketedFL single pre post = lexChar pre >> go
   where
-    convert FileNameFormatV1 =
-      floatPath <=< decodeWhite . decodeLocale . BC.pack . unpackPSFromUTF8
-    convert FileNameFormatV2 =
-      floatPath <=< decodeWhite . decodeLocale
-    convert FileNameFormatDisplay = error "readFileName called with FileNameFormatDisplay"
+    go :: forall wZ. Parser (Sealed (FL p wZ))
+    go = none <|> some
+    none = lexChar post >> pure (Sealed NilFL)
+    some = do
+      Sealed p <- single
+      Sealed ps <- go
+      return $ Sealed (p :>: ps)

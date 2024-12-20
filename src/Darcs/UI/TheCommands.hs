@@ -60,7 +60,8 @@ commandControlList =
     [ commandGroup "Most used/starting out:"
     , normalCommand initialize
     , normalCommand add
-    , normalCommand whatsnew, hiddenCommand status
+    , normalCommand whatsnew
+    , normalCommand status
     , normalCommand record, hiddenCommand commit
     , normalCommand clone, hiddenCommand get, hiddenCommand put
     , normalCommand pull

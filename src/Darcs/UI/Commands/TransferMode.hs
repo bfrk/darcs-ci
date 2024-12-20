@@ -82,11 +82,11 @@ transfer = do 'g':'e':'t':' ':fn <- getLine
               x <- readfile fn
               case x of
                 Right c -> do putStrLn $ "got " ++ fn
-                              print $ B.length c
+                              putStrLn $ show $ B.length c
                               B.hPut stdout c
                               hFlush stdout
                 Left e -> do putStrLn $ "error " ++ fn
-                             print e
+                             putStrLn $ show e
                              hFlush stdout
               transfer
 

@@ -2,6 +2,7 @@
 {-# LANGUAGE RebindableSyntax #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# OPTIONS_GHC -Wno-redundant-constraints #-}
 module Darcs.UI.Commands.Test.Impl
     ( TestRunner(..), runStrategy
     , TestResult(..), TestResultValid(..), TestFailure(..)

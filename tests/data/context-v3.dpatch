@@ -1,0 +1,48 @@
+2 patches for repository /home/ben/src/darcs/head/xxx/Darcs3/Patience/WithIndex/WithCache/send-output/empty:
+
+patch f61189e3150c02fe42de53a42f12ecf624870ef0
+Author: Ben Franksen <ben.franksen@online.de>
+Date:   Sat Jul 16 09:07:22 CEST 2022
+  * init
+
+patch 116b881c438ec6f3b69f9a152c407afadec2c55b
+Author: Ben Franksen <ben.franksen@online.de>
+Date:   Sat Jul 16 09:08:03 CEST 2022
+  * ABC
+
+New patches:
+
+[init
+Ben Franksen <ben.franksen@online.de>**20220716070722
+ Ignore-this: 99d3a42017d02a59c10a5f84bcd269a95fd0241a3a2986a660162d4db4905f94774f91a691d5f6fa
+] hash 1 f61189e3150c02fe42de53a42f12ecf624870ef0
+addfile ./wibble
+hash 2 f61189e3150c02fe42de53a42f12ecf624870ef0
+hunk ./wibble 1
++1
++2
++3
++4
++5
++6
++7
++8
++9
++10
+
+[ABC
+Ben Franksen <ben.franksen@online.de>**20220716070803
+ Ignore-this: 5235c7a2a9ee35f2c7908dab0fe5f53a5ef22c21348c89f1a5949be034ee76c6a76bc3ca59cb1b4d
+] hash 1 116b881c438ec6f3b69f9a152c407afadec2c55b
+hunk ./wibble 4
+-4
+-5
+-6
++4A
++5B
++6C
+
+Context:
+
+Patch bundle hash:
+d5c78653b80a55ee82a30f74864381c1f2275d99

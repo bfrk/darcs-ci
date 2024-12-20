@@ -27,7 +27,7 @@
 function getRecordedChanges () {
 darcs rec -am 1
 # Ignore patch details and unindent - we should have the same contents as wh
-darcs changes --last 1 -v | tail -n+5 | sed -e 's/^\s\+//' | grep -v '^[{}]$' > $1
+darcs changes --last 1 -v | tail -n+5 | sed -e 's/^\s\+//' | grep -v '^[{}]$' | grep -vw hash > $1
 darcs unrecord --last 1 -a
 }
 
@@ -59,23 +59,23 @@ hunk ./foo 1
 rmfile ./foo
 EOF
 
-diff whoutput1 expected1
+diff whoutput1 expected1 >&2
 
 # Ensure recording everything isn't any different to asking whatsnew
 getRecordedChanges recoutput1
-diff recoutput1 expected1
+diff recoutput1 expected1 >&2
 rmOutputFiles
 
 # To avoid the output file appearing in the output of wh -l
 whl=$(darcs wh -l)
 echo "$whl" > whoutput2
 cat << EOF > expected2
-R ./foo
+R ./foo -1
 a ./foo/
 a ./foo/bar
 EOF
 
-diff whoutput2 expected2
+diff -u whoutput2 expected2 >&2
 
 darcs add foo
 
@@ -87,9 +87,9 @@ rmfile ./foo
 adddir ./foo
 EOF
 
-diff whoutput3 expected3
+diff whoutput3 expected3 >&2
 getRecordedChanges recoutput3
-diff recoutput3 expected3
+diff recoutput3 expected3 >&2
 rmOutputFiles
 
 darcs add foo/bar
@@ -103,9 +103,9 @@ adddir ./foo
 addfile ./foo/bar
 EOF
 
-diff whoutput4 expected4
+diff whoutput4 expected4 >&2
 getRecordedChanges recoutput4
-diff recoutput4 expected4
+diff recoutput4 expected4 >&2
 
 # Make sure we can remove the directory, without modifying working
 darcs remove foo/bar
@@ -115,8 +115,8 @@ darcs add -r foo
 darcs wh > whoutput4a
 getRecordedChanges recoutput4a
 
-diff whoutput4a expected4
-diff recoutput4a expected4
+diff whoutput4a expected4 >&2
+diff recoutput4a expected4 >&2
 rmOutputFiles
 
 # Make sure foo is now recorded as a directory
@@ -133,9 +133,9 @@ rmfile ./foo/bar
 rmdir ./foo
 EOF
 
-diff whoutput5 expected5
+diff whoutput5 expected5 >&2
 getRecordedChanges recoutput5
-diff recoutput5 expected5
+diff recoutput5 expected5 >&2
 rmOutputFiles
 
 darcs rev -a
@@ -151,9 +151,9 @@ cat << EOF > expected6
 rmdir ./bar
 EOF
 
-diff whoutput6 expected6
+diff whoutput6 expected6 >&2
 getRecordedChanges recoutput6
-diff recoutput6 expected6
+diff recoutput6 expected6 >&2
 rmOutputFiles
 
 whl=$(darcs wh -l)
@@ -164,7 +164,7 @@ R ./bar/
 a ./bar
 EOF
 
-diff whoutput7 expected7
+diff whoutput7 expected7 >&2
 
 darcs add bar
 
@@ -174,7 +174,7 @@ rmdir ./bar
 addfile ./bar
 EOF
 
-diff whoutput8 expected8
+diff whoutput8 expected8 >&2
 getRecordedChanges recoutput8
-diff recoutput8 expected8
+diff recoutput8 expected8 >&2
 rmOutputFiles

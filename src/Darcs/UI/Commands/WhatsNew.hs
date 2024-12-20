@@ -45,7 +45,7 @@ import Darcs.Patch.Show
     ( ShowContextPatch
     , ShowPatch(..)
     , ShowPatchBasic(..)
-    , displayPatch
+    , showPatch
     )
 import Darcs.Patch.TouchesFiles ( chooseTouching )
 import Darcs.Patch.Witnesses.Ordered
@@ -393,10 +393,10 @@ interactiveHunks = do
     adv_options = [ optionsView, optionsNav ]
 
 printPatchPager :: ShowPatchBasic p => p wX wY -> IO ()
-printPatchPager = viewDocWith fancyPrinters . displayPatch
+printPatchPager = viewDocWith fancyPrinters . showPatch
 
 printPatch :: ShowPatchBasic p => p wX wY -> IO ()
-printPatch = putDocLnWith fancyPrinters . displayPatch
+printPatch = putDocLnWith fancyPrinters . showPatch
 
 -- | An alias for 'whatsnew', with implicit @-l@ (and thus implicit @-s@)
 -- flags. We override the default description, to include these flags.

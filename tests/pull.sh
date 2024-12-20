@@ -101,19 +101,17 @@ echo -n bar > correct_baz
 diff baz correct_baz
 cd ..
 
-#   my $test_name = "when a patch creating a directory is attempted to be applied
-#       while a directory with that name already exists, a warning is raised, but
-#       the pull succeeds.";
+# When a patch creating a directory is attempted to be applied while a
+# directory with that name already exists, but has not been added, the pull
+# succeeds (if there are no further conflicts inside that directory).
 mkdir temp1/newdir
 cd temp1
 darcs add newdir
 darcs record -am newdir
 cd ../temp2
 mkdir newdir
-darcs pull -a --set-default ../temp1 &> out2
-grep Backing out2
+darcs pull -a ../temp1 > out2
 grep 'Finished pulling' out2
-grep newdir out2
 cd ..
 
 rm -rf temp1 temp2

@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Darcs.Util.ByteString
@@ -19,10 +18,12 @@ module Darcs.Util.ByteString
     -- * IO with mmap or gzip
       gzReadFilePS
     , mmapFilePS
+    , gzWriteFile
     , gzWriteFilePS
     , gzWriteFilePSs
     , gzReadStdin
     , gzWriteHandle
+    , gzWriteHandleBL
     , FileSegment
     , readSegment
     -- * gzip handling
@@ -32,6 +33,8 @@ module Darcs.Util.ByteString
     , dropSpace
     , linesPS
     , unlinesPS
+    , linesBS
+    , unlinesBS
     , hashPS
     , breakFirstPS
     , breakLastPS
@@ -62,6 +65,7 @@ import qualified Data.ByteString.Char8      as BC
 import qualified Data.ByteString.Lazy       as BL
 import Data.ByteString (intercalate)
 import qualified Data.ByteString.Base16     as B16
+import qualified Data.ByteString.Short      as BS
 
 import System.Directory ( getFileSize )
 import System.IO ( withFile, IOMode(ReadMode)
@@ -84,10 +88,7 @@ import qualified Codec.Compression.Zlib.Internal as ZI
 import Darcs.Util.Encoding ( decode, encode, decodeUtf8, encodeUtf8 )
 import Darcs.Util.Global ( addCRCWarning )
 
-#if mingw32_HOST_OS
-#else
 import System.IO.MMap( mmapFileByteString )
-#endif
 import System.Mem( performGC )
 
 ------------------------------------------------------------------------
@@ -165,6 +166,19 @@ linesPS ps
 -- | Concatenate the inputs with '\n' bytes in interspersed.
 unlinesPS :: [B.ByteString] -> B.ByteString
 unlinesPS = B.concat . intersperse (BC.singleton '\n')
+
+{-# INLINE linesBS #-}
+-- | Split the input into lines, that is, sections separated by '\n' bytes,
+-- unless it is empty, in which case the result has one empty line.
+linesBS :: BS.ShortByteString -> [BS.ShortByteString]
+linesBS ps
+     | BS.null ps = [BS.empty]
+     | otherwise = BS.split 10 ps
+
+{-# INLINE unlinesBS #-}
+-- | Concatenate the inputs with '\n' bytes in interspersed.
+unlinesBS :: [BS.ShortByteString] -> BS.ShortByteString
+unlinesBS = BS.concat . intersperse (BS.singleton 10)
 
 -- properties of linesPS and unlinesPS
 
@@ -247,6 +261,9 @@ hGetLittleEndInt h = do
     b4 <- ord `fmap` hGetChar h
     return $ b1 + 256*b2 + 65536*b3 + 16777216*b4
 
+gzWriteFile :: FilePath -> BL.ByteString -> IO ()
+gzWriteFile f = BL.writeFile f . GZ.compress
+
 gzWriteFilePS :: FilePath -> B.ByteString -> IO ()
 gzWriteFilePS f ps = gzWriteFilePSs f [ps]
 
@@ -257,6 +274,9 @@ gzWriteFilePSs f pss  =
 gzWriteHandle :: Handle -> [B.ByteString] -> IO ()
 gzWriteHandle h pss  =
     BL.hPut h $ GZ.compress $ BL.fromChunks pss
+
+gzWriteHandleBL :: Handle -> BL.ByteString -> IO ()
+gzWriteHandleBL h = BL.hPut h . GZ.compress
 
 -- | Read standard input, which may or may not be gzip compressed, directly
 -- into a 'B.ByteString'.
@@ -310,9 +330,6 @@ readSegment (f,range) = do
 -- is modified.
 
 mmapFilePS :: FilePath -> IO B.ByteString
-#if mingw32_HOST_OS
-mmapFilePS = B.readFile
-#else
 mmapFilePS f =
   mmapFileByteString f Nothing
    `catchIOError` (\_ -> do
@@ -320,7 +337,6 @@ mmapFilePS f =
                      if size == 0
                         then return B.empty
                         else performGC >> mmapFileByteString f Nothing)
-#endif
 
 -- -------------------------------------------------------------------------
 -- fromPS2Hex

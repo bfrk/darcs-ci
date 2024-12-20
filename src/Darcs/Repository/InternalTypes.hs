@@ -15,7 +15,6 @@
 -- Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 module Darcs.Repository.InternalTypes
     ( Repository
-    , PristineType(..)
     , AccessType(..)
     , SAccessType(..)
     , repoAccessType
@@ -24,8 +23,6 @@ module Darcs.Repository.InternalTypes
     , repoFormat
     , modifyRepoFormat
     , repoLocation
-    , withRepoDir
-    , repoPristineType
     , unsafeCoerceRepoType
     , unsafeCoercePatchType
     , unsafeCoerceR
@@ -37,18 +34,11 @@ module Darcs.Repository.InternalTypes
 
 import Darcs.Prelude
 
-import Darcs.Util.Cache ( Cache )
+import Darcs.Util.Cache ( Cache, WritableOrNot(..), setThisRepo )
 import Darcs.Repository.Format ( RepoFormat, unsafeWriteRepoFormat )
 import Darcs.Repository.Paths ( formatPath )
 import Darcs.Util.Path ( AbsoluteOrRemotePath, toPath )
-import System.Directory ( withCurrentDirectory )
 import Unsafe.Coerce ( unsafeCoerce )
-
-data PristineType
-  = NoPristine
-  | PlainPristine
-  | HashedPristine
-    deriving ( Show, Eq )
 
 data AccessType = RO | RW deriving (Eq)
 
@@ -66,33 +56,31 @@ data SAccessType (rt :: AccessType) where
 --
 --        * the recorded state when outside a transaction, or
 --        * the tentative state when inside a transaction.
-data Repository (rt :: AccessType) (p :: Type -> Type -> Type) wU wR =
-  Repo !String !RepoFormat !PristineType Cache (SAccessType rt)
+--
+-- Note that none of the accessors are exported.
+data Repository (rt :: AccessType) (p :: Type -> Type -> Type) wU wR = Repo
+  { location :: !String
+  , format :: !RepoFormat
+  , cache :: Cache
+  , access :: (SAccessType rt)
+  }
 
 type role Repository nominal nominal nominal nominal
 
 repoLocation :: Repository rt p wU wR -> String
-repoLocation (Repo loc _ _ _ _) = loc
-
--- | Perform an action with the current working directory set to the
--- 'repoLocation'.
-withRepoDir :: Repository rt p wU wR -> IO a -> IO a
-withRepoDir repo = withCurrentDirectory (repoLocation repo)
+repoLocation = location
 
 repoFormat :: Repository rt p wU wR -> RepoFormat
-repoFormat (Repo _ fmt _ _ _) = fmt
-
-repoPristineType :: Repository rt p wU wR -> PristineType
-repoPristineType (Repo _ _ pr _ _) = pr
+repoFormat = format
 
 repoCache :: Repository rt p wU wR -> Cache
-repoCache (Repo _ _ _ c _) = c
+repoCache = cache
 
 modifyCache :: (Cache -> Cache) -> Repository rt p wU wR -> Repository rt p wU wR
-modifyCache g (Repo l f p c a) = Repo l f p (g c) a
+modifyCache g r@(Repo {cache = c}) = r { cache = g c }
 
 repoAccessType :: Repository rt p wU wR -> SAccessType rt
-repoAccessType (Repo _ _ _ _ s) = s
+repoAccessType = access
 
 unsafeCoerceRepoType :: Repository rt p wU wR -> Repository rt' p wU wR
 unsafeCoerceRepoType = unsafeCoerce
@@ -118,19 +106,21 @@ unsafeCoerceU = unsafeCoerce
 -- of access type 'RO. The same holds for other state that is modified in a
 -- transaction, like the pending patch or the rebase state.
 unsafeStartTransaction :: Repository 'RO p wU wR -> Repository 'RW p wU wR
-unsafeStartTransaction (Repo l f p c SRO) = Repo l f p c SRW
+unsafeStartTransaction Repo {access = SRO, ..} =
+  Repo {access = SRW, cache = setThisRepo location Writable cache, ..}
 
 unsafeEndTransaction :: Repository 'RW p wU wR -> Repository 'RO p wU wR
-unsafeEndTransaction (Repo l f p c SRW) = Repo l f p c SRO
+unsafeEndTransaction Repo {access = SRW, ..} =
+  Repo {access = SRO, cache = setThisRepo location NotWritable cache, ..}
 
-mkRepo :: AbsoluteOrRemotePath -> RepoFormat -> PristineType -> Cache -> Repository 'RO p wU wR
-mkRepo p f pr c = Repo (toPath p) f pr c SRO
+mkRepo :: AbsoluteOrRemotePath -> RepoFormat -> Cache -> Repository 'RO p wU wR
+mkRepo p f c = Repo {location = toPath p, format = f, cache = c, access = SRO}
 
 modifyRepoFormat
   :: (RepoFormat -> RepoFormat)
   -> Repository 'RW p wU wR
   -> IO (Repository 'RW p wU wR)
-modifyRepoFormat f (Repo l fmt p c a) = do
+modifyRepoFormat f r@(Repo {format = fmt}) = do
   let fmt' = f fmt
   unsafeWriteRepoFormat fmt' formatPath
-  return $ Repo l fmt' p c a
+  return r {format = fmt'}

@@ -74,15 +74,14 @@ import Darcs.Repository
     , withRepository
     , RepoJob(..)
     , readPatches
-    , readPristine
     , prefsUrl )
 import Darcs.Patch.Set ( Origin )
 import Darcs.Patch.Apply( ApplyState )
-import Darcs.Patch ( RepoPatch, description, applyToTree, effect, invert )
-import Darcs.Patch.Witnesses.Sealed ( Sealed(..) )
+import Darcs.Patch ( RepoPatch, description )
+import Darcs.Patch.Witnesses.Sealed ( Sealed(..), Sealed2(..) )
 import Darcs.Patch.Witnesses.Unsafe ( unsafeCoerceP )
 import Darcs.Patch.Witnesses.Ordered
-    ( FL(..), (:>)(..), (:\/:)(..),
+    ( FL(..), (:>)(..),
     mapFL, mapFL_FL, lengthFL, nullFL )
 import Darcs.Patch.Bundle
     ( makeBundle
@@ -97,7 +96,7 @@ import Darcs.Repository.Prefs
 import Darcs.Repository.Flags ( DryRun(..) )
 import Darcs.Util.File ( fetchFilePS, Cachable(..) )
 import Darcs.UI.External
-    ( signString
+    ( signFormat
     , sendEmailDoc
     , generateEmail
     , editFile
@@ -126,10 +125,11 @@ import Darcs.UI.Completion ( prefArgs )
 import Darcs.UI.Commands.Util ( getUniqueDPatchName )
 import Darcs.Util.Printer
     ( Doc, formatWords, vsep, text, ($$), (<+>), putDoc, putDocLn
-    , quoted, renderPS, sentence, vcat
+    , quoted, renderPS, vcat
     )
 import Darcs.Util.English ( englishNum, Noun(..) )
 import Darcs.Util.Exception ( catchall )
+import qualified Darcs.Util.Format as F
 import Darcs.Util.Path ( FilePathLike, toFilePath, AbsolutePath, AbsolutePathOrStd,
                         getCurrentDirectory, useAbsoluteOrStd, makeAbsoluteOrStd )
 import Darcs.Util.HTTP ( postUrl )
@@ -212,7 +212,7 @@ sendCmd (_,o) opts [unfixedrepodir] =
         old_default <- getPreflist Defaultrepo
         when (old_default == [repodir]) $
             putInfo opts (creatingPatch repodir)
-        repo <- identifyRepositoryFor Reading repository (useCache ? opts) repodir
+        Sealed2 repo <- identifyRepositoryFor Reading repository (useCache ? opts) repodir
         them <- readPatches repo
         addRepoSource repodir (dryRun ? opts) (setDefault False opts)
           (O.inheritDefault ? opts) (isInteractive True opts)
@@ -231,7 +231,6 @@ sendToThem repo opts wtds their_name them = do
       NilFL -> do putInfo opts nothingSendable
                   exitSuccess
       _     -> putVerbose opts $ selectionIs (mapFL description us')
-  pristine <- readPristine repo
   let direction = if changesReverse ? opts then FirstReversed else First
       selection_config = selectionConfig direction "send" (patchSelOpts opts) Nothing Nothing
   (to_be_sent :> _) <- runSelection us' selection_config
@@ -247,14 +246,15 @@ sendToThem repo opts wtds their_name them = do
       exitSuccess
   setEnvDarcsPatches to_be_sent
 
-  let genFullBundle = prepareBundle opts common  (Right (pristine, us':\/:to_be_sent))
+  let genFullBundle = prepareBundle opts common to_be_sent
   bundle <- if not (minimize ? opts)
              then genFullBundle
              else do putInfo opts "Minimizing context, to send with full context hit ctrl-C..."
                      ( case minContext common to_be_sent of
-                         Sealed (common' :> to_be_sent') -> prepareBundle opts common' (Left to_be_sent') )
+                         Sealed (common' :> to_be_sent') ->
+                            prepareBundle opts common' to_be_sent' )
                      `catchInterrupt` genFullBundle
-  here   <- getCurrentDirectory
+  here <- getCurrentDirectory
   let make_fname (tb:>:_) = getUniqueDPatchName $ patchDesc tb
       make_fname _ = error "impossible case"
   let fname = make_fname to_be_sent
@@ -264,27 +264,20 @@ sendToThem repo opts wtds their_name them = do
                             | not $ null [ p | PostHttp p <- wtds] -> Nothing
                             | otherwise        -> Just (makeAbsoluteOrStd here <$> fname)
   case outname of
-    Just fname' -> fname' >>= \f -> writeBundleToFile opts to_be_sent bundle f wtds their_name
-    Nothing     -> fname >>= \f -> sendBundle opts to_be_sent bundle f wtds their_name
+    Just fname' -> fname' >>= \f -> writeBundleToFile opts to_be_sent (F.toDoc bundle) f wtds their_name
+    Nothing     -> fname >>= \f -> sendBundle opts to_be_sent (F.toDoc bundle) f wtds their_name
 
 
-prepareBundle :: forall p wX wY wZ. (RepoPatch p, ApplyState p ~ Tree)
-              => [DarcsFlag] -> PatchSet p Origin wZ
-              -> Either (FL (PatchInfoAnd p) wX wY)
-                        (Tree IO, (FL (PatchInfoAnd p) :\/: FL (PatchInfoAnd p)) wX wY)
-              -> IO Doc
-prepareBundle opts common e = do
-  unsig_bundle <-
-     case e of
-       (Right (pristine, us' :\/: to_be_sent)) -> do
-         pristine' <- applyToTree (invert $ effect us') pristine
-         makeBundle (Just pristine')
-                     (unsafeCoerceP common)
-                     (mapFL_FL hopefully to_be_sent)
-       Left to_be_sent -> makeBundle Nothing
-                                      (unsafeCoerceP common)
-                                      (mapFL_FL hopefully to_be_sent)
-  signString (O.sign ? opts) unsig_bundle
+prepareBundle
+  :: forall p wX wY wZ
+   . (RepoPatch p, ApplyState p ~ Tree)
+  => [DarcsFlag]
+  -> PatchSet p Origin wZ
+  -> FL (PatchInfoAnd p) wX wY
+  -> IO F.Format
+prepareBundle opts common to_be_sent =
+  signFormat (O.sign ? opts) $
+    makeBundle (unsafeCoerceP common) (mapFL_FL hopefully to_be_sent)
 
 sendBundle
   :: forall p wX wY
@@ -598,7 +591,7 @@ selectionIsNull :: Doc
 selectionIsNull = text "You don't want to send any patches, and that's fine with me!"
 
 emailBackedUp :: String -> Doc
-emailBackedUp mf = sentence $ "Email body left in" <+> text mf <> "."
+emailBackedUp mf = "Email body left in" <+> text mf <> "."
 
 promptCharSetWarning :: String -> String
 promptCharSetWarning msg = "Warning: " ++ msg ++ "  Send anyway?"
@@ -613,8 +606,8 @@ aborted :: Doc
 aborted = "Aborted."
 
 success :: String -> String -> Doc
-success to cc = sentence $
-    "Successfully sent patch bundle to:" <+> text to <+> copies cc
+success to cc =
+    "Successfully sent patch bundle to:" <+> text to <+> copies cc <> "."
   where
     copies "" = ""
     copies x  = "and cc'ed" <+> text x
@@ -623,7 +616,7 @@ postingPatch :: String -> Doc
 postingPatch url = "Posting patch to" <+> text url
 
 wroteBundle :: FilePathLike a => a -> Doc
-wroteBundle a = sentence $ "Wrote patch to" <+> text (toFilePath a)
+wroteBundle a = "Wrote patch to" <+> text (toFilePath a) <> "."
 
 savedButNotSent :: String -> Doc
 savedButNotSent to =

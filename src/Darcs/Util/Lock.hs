@@ -25,14 +25,15 @@ module Darcs.Util.Lock
     , withNamedTemp
     , writeBinFile
     , writeTextFile
+    , writeFormatBinFile
     , writeDocBinFile
-    , appendBinFile
-    , appendTextFile
     , appendDocBinFile
+    , appendFormatBinFile
     , readBinFile
     , readTextFile
     , readDocBinFile
     , writeAtomicFilePS
+    , gzWriteAtomicFile
     , gzWriteAtomicFilePS
     , gzWriteAtomicFilePSs
     , gzWriteDocFile
@@ -78,7 +79,6 @@ import System.Directory
     , renameDirectory
     )
 import System.FilePath.Posix ( splitDirectories, splitFileName )
-import System.Directory ( withCurrentDirectory )
 import System.Environment ( lookupEnv )
 import System.IO.Temp ( createTempDirectory )
 
@@ -100,8 +100,10 @@ import Darcs.Util.File ( removeFileMayNotExist )
 import Darcs.Util.Path ( AbsolutePath, FilePathLike, toFilePath,
                         getCurrentDirectory, setCurrentDirectory )
 
-import Darcs.Util.ByteString ( gzWriteFilePSs )
+import Darcs.Util.ByteString ( gzWriteFile, gzWriteFilePSs )
 import qualified Data.ByteString as B (null, readFile, hPut, ByteString)
+import qualified Data.ByteString.Lazy as BL ( ByteString )
+import Darcs.Util.Format (Format, hPutFormat)
 
 import Darcs.Util.SignalHandler ( withSignalsBlocked )
 import Darcs.Util.Printer ( Doc, hPutDoc, packedString, empty, renderPSs )
@@ -304,14 +306,11 @@ readDocBinFile :: FilePathLike p => p -> IO Doc
 readDocBinFile fp = do ps <- B.readFile $ toFilePath fp
                        return $ if B.null ps then empty else packedString ps
 
-appendBinFile :: FilePathLike p => p -> B.ByteString -> IO ()
-appendBinFile f s = appendToFile Binary f $ \h -> B.hPut h s
-
-appendTextFile :: FilePathLike p => p -> String -> IO ()
-appendTextFile f s = appendToFile Text f $ \h -> hPutStr h s
-
 appendDocBinFile :: FilePathLike p => p -> Doc -> IO ()
 appendDocBinFile f d = appendToFile Binary f $ \h -> hPutDoc h d
+
+appendFormatBinFile :: FilePathLike p => p -> Format -> IO ()
+appendFormatBinFile f d = appendToFile Binary f $ \h -> hPutFormat h d
 
 data FileType = Text | Binary
 
@@ -326,43 +325,48 @@ writeTextFile f s = writeToFile Text f $ \h -> do
 writeDocBinFile :: FilePathLike p => p -> Doc -> IO ()
 writeDocBinFile f d = writeToFile Binary f $ \h -> hPutDoc h d
 
+writeFormatBinFile :: FilePathLike p => p -> Format -> IO ()
+writeFormatBinFile f d = writeToFile Binary f $ \h -> hPutFormat h d
+
 writeAtomicFilePS :: FilePathLike p => p -> B.ByteString -> IO ()
 writeAtomicFilePS f ps = writeToFile Binary f $ \h -> B.hPut h ps
+
+gzWriteAtomicFile :: FilePathLike p => p -> BL.ByteString -> IO ()
+gzWriteAtomicFile f s = atomicWrite (toFilePath f) (flip gzWriteFile s)
 
 gzWriteAtomicFilePS :: FilePathLike p => p -> B.ByteString -> IO ()
 gzWriteAtomicFilePS f ps = gzWriteAtomicFilePSs f [ps]
 
 gzWriteAtomicFilePSs :: FilePathLike p => p -> [B.ByteString] -> IO ()
-gzWriteAtomicFilePSs f pss =
-    withSignalsBlocked $ withNamedTemp (toFilePath f) $ \newf -> do
-    gzWriteFilePSs newf pss
-    already_exists <- doesFileExist $ toFilePath f
-    when already_exists $ do mode <- fileMode `fmap` getFileStatus (toFilePath f)
-                             setFileMode newf mode
-             `catchall` return ()
-    renameFile newf (toFilePath f)
+gzWriteAtomicFilePSs f pss = atomicWrite (toFilePath f) (flip gzWriteFilePSs pss)
 
 gzWriteDocFile :: FilePathLike p => p -> Doc -> IO ()
 gzWriteDocFile f d = gzWriteAtomicFilePSs f $ renderPSs d
 
 writeToFile :: FilePathLike p => FileType -> p -> (Handle -> IO ()) -> IO ()
 writeToFile t f job =
-    withSignalsBlocked $ withNamedTemp (toFilePath f) $ \newf -> do
+  atomicWrite (toFilePath f) $ \temp -> do
     (case t of
       Text -> withFile
-      Binary -> withBinaryFile) newf WriteMode job
-    already_exists <- doesFileExist (toFilePath f)
-    when already_exists $ do mode <- fileMode `fmap` getFileStatus (toFilePath f)
-                             setFileMode newf mode
-             `catchall` return ()
-    renameFile newf (toFilePath f)
+      Binary -> withBinaryFile) temp WriteMode job
 
 appendToFile :: FilePathLike p => FileType -> p -> (Handle -> IO ()) -> IO ()
-appendToFile t f job = withSignalsBlocked $
+appendToFile t f job =
+  withSignalsBlocked $
     (case t of
       Binary -> withBinaryFile
       Text -> withFile) (toFilePath f) AppendMode job
 
+atomicWrite :: FilePath -> (FilePath -> IO ()) -> IO ()
+atomicWrite dest write = do
+  withSignalsBlocked $ withNamedTemp dest $ \temp -> do
+    write temp
+    already_exists <- doesFileExist dest
+    when already_exists $ do
+      mode <- fileMode `fmap` getFileStatus dest
+      setFileMode temp mode
+     `catchall` return ()
+    renameFile temp dest
 
 addToErrorLoc :: IOException
               -> String
@@ -370,11 +374,14 @@ addToErrorLoc :: IOException
 addToErrorLoc ioe s = annotateIOError ioe s Nothing Nothing
 
 -- | Do an action in a newly created directory of the given name. If the
--- directory is successfully created but the action raises an exception, the
--- directory and all its content is deleted. Caught exceptions are re-thrown.
+-- directory is successfully created but the action raises an exception, change
+-- back to the current directory and delete the directory and all its content,
+-- re-throwing the exceptions. Otherwise stay in the new directory.
 withNewDirectory :: FilePath -> IO () -> IO ()
 withNewDirectory name action = do
   createDirectory name
-  withCurrentDirectory name action `catch` \e -> do
+  old <- getCurrentDirectory
+  (setCurrentDirectory name >> action) `catch` \e -> do
+    setCurrentDirectory old
     removePathForcibly name `catchIOError` const (return ())
     throwIO (e :: SomeException)

@@ -49,6 +49,7 @@ module Darcs.UI.Commands
     , amInRepository
     , amNotInRepository
     , findRepository
+    , noPrereq
     ) where
 
 import Control.Monad ( when, unless )
@@ -143,7 +144,7 @@ data DarcsCommand =
                               -- second one is the path where darcs was executed.
                               (AbsolutePath, AbsolutePath)
                            -> [DarcsFlag] -> [String] -> IO ()
-          , commandPrereq :: [DarcsFlag] -> IO (Either String ())
+          , commandPrereq :: CommandPrereq
           , commandCompleteArgs :: (AbsolutePath, AbsolutePath)
                                 -> [DarcsFlag] -> [String] -> IO [String]
           , commandArgdefaults :: [DarcsFlag] -> AbsolutePath -> [String]
@@ -155,9 +156,11 @@ data DarcsCommand =
           , commandName :: String
           , commandHelp :: Doc
           , commandDescription :: String
-          , commandPrereq :: [DarcsFlag] -> IO (Either String ())
+          , commandPrereq :: CommandPrereq
           , commandSubCommands :: [CommandControl]
           }
+
+type CommandPrereq = [DarcsFlag] -> IO (Either String ())
 
 data CommandOptions = CommandOptions
   { coBasicOptions :: [DarcsOptDescr DarcsFlag]
@@ -348,15 +351,18 @@ defaultRepo :: [DarcsFlag] -> AbsolutePath -> [String] -> IO [String]
 defaultRepo _ _ [] = maybeToList <$> getDefaultRepo
 defaultRepo _ _ args = return args
 
-amInHashedRepository :: [DarcsFlag] -> IO (Either String ())
+amInHashedRepository :: CommandPrereq
 amInHashedRepository fs = R.amInHashedRepository (workRepo fs)
 
-amInRepository :: [DarcsFlag] -> IO (Either String ())
+amInRepository :: CommandPrereq
 amInRepository fs = R.amInRepository (workRepo fs)
 
-amNotInRepository :: [DarcsFlag] -> IO (Either String ())
+amNotInRepository :: CommandPrereq
 amNotInRepository fs =
   R.amNotInRepository (maybe WorkRepoCurrentDir WorkRepoDir (newRepo ? fs))
 
-findRepository :: [DarcsFlag] -> IO (Either String ())
+findRepository :: CommandPrereq
 findRepository fs = R.findRepository (workRepo fs)
+
+noPrereq :: CommandPrereq
+noPrereq _ = return $ Right ()

@@ -38,13 +38,12 @@ import Darcs.Patch.Rebase.Suspended
     ( Suspended(Items)
     , countToEdit
     , readSuspended
-    , showSuspended
+    , formatSuspended
     , simplifyPushes
     , removeFixupsFromSuspended
     )
 import Darcs.Patch.Rebase.Fixup ( RebaseFixup(..) )
 import Darcs.Patch.RepoPatch ( RepoPatch, PrimOf )
-import Darcs.Patch.Show ( ShowPatchFor(ForStorage) )
 import Darcs.Patch.Witnesses.Ordered
     ( (:>)(..)
     , FL(..)
@@ -76,7 +75,7 @@ import Darcs.Repository.Paths
 import Darcs.Util.Diff ( DiffAlgorithm(MyersDiff) )
 import Darcs.Util.English ( englishNum, Noun(..) )
 import Darcs.Util.Exception ( catchDoesNotExistError )
-import Darcs.Util.Lock ( writeDocBinFile, readBinFile )
+import Darcs.Util.Lock ( writeFormatBinFile, readBinFile )
 import Darcs.Util.Parser ( parse )
 import Darcs.Util.Printer ( text, hsep, vcat )
 import Darcs.Util.Printer.Color ( ePutDocLn )
@@ -212,7 +211,7 @@ writeRebaseFile :: RepoPatch p
                 => FilePath -> Repository rt p wU wR
                 -> Suspended p wR -> IO ()
 writeRebaseFile path r sp =
-  writeDocBinFile (repoLocation r </> path) (showSuspended ForStorage sp)
+  writeFormatBinFile (repoLocation r </> path) (formatSuspended sp)
 
 type PiaW p = PatchInfoAndG (W.WrappedNamed p)
 

@@ -1,10 +1,13 @@
 --  Copyright (C) 2009 Ganesh Sittampalam
 --
 --  BSD3
+{-# LANGUAGE PartialTypeSignatures #-}
+{-# OPTIONS_GHC -Wno-partial-type-signatures #-}
 module Darcs.Patch.Rebase.Change
     ( RebaseChange(..)
     , extractRebaseChange
     , reifyRebaseChange
+    , forceCommuteRebaseChange
     , partitionUnconflicted
     , rcToPia
     , WithDroppedDeps(..)
@@ -24,10 +27,9 @@ import Darcs.Patch.CommuteFn
     )
 import Darcs.Patch.Debug ( PatchDebug(..) )
 import Darcs.Patch.Effect ( Effect(..) )
-import Darcs.Patch.FileHunk ( IsHunk(..) )
-import Darcs.Patch.Format ( PatchListFormat(..) )
+import Darcs.Patch.Format ( FormatPatch(..), formatPatchFL )
 import Darcs.Patch.Ident ( Ident(..), PatchId )
-import Darcs.Patch.Info ( PatchInfo, patchinfo, displayPatchInfo )
+import Darcs.Patch.Info ( PatchInfo, patchinfo, showPatchInfo )
 import Darcs.Patch.Invert ( invert )
 import Darcs.Patch.Merge ( selfMerger )
 import Darcs.Patch.Named
@@ -45,7 +47,7 @@ import Darcs.Patch.PatchInfoAnd ( PatchInfoAnd, n2pia )
 import Darcs.Patch.Apply ( Apply(..) )
 import Darcs.Patch.Commute ( Commute(..) )
 import Darcs.Patch.Inspect ( PatchInspect(..) )
-import Darcs.Patch.Read ( ReadPatch(..) )
+import Darcs.Patch.Read ( ReadPatch(..), ReadPatches(..) )
 import Darcs.Patch.Show ( ShowPatch(..) )
 import Darcs.Patch.Summary
     ( ConflictState(..)
@@ -71,7 +73,7 @@ import Darcs.Patch.Rebase.PushFixup
   , pushFixupIdMB_FLIdFLFL
   )
 import Darcs.Patch.RepoPatch ( RepoPatch )
-import Darcs.Patch.Show ( ShowPatchBasic(..), ShowPatchFor(..), ShowContextPatch(..) )
+import Darcs.Patch.Show ( ShowPatchBasic(..), ShowContextPatch(..) )
 import Darcs.Patch.Unwind ( Unwound(..), fullUnwind )
 import Darcs.Patch.V3 ( RepoPatchV3 )
 import Darcs.Patch.Witnesses.Maybe ( Maybe2(..) )
@@ -81,9 +83,10 @@ import Darcs.Patch.Witnesses.Sealed
 import Darcs.Patch.Witnesses.Show ( Show1, Show2 )
 import Darcs.Patch.Witnesses.Unsafe ( unsafeCoerceP )
 import qualified Darcs.Util.Diff as D ( DiffAlgorithm )
+import qualified Darcs.Util.Format as F ( vcat, ascii )
 import Darcs.Util.IsoDate ( getIsoDateTime )
 import Darcs.Util.Parser ( lexString )
-import Darcs.Util.Printer ( Doc, ($$), (<+>), blueText )
+import Darcs.Util.Printer ( Doc, ($$) )
 
 import qualified Data.ByteString.Char8 as BC ( pack )
 import Data.List ( (\\) )
@@ -144,13 +147,18 @@ instance Commute prim => Summary (RebaseChange prim) where
           unconflicted :> _ :> conflicted ->
             mapFL (IsC Okay) unconflicted ++ mapFL (IsC Conflicted) conflicted
 
+instance PrimPatch prim => FormatPatch (RebaseChange prim) where
+  formatPatch (RC fixups toedit) =
+    F.vcat
+      [ F.ascii "rebase-change ("
+      , formatPatchFL fixups
+      , F.ascii ")"
+      , formatPatch toedit
+      ]
+
 instance PrimPatch prim => ShowPatchBasic (RebaseChange prim) where
-  showPatch ForStorage (RC fixups toedit) =
-    blueText "rebase-change"
-      <+> blueText "(" $$ showPatch ForStorage fixups $$ blueText ")"
-      $$ showPatch ForStorage toedit
-  showPatch ForDisplay rc@(RC _ (NamedP n _ _)) =
-    displayPatchInfo n $$ rebaseChangeContent rc
+  showPatch rc@(RC _ (NamedP n _ _)) =
+    showPatchInfo n $$ rebaseChangeContent rc
 
 rebaseChangeContent
   :: forall prim wX wY . PrimPatch prim => RebaseChange prim wX wY -> Doc
@@ -176,7 +184,7 @@ instance PrimPatch prim => ShowPatch (RebaseChange prim) where
     -- but that introduces a spurious dependency on Summary (PrimOf p),
     -- because of other methods in the Named instance, so we just inline
     -- the implementation from Named here.
-    description (RC _ (NamedP n _ _)) = displayPatchInfo n
+    description (RC _ (NamedP n _ _)) = showPatchInfo n
     -- TODO report conflict indicating name fixups (i.e. dropped deps)
     summary p@(RC fs (NamedP _ ds _)) =
       showDependencies ShowDroppedDeps ShowDepsSummary (droppedDeps fs) $$
@@ -194,13 +202,13 @@ instance PrimPatch prim => ShowPatch (RebaseChange prim) where
 
 -- TODO this is a dummy instance that does not actually show context
 instance PrimPatch prim => ShowContextPatch (RebaseChange prim) where
-    showPatchWithContextAndApply f p = apply p >> return (showPatch f p)
+    showPatchWithContextAndApply p = apply p >> return (showPatch p)
 
-instance (ReadPatch prim, PatchListFormat prim) => ReadPatch (RebaseChange prim) where
+instance ReadPatches prim => ReadPatch (RebaseChange prim) where
   readPatch' = do
     lexString (BC.pack "rebase-change")
     lexString (BC.pack "(")
-    Sealed fixups <- readPatch'
+    Sealed fixups <- readPatchFL'
     lexString (BC.pack ")")
     Sealed contents <- readPatch'
     return $ Sealed $ RC fixups contents
@@ -357,7 +365,7 @@ forceCommuteName (AddName an :> WithDroppedDeps (NamedP pn deps body) ddeps)
       :>
       AddName an
 forceCommuteName (DelName dn :> p@(WithDroppedDeps (NamedP pn deps _body) _ddeps))
-  | dn == pn = error "impossible case"
+  | dn == pn = unsafeCoerceP p :> DelName dn
   | dn `elem` deps = error "impossible case"
   | otherwise = unsafeCoerceP p :> DelName dn
 forceCommuteName (Rename old new :> WithDroppedDeps (NamedP pn deps body) ddeps)
@@ -440,10 +448,59 @@ extractRebaseChange da rcs = go (NilFL :> rcs)
         -- finally force-commute the fixups with this and any other patches we are
         -- unsuspending.
         RC fixups toedit :> fixupsOut2 ->
-          case forceCommutes (fixups :> WithDroppedDeps (fromPrimNamed toedit) []) of
+          case forceCommutes (fixups :> noDroppedDeps (fromPrimNamed toedit)) of
             toedit' :> fixupsOut1 ->
               case go (fixupsOut1 +>+ fixupsOut2 :> rest) of
                 toedits' :> fixupsOut -> toedit' :>: toedits' :> fixupsOut
+
+-- TODO this is slightly incorrect in that we create RebaseChange patches
+-- with fixups that aren't fully pushed through.
+forceCommuteRebaseChange
+  :: forall prim wX wY
+   . PrimPatch prim
+  => (RebaseChange prim :> RebaseChange prim) wX wY
+  -> Maybe ((RebaseChange prim :> RebaseChange prim) wX wY)
+forceCommuteRebaseChange (RC fs1 e1 :> RC fs2 e2@(NamedP n2 ds2 _)) = do
+  fs2' :> NamedP n1 ds1 ps1' <- commuterIdFL commuteNamedFixup (e1 :> fs2)
+  (np2' :: Named (RepoPatchV3 prim) _ _) :> ps1'' <-
+    return $ simpleForceCommutePrims (ps1' :> fromPrimNamed e2)
+  Unwound fs2'' ps2' fs2''' <- return $ fullUnwind np2'
+  let nameFixups2 =
+        if n1 `elem` ds2 then NameFixup (AddName n1) :>: NilFL else NilFL
+  let nameFixups1 =
+        if n1 `elem` ds2 then NameFixup (DelName n1) :>: NilFL else NilFL
+  return $
+    RC
+      (fs1 +>+ fs2' +>+ mapFL_FL PrimFixup fs2'' +>+ nameFixups2)
+      (NamedP n2 ds2 ps2')
+    :>
+    RC
+      (nameFixups1 +>+ mapFL_FL PrimFixup (reverseRL fs2'''))
+      (NamedP n1 ds1 ps1'')
+
+-- | Plural version of 'simpleForceCommutePrim'.
+simpleForceCommutePrims
+  :: RepoPatch p
+  => (FL (PrimOf p) :> Named p) wX wY
+  -> (Named p :> FL (PrimOf p)) wX wY
+simpleForceCommutePrims (NilFL :> nq) = nq :> NilFL
+simpleForceCommutePrims (p :>: ps :> nq) =
+  case simpleForceCommutePrims (ps :> nq) of
+    nq' :> ps' ->
+      case simpleForceCommutePrim (p :> nq') of
+        nq'' :> p' -> nq'' :> (p' +>+ ps')
+
+-- | Like 'forceCommutePrim' but without injecting an inverse pair into the
+-- resulting 'WDDNamed'. This is not needed here, since we immediately turn the
+-- 'WDDNamed' back into a 'RebaseChange' using 'fullUnwind'. Indeed, using
+-- 'forceCommutePrim' here makes 'fullUnwind' run into an "impossible" case.
+simpleForceCommutePrim
+  :: RepoPatch p
+  => (PrimOf p :> Named p) wX wY
+  -> (Named p :> FL (PrimOf p)) wX wY
+simpleForceCommutePrim (p :> wq) =
+  case mergerIdNamed selfMerger (fromAnonymousPrim (invert p) :\/: wq) of
+    wq' :/\: irp' -> wq' :> invert (effect irp')
 
 -- signature to be compatible with extractRebaseChange
 -- | Like 'extractRebaseChange', but any fixups are "reified" into a separate patch.
@@ -483,13 +540,6 @@ mkDummy :: FromPrim p => RebaseName wX wY -> Named p wX wY
 mkDummy (AddName pi) = infopatch pi (unsafeCoerceP NilFL)
 mkDummy (DelName _) = error "internal error: can't make a dummy patch from a delete"
 mkDummy (Rename _ _) = error "internal error: can't make a dummy patch from a rename"
-
-instance IsHunk (RebaseChange prim) where
-    -- RebaseChange is a compound patch, so it doesn't really make sense to
-    -- ask whether it's a hunk. TODO: get rid of the need for this.
-    isHunk _ = Nothing
-
-instance PatchListFormat (RebaseChange prim)
 
 addNamedToRebase
   :: RepoPatch p

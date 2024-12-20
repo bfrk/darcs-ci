@@ -3,13 +3,12 @@ module Darcs.Patch.Prim.Class
     , PrimCoalesce(..)
     , PrimDetails(..)
     , PrimSift(..)
-    , PrimShow(..)
-    , PrimRead(..)
     , PrimApply(..)
     , PrimPatch
     , PrimMangleUnravelled(..)
     , Mangled
     , Unravelled
+    , showPrimWithContextAndApply
     , primCleanMerge
     )
     where
@@ -18,24 +17,25 @@ import Darcs.Prelude
 
 import Darcs.Patch.Annotate.Class ( Annotate )
 import Darcs.Patch.ApplyMonad ( ApplyMonad )
-import Darcs.Patch.FileHunk ( FileHunk, IsHunk )
-import Darcs.Patch.Format ( FileNameFormat, PatchListFormat )
+import Darcs.Patch.FileHunk ( IsHunk(..) )
 import Darcs.Patch.Inspect ( PatchInspect )
 import Darcs.Patch.Apply ( Apply(..), ObjectIdOfPatch )
 import Darcs.Patch.Commute ( Commute(..) )
 import Darcs.Patch.CommuteFn ( PartialMergeFn )
+import Darcs.Patch.Format ( FormatPatch )
 import Darcs.Patch.Invert ( Invert(..) )
 import Darcs.Patch.Merge ( CleanMerge(..) )
-import Darcs.Patch.Read ( ReadPatch )
+import Darcs.Patch.Object ( ObjectId )
+import Darcs.Patch.Read ( ReadPatches )
 import Darcs.Patch.Repair ( RepairToFL )
-import Darcs.Patch.Show ( ShowPatch, ShowContextPatch )
+import Darcs.Patch.Show ( ShowContextPatch, ShowPatch, ShowPatchBasic(..) )
 import Darcs.Patch.SummaryData ( SummDetail )
+import Darcs.Patch.Viewing ( showContextHunk )
 import Darcs.Patch.Witnesses.Eq ( Eq2(..), EqCheck )
 import Darcs.Patch.Witnesses.Ordered ( (:/\:)(..), (:>)(..), (:\/:)(..), FL )
 import Darcs.Patch.Witnesses.Show ( Show2 )
 import Darcs.Patch.Witnesses.Sealed ( Sealed )
 
-import Darcs.Util.Parser ( Parser )
 import Darcs.Util.Path ( AnchoredPath )
 import Darcs.Util.Printer ( Doc )
 
@@ -59,10 +59,10 @@ type PrimPatch prim =
     , PrimApply prim
     , PrimSift prim
     , PrimMangleUnravelled prim
-    , ReadPatch prim
+    , ReadPatches prim
     , ShowPatch prim
     , ShowContextPatch prim
-    , PatchListFormat prim
+    , FormatPatch prim
     )
 
 class PrimConstruct prim where
@@ -75,7 +75,6 @@ class PrimConstruct prim where
    hunk :: AnchoredPath -> Int -> [B.ByteString] -> [B.ByteString] -> prim wX wY
    tokreplace :: AnchoredPath -> String -> String -> String -> prim wX wY
    binary :: AnchoredPath -> B.ByteString -> B.ByteString -> prim wX wY
-   primFromHunk :: FileHunk (ObjectIdOfPatch prim) wX wY -> prim wX wY
 
 class (Commute prim, Eq2 prim, Invert prim) => PrimCoalesce prim where
    -- | Try to shrink the input sequence by getting rid of self-cancellations
@@ -123,12 +122,24 @@ class PrimSift prim where
 class PrimDetails prim where
    summarizePrim :: prim wX wY -> [SummDetail]
 
-class PrimShow prim where
-   showPrim :: FileNameFormat -> prim wA wB -> Doc
-   showPrimWithContextAndApply :: ApplyMonad  (ApplyState prim) m => FileNameFormat -> prim wA wB -> m Doc
-
-class PrimRead prim where
-   readPrim :: FileNameFormat -> Parser (Sealed (prim wX))
+showPrimWithContextAndApply
+  :: ( ApplyMonad (ApplyState prim) m
+     , IsHunk prim
+     , ObjectId (ObjectIdOfPatch prim)
+     , Apply prim
+     , ShowPatchBasic prim
+     )
+  => prim wA wB
+  -> m Doc
+showPrimWithContextAndApply p =
+  case isHunk p of
+    Just fh -> do
+      r <- showContextHunk fh
+      apply p
+      return r
+    Nothing -> do
+      apply p
+      return $ showPatch p
 
 class PrimApply prim where
    applyPrimFL :: ApplyMonad (ApplyState prim) m => FL prim wX wY -> m ()

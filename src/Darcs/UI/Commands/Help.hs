@@ -46,6 +46,7 @@ import Darcs.UI.Commands
     , disambiguateCommands
     , extractCommands
     , getSubcommands
+    , noPrereq
     , nodefaults
     , normalCommand
     , withStdOpts
@@ -127,7 +128,7 @@ help = DarcsCommand
     , commandExtraArgs = -1
     , commandExtraArgHelp = ["[<DARCS_COMMAND> [DARCS_SUBCOMMAND]]  "]
     , commandCommand = \ x y z -> helpCmd x y z >> exitSuccess
-    , commandPrereq = \_ -> return $ Right ()
+    , commandPrereq = noPrereq
     , commandCompleteArgs = \_ _ -> return . completeArgs
     , commandArgdefaults = nodefaults
     , commandOptions = withStdOpts oid oid

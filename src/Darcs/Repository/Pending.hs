@@ -21,7 +21,7 @@ module Darcs.Repository.Pending
     , readTentativePending
     , writeTentativePending
     , siftForPending
-    , tentativelyRemoveFromPW
+    , tentativelyRemoveFromPending
     , revertPending
     , finalizePending
     , setTentativePending
@@ -29,11 +29,13 @@ module Darcs.Repository.Pending
 
 import Darcs.Prelude
 
-import Control.Applicative
+import Control.Exception ( throwIO )
 import System.Directory ( copyFile, renameFile )
+import System.IO.Error ( isDoesNotExistError, tryIOError ) 
 
-import Darcs.Patch ( PrimOf, PrimPatch, RepoPatch, commuteFL, readPatch )
+import Darcs.Patch ( PrimOf, PrimPatch, RepoPatch, commuteFL )
 import Darcs.Patch.Commute ( Commute(..) )
+import Darcs.Patch.Format ( FormatPatch(..) )
 import Darcs.Patch.Invert ( invertFL )
 import Darcs.Patch.Permutations ( partitionFL )
 import Darcs.Patch.Prim
@@ -42,8 +44,7 @@ import Darcs.Patch.Prim
     , coalesce
     )
 import Darcs.Patch.Progress ( progressFL )
-import Darcs.Patch.Read ( ReadPatch(..), bracketedFL )
-import Darcs.Patch.Show ( ShowPatchBasic(..), ShowPatchFor(ForStorage) )
+import Darcs.Patch.Read ( ReadPatch(..), legacyReadPatchFL' )
 import Darcs.Patch.Witnesses.Maybe ( Maybe2(..) )
 import Darcs.Patch.Witnesses.Ordered
     ( FL(..)
@@ -59,100 +60,75 @@ import Darcs.Repository.InternalTypes
     , Repository
     , SAccessType(..)
     , repoAccessType
-    , unsafeStartTransaction
-    , withRepoDir
     )
 import Darcs.Repository.Paths ( pendingPath, tentativePendingPath )
 
 import Darcs.Util.ByteString ( gzReadFilePS )
-import Darcs.Util.Exception ( catchDoesNotExistError, ifDoesNotExistError )
-import Darcs.Util.Lock ( writeDocBinFile )
-import Darcs.Util.Parser ( Parser )
-import Darcs.Util.Printer ( Doc, text, vcat, ($$) )
+import Darcs.Util.Exception ( catchDoesNotExistError )
+import Darcs.Util.Format ( Format, ascii, newline, vcat, ($$) )
+import Darcs.Util.Lock ( writeFormatBinFile )
+import Darcs.Util.Parser ( Parser, parseAll )
 
 
-tentativeSuffix :: String
-tentativeSuffix = ".tentative"
+-- | Read the contents of  pending (either tentative or regular, depending on
+-- the repo's transaction parameter).
+readPending
+  :: forall rt p wR wU. RepoPatch p => Repository rt p wU wR -> IO (Sealed (FL (PrimOf p) wR))
+readPending repo = do
+  let filepath :: FilePath =
+        case repoAccessType repo of
+          SRO -> pendingPath
+          SRW -> tentativePendingPath
+  -- note: there are (very) old darcs versions that compress pending,
+  -- see tests/oldfashioned.sh
+  tryIOError (gzReadFilePS filepath) >>= \case
+    Left e
+      | isDoesNotExistError e -> return (Sealed NilFL)
+      | otherwise -> throwIO e
+    Right raw ->
+      case parseAll (readPendingPatch @(PrimOf p)) raw of
+        Right p -> return p
+        Left e -> fail $ unlines ["Corrupt pending patch: " ++ show filepath, e]
 
--- | Read the contents of pending.
-readPending :: RepoPatch p => Repository rt p wU wR
-            -> IO (Sealed (FL (PrimOf p) wR))
-readPending repo =
-  case repoAccessType repo of
-    SRO -> readPendingFile "" repo
-    SRW -> readPendingFile tentativeSuffix repo
+-- | Read the contents of tentative pending.
+readTentativePending
+  :: RepoPatch p => Repository 'RW p wU wR -> IO (Sealed (FL (PrimOf p) wR))
+readTentativePending = readPending
 
--- |Read the contents of tentative pending.
-readTentativePending :: RepoPatch p => Repository 'RW p wU wR
-                     -> IO (Sealed (FL (PrimOf p) wR))
-readTentativePending = readPendingFile tentativeSuffix
-
--- |Read the pending file with the given suffix. CWD should be the repository
--- directory. Unsafe!
-readPendingFile :: ReadPatch prim => String -> Repository rt p wU wR
-                -> IO (Sealed (FL prim wX))
-readPendingFile suffix _ =
-  ifDoesNotExistError (Sealed NilFL) $ do
-    let filepath = pendingPath ++ suffix
-    raw <- gzReadFilePS filepath
-    case readPatch raw of
-      Right p -> return (mapSeal unFLM p)
-      Left e -> fail $ unlines ["Corrupt pending patch: " ++ show filepath, e]
-
--- Wrapper around FL where printed format uses { } except around singletons.
--- Now that the Show behaviour of FL p can be customised (using
--- showFLBehavior (*)), we could instead change the general behaviour of FL Prim;
--- but since the pending code can be kept nicely compartmentalised, it's nicer
--- to do it this way.
--- (*) bf: This function does not exist.
-newtype FLM p wX wY = FLM { unFLM :: FL p wX wY }
-
-instance ReadPatch p => ReadPatch (FLM p) where
-    readPatch' = mapSeal FLM <$> readMaybeBracketedFL readPatch' '{' '}'
-
-instance ShowPatchBasic p => ShowPatchBasic (FLM p) where
-    showPatch f = showMaybeBracketedFL (showPatch f) '{' '}' . unFLM
-
-readMaybeBracketedFL :: (forall wY . Parser (Sealed (p wY))) -> Char -> Char
-                     -> Parser (Sealed (FL p wX))
-readMaybeBracketedFL parser pre post =
-    bracketedFL parser pre post <|> (mapSeal (:>:NilFL) <$> parser)
-
-showMaybeBracketedFL :: (forall wX wY . p wX wY -> Doc) -> Char -> Char
-                     -> FL p wA wB -> Doc
-showMaybeBracketedFL _ pre post NilFL = text [pre] $$ text [post]
-showMaybeBracketedFL printer _ _ (p :>: NilFL) = printer p
-showMaybeBracketedFL printer pre post ps = text [pre] $$
-                                           vcat (mapFL printer ps) $$
-                                           text [post]
+readPendingPatch :: ReadPatch prim => Parser (Sealed (FL prim wR))
+readPendingPatch = legacyReadPatchFL'
 
 -- |Write the contents of tentative pending.
 writeTentativePending :: RepoPatch p => Repository 'RW p wU wR
                       -> FL (PrimOf p) wR wP -> IO ()
 writeTentativePending _ ps =
-    unseal (writePatch name . FLM) (siftForPending ps)
-  where
-    name = pendingPath ++ tentativeSuffix
+    unseal (writePatch tentativePendingPath) (siftForPending ps)
 
-writePatch :: ShowPatchBasic p => FilePath -> p wX wY -> IO ()
-writePatch f p = writeDocBinFile f $ showPatch ForStorage p <> text "\n"
+writePatch :: FormatPatch p => FilePath -> FL p wX wY -> IO ()
+writePatch f ps = writeFormatBinFile f $ formatPendingPatch ps <> newline
+
+formatPendingPatch :: FormatPatch p => FL p wA wB -> Format
+formatPendingPatch (p :>: NilFL) = formatPatch p
+formatPendingPatch ps = ascii "{" $$ vcat (mapFL formatPatch ps) $$ ascii "}"
 
 -- | Remove as much as possible of the given list of prim patches from the
--- pending patch. It is used by record and amend to update pending.
+-- pending patch. Used by record and amend to update pending.
 --
--- The "as much as possible" is due to --look-for-* options which cause changes
--- that normally must be explicitly done by the user (such as add, move, and
--- replace) to be inferred from the the diff between pristine and working.
--- Also, before we present prims to the user to select for recording, we
--- coalesce prims from pending and working, which is reason we have to use
--- decoalescing.
-tentativelyRemoveFromPW :: forall p wR wO wP wU. RepoPatch p
-                        => Repository 'RW p wU wR
-                        -> FL (PrimOf p) wO wR -- added repo changes
-                        -> FL (PrimOf p) wO wP -- O = old recorded state
-                        -> FL (PrimOf p) wP wU -- P = (old) pending state
-                        -> IO ()
-tentativelyRemoveFromPW r changes pending _working = do
+-- This is a highly non-trivial operation, since --look-for-* options cause
+-- changes that are normally done explicitly by the user (such as add, move,
+-- and replace) to be inferred from the the diff between pristine and working.
+-- Furthermore, all these changes are coalesced before we present them to the
+-- user to select for recording. Finally, the user can record modified hunks
+-- due to hunk splitting. We have to infer from the recorded changes and the
+-- old pending which parts of pending is "contained" in the recorded changes
+-- and which is not. See 'updatePending' for the details of how to do that.
+tentativelyRemoveFromPending
+  :: RepoPatch p
+  => Repository 'RW p wU wR
+  -> FL (PrimOf p) wO wR -- ^ added repo changes
+  -> FL (PrimOf p) wO wP -- ^ O = old recorded state, P = (old) pending state
+  -> IO ()
+tentativelyRemoveFromPending r changes pending = do
   let inverted_changes = invertFL (progressFL "Removing from pending:" changes)
   unseal (writeTentativePending r) (updatePendingRL inverted_changes pending)
 
@@ -212,18 +188,17 @@ finalizePending _ = renameFile tentativePendingPath pendingPath
 
 -- | Copy the pending patch to the tentative pending, or write a new empty
 -- tentative pending if regular pending does not exist.
-revertPending :: RepoPatch p => Repository 'RO p wU wR -> IO ()
-revertPending r =
+revertPending :: forall p wU wR. RepoPatch p => Repository 'RO p wU wR -> IO ()
+revertPending _ =
   copyFile pendingPath tentativePendingPath `catchDoesNotExistError`
-    (readPending r >>= unseal (writeTentativePending (unsafeStartTransaction r)))
+    writePatch tentativePendingPath emptyPending
+  where
+    emptyPending = NilFL :: FL (PrimOf p) wR wR
 
 -- | Overwrites the pending patch with a new one, starting at the tentative state.
-setTentativePending :: forall p wU wR wP. RepoPatch p
-                    => Repository 'RW p wU wR
-                    -> FL (PrimOf p) wR wP
-                    -> IO ()
-setTentativePending repo ps = do
-    withRepoDir repo $ writeTentativePending repo ps
+setTentativePending
+  :: RepoPatch p => Repository 'RW p wU wR -> FL (PrimOf p) wR wP -> IO ()
+setTentativePending repo ps = writeTentativePending repo ps
 
 -- | Simplify the candidate pending patch through a combination of looking
 -- for self-cancellations (sequences of patches followed by their inverses),

@@ -59,6 +59,9 @@ import Prelude hiding
     ,
       -- used by various code for no particularly good reason
       lookup, pred
+
+    , -- method of class Print
+      print
     )
 
 import Control.Applicative ( Applicative(..), (<$>), (<*>) )

@@ -6,8 +6,8 @@ module Darcs.Test.Misc.CommandLine
 import Darcs.Prelude
 
 import Test.HUnit ( assertEqual, assertFailure )
-import Test.Framework.Providers.HUnit ( testCase )
-import Test.Framework ( Test, testGroup )
+import Test.Tasty.HUnit ( testCase )
+import Test.Tasty ( TestTree, testGroup )
 
 import Darcs.Util.CommandLine ( parseCmd )
 
@@ -17,7 +17,7 @@ formatTable = [('s',"<insert subject here>"),
                ('d',"date")
               ]
 
-testParser :: (String, ([String], Bool)) -> Test
+testParser :: (String, ([String], Bool)) -> TestTree
 testParser (s, ok) =
   testCase ("Parse: " ++ show s) $
     case parseCmd formatTable s of
@@ -38,6 +38,6 @@ testCases = [("a b",(["a","b"], False)),
              ("\"/foo:%d\"", (["/foo:date"], False))
             ]
 
-commandLineTestSuite :: Test
+commandLineTestSuite :: TestTree
 commandLineTestSuite =
   testGroup "Darcs.Util.CommandLine" $ map testParser testCases

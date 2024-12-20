@@ -33,6 +33,7 @@ import System.IO ( hPutStrLn, stderr )
 import System.IO.Error ( catchIOError )
 import Data.Maybe ( fromMaybe )
 
+import Darcs.Patch.Witnesses.Sealed ( Sealed2(..) )
 import Darcs.Repository.Old ( oldRepoFailMsg )
 import Darcs.Repository.Flags ( UseCache(..), WorkRepo (..) )
 import Darcs.Util.Path
@@ -45,15 +46,10 @@ import Darcs.Util.URL ( isValidLocalPath )
 import Darcs.Util.Workaround
     ( getCurrentDirectory
     )
-import Darcs.Repository.Paths
-    ( hashedInventoryPath
-    , oldCurrentDirPath
-    , oldPristineDirPath
-    )
+import Darcs.Repository.Paths ( hashedInventoryPath )
 import Darcs.Repository.Prefs ( getCaches )
 import Darcs.Repository.InternalTypes
     ( AccessType(..)
-    , PristineType(..)
     , Repository
     , mkRepo
     , repoFormat
@@ -85,9 +81,8 @@ maybeIdentifyRepository useCache "." =
           Right rf ->
               case readProblem rf of
               Just err -> return $ BadRepository err
-              Nothing -> do pris <- identifyPristine
-                            cs <- getCaches useCache Nothing
-                            return $ GoodRepository $ mkRepo here rf pris cs
+              Nothing -> do cs <- getCaches useCache Nothing
+                            return $ GoodRepository $ mkRepo here rf cs
 maybeIdentifyRepository useCache url' =
  do url <- ioAbsoluteOrRemote url'
     repoFormatOrError <- tryIdentifyRepoFormat (toPath url)
@@ -96,18 +91,7 @@ maybeIdentifyRepository useCache url' =
       Right rf -> case readProblem rf of
                   Just err -> return $ BadRepository err
                   Nothing ->  do cs <- getCaches useCache (Just url)
-                                 return $ GoodRepository $ mkRepo url rf NoPristine cs
-
-identifyPristine :: IO PristineType
-identifyPristine =
-    do pristine <- doesDirectoryExist oldPristineDirPath
-       current  <- doesDirectoryExist oldCurrentDirPath
-       hashinv  <- doesFileExist      hashedInventoryPath
-       case (pristine || current, hashinv) of
-           (False, False) -> return NoPristine
-           (True,  False) -> return PlainPristine
-           (False, True ) -> return HashedPristine
-           _ -> fail "Multiple pristine trees."
+                                 return $ GoodRepository $ mkRepo url rf cs
 
 -- | identifyRepository identifies the repo at 'url'. Warning:
 -- you have to know what kind of patches are found in that repo.
@@ -127,7 +111,7 @@ identifyRepositoryFor :: ReadingOrWriting
                       -> Repository rt p wU wR
                       -> UseCache
                       -> String
-                      -> IO (Repository 'RO p vR vU)
+                      -> IO (Sealed2 (Repository 'RO p))
 identifyRepositoryFor what us useCache them_loc = do
   them <- identifyRepository useCache them_loc
   case
@@ -136,7 +120,7 @@ identifyRepositoryFor what us useCache them_loc = do
       Writing -> transferProblem (repoFormat us) (repoFormat them) 
     of
       Just e -> fail $ "Incompatibility with repository " ++ them_loc ++ ":\n" ++ e
-      Nothing -> return them
+      Nothing -> return (Sealed2 them)
 
 amInRepository :: WorkRepo -> IO (Either String ())
 amInRepository (WorkRepoDir d) =
@@ -157,10 +141,10 @@ amInHashedRepository :: WorkRepo -> IO (Either String ())
 amInHashedRepository wd
  = do inrepo <- amInRepository wd
       case inrepo of
-       Right _ -> do pristine <- identifyPristine
-                     case pristine of
-                       HashedPristine -> return (Right ())
-                       _ -> return (Left oldRepoFailMsg)
+       Right _ -> do
+          doesFileExist hashedInventoryPath >>= \case
+            True -> return (Right ())
+            False -> return (Left oldRepoFailMsg)
        left    -> return left
 
 -- | hunt upwards for the darcs repository

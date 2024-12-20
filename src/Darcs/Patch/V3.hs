@@ -5,12 +5,14 @@ import Darcs.Prelude
 
 import Darcs.Patch.FromPrim ( FromPrim(..) )
 import Darcs.Patch.Prim.Named
-  ( PrimPatchId
-  , anonymousNamedPrim, namedPrim, positivePrimPatchIds
-  )
-import Darcs.Patch.Witnesses.Ordered ( FL(..) )
+    ( PrimPatchId
+    , anonymousNamedPrim
+    , namedPrim
+    , positivePrimPatchIds
+    )
 import qualified Darcs.Patch.V3.Core as Core ( RepoPatchV3(..) )
 import Darcs.Patch.V3.Resolution ()
+import Darcs.Patch.Witnesses.Ordered ( FL(..) )
 
 type RepoPatchV3 = Core.RepoPatchV3 PrimPatchId
 

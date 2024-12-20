@@ -17,42 +17,32 @@
 
 module Darcs.Patch.Show
      ( ShowPatchBasic(..)
-     , displayPatch
-     , ShowPatchFor(..)
      , ShowPatch(..)
      , ShowContextPatch(..)
      , showPatchWithContext
-     , formatFileName
      ) where
 
 import Darcs.Prelude
 
 import Darcs.Patch.Apply ( ApplyState )
 import Darcs.Patch.ApplyMonad ( ApplyMonad, ApplyMonadTrans, evalApplyMonad )
-import Darcs.Patch.Object ( formatFileName )
 import Darcs.Patch.Witnesses.Ordered ( FL, mapFL )
 
 import Darcs.Util.English ( plural, Noun(Noun) )
 import Darcs.Util.Printer ( Doc, vcat )
 
-data ShowPatchFor = ForDisplay | ForStorage
-
-displayPatch :: ShowPatchBasic p => p wX wY -> Doc
-displayPatch p = showPatch ForDisplay p
-
 class ShowPatchBasic p where
-    showPatch :: ShowPatchFor -> p wX wY -> Doc
+    showPatch :: p wX wY -> Doc
 
 -- | Like 'showPatchWithContextAndApply' but without applying the patch
 -- in the monad @m@.
 showPatchWithContext
     :: (ApplyMonadTrans (ApplyState p) m, ShowContextPatch p)
-    => ShowPatchFor
-    -> ApplyState p m
+    => ApplyState p m
     -> p wX wY
     -> m Doc
-showPatchWithContext f st p =
-    evalApplyMonad (showPatchWithContextAndApply f p) st
+showPatchWithContext st p =
+    evalApplyMonad (showPatchWithContextAndApply p) st
 
 class ShowPatchBasic p => ShowContextPatch p where
     -- | Show a patch with context lines added, as diff -u does. Thus, it
@@ -67,12 +57,12 @@ class ShowPatchBasic p => ShowContextPatch p where
     -- For a version that does not apply the patch see 'showPatchWithContext'.
     showPatchWithContextAndApply
         :: (ApplyMonad (ApplyState p) m)
-        => ShowPatchFor -> p wX wY -> m Doc
+        => p wX wY -> m Doc
 
 -- | This class is used only for user interaction, not for storage. The default
 -- implementations for 'description' and 'content' are suitable only for
 -- 'PrimPatch' and 'RepoPatch' types. Logically, 'description' should default
--- to 'mempty' while 'content' should default to 'displayPatch'. We define them
+-- to 'mempty' while 'content' should default to 'showPatch'. We define them
 -- the other way around so that 'Darcs.UI.PrintPatch.showFriendly' gives
 -- reasonable results for all patch types.
 class ShowPatchBasic p => ShowPatch p where
@@ -80,7 +70,7 @@ class ShowPatchBasic p => ShowPatch p where
     content = mempty
 
     description :: p wX wY -> Doc
-    description = displayPatch
+    description = showPatch
 
     summary :: p wX wY -> Doc
 

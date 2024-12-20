@@ -5,15 +5,17 @@ module Darcs.Test.Shell
     , DiffAlgorithm(..)
     , UseIndex(..)
     , UseCache(..)
-    , findShell
+    , genShellTests
     ) where
 
 import Darcs.Prelude
 
 import Control.Exception ( SomeException )
-import Data.Data ( Data, Typeable )
+import Data.List ( intercalate )
+import Data.Tagged ( Tagged(..) )
 import Data.Text ( Text, pack, unpack )
 import qualified Data.Text as T
+import Data.Typeable ( Typeable )
 import qualified Shelly ( FilePath, run )
 import Shelly
     ( Sh
@@ -41,19 +43,20 @@ import qualified System.FilePath as Native ( splitSearchPath )
 import System.FilePath ( makeRelative, takeBaseName, takeDirectory )
 import qualified System.FilePath.Posix as Posix ( searchPathSeparator )
 import System.IO ( hSetBinaryMode )
-import Test.Framework.Providers.API
-    ( Test(..)
-    , TestResultlike(..)
-    , Testlike(..)
-    , liftIO
-    , runImprovingIO
-    , yieldImprovement
+import Test.Tasty.Options ( IsOption(..) )
+import Test.Tasty ( testGroup )
+import Test.Tasty.Providers
+    ( IsTest(..)
+    , TestTree
+    , singleTest
+    , testFailed
+    , testPassed
     )
 
-data Format = Darcs1 | Darcs2 | Darcs3 deriving (Show, Eq, Typeable, Data)
-data DiffAlgorithm = Myers | Patience deriving (Show, Eq, Typeable, Data)
-data UseIndex = NoIndex | WithIndex deriving (Show, Eq, Typeable, Data)
-data UseCache = NoCache | WithCache deriving (Show, Eq, Typeable, Data)
+data Format = Darcs1 | Darcs2 | Darcs3 deriving (Show, Eq, Typeable)
+data DiffAlgorithm = Myers | Patience deriving (Show, Eq, Typeable)
+data UseIndex = NoIndex | WithIndex deriving (Show, Eq, Typeable)
+data UseCache = NoCache | WithCache deriving (Show, Eq, Typeable)
 
 data ShellTest = ShellTest
   { format :: Format
@@ -69,22 +72,20 @@ data ShellTest = ShellTest
 data Running = Running deriving Show
 data Result = Success | Skipped | Failed String
 
-instance Show Result where
-  show Success = "Success"
-  show Skipped = "Skipped"
-  show (Failed f) = unlines (map ("| " ++) $ lines f)
+newtype TestDir = TestDir (Maybe FilePath)
+instance IsOption TestDir where
+  defaultValue = TestDir Nothing
+  parseValue s = Just (TestDir (Just s))
+  optionName = Tagged "d"
+  optionHelp = Tagged "Directory to run tests in"
 
-instance TestResultlike Running Result where
-  testSucceeded Success = True
-  testSucceeded Skipped = True
-  testSucceeded _ = False
-
-instance Testlike Running Result ShellTest where
-  testTypeName _ = "Shell"
-  runTest _ test =
-    runImprovingIO $ do
-      yieldImprovement Running
-      liftIO (shelly $ runtest test)
+instance IsTest ShellTest where
+  testOptions = Tagged []
+  run _opts test _progress = resultToTasty <$> shelly (runtest test)
+    where
+      resultToTasty Success = testPassed ""
+      resultToTasty Skipped = testPassed "Skipped"
+      resultToTasty (Failed msg) = testFailed msg
 
 -- | Environment variable values may need translating depending on whether we
 -- are setting them directly or writing out a shell script to set them, and
@@ -228,7 +229,7 @@ runtest test@ShellTest{..} =
             job d
         Nothing -> withTmpDir
 
-findShell
+genShellTests
   :: FilePath
   -> [FilePath]
   -> Maybe FilePath
@@ -237,44 +238,28 @@ findShell
   -> [Format]
   -> [UseIndex]
   -> [UseCache]
-  -> IO [Test]
-findShell dp files tdir ghcflags diffAlgorithms repoFormats useindexs usecaches =
-  do
-    return
-      [ shellTest
-          ShellTest
-            { format = fmt
-            , testfile = file
-            , testdir = tdir
-            , darcspath = dp
-            , ghcflags = ghcflags
-            , diffalgorithm = da
-            , useindex = ui
-            , usecache = uc
-            }
-      | file <- files
-      , fmt <- repoFormats
-      , da <- diffAlgorithms
-      , ui <- useindexs
-      , uc <- usecaches
-      ]
-
-shellTest :: ShellTest -> Test
-shellTest test@ShellTest{..} = Test name test
-  where
-    name =
-      concat
-        [ unpack (toTextIgnore (takeTestName testfile))
-        , " ("
-        , show format
-        , ","
-        , show diffalgorithm
-        , ","
-        , show useindex
-        , ","
-        , show usecache
-        , ")"
-        ]
+  -> [TestTree]
+genShellTests dp files tdir ghcflags diffAlgorithms repoFormats useindexs usecaches =
+  [ testGroup file
+    [ singleTest variant
+      ShellTest
+        { format = fmt
+        , testfile = file
+        , testdir = tdir
+        , darcspath = dp
+        , ghcflags = ghcflags
+        , diffalgorithm = da
+        , useindex = ui
+        , usecache = uc
+        }
+    | fmt <- repoFormats
+    , da <- diffAlgorithms
+    , ui <- useindexs
+    , uc <- usecaches
+    , let variant = intercalate "," [show fmt, show da, show ui, show uc]
+    ]
+  | file <- files
+  ]
 
 takeTestName :: FilePath -> Shelly.FilePath
 takeTestName n =

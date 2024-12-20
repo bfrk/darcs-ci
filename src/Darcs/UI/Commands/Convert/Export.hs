@@ -99,7 +99,7 @@ import qualified Darcs.UI.Options.All as O
 import Darcs.Util.DateTime ( formatDateTime, fromClockTime )
 import Darcs.Util.Path
     ( AbsolutePath
-    , AnchoredPath(..)
+    , AnchoredPath
     , anchorPath
     , appendPath
     , toFilePath

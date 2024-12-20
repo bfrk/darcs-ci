@@ -53,12 +53,13 @@ module Darcs.Patch.Match
     , firstMatch
     , secondMatch
     , haveNonrangeMatch
-    , PatchSetMatch(..)
+    , PatchSetMatch
     , patchSetMatch
     , checkMatchSyntax
     , hasIndexRange
     , getMatchingTag
     , matchAPatchset
+    , matchOnePatchset
     , MatchFlag(..)
     , matchingHead
     , Matchable
@@ -99,8 +100,9 @@ import Data.List ( isPrefixOf, intercalate )
 import Data.Char ( toLower )
 import Data.Typeable ( Typeable )
 
-import Darcs.Util.Path ( AbsolutePath )
+import Darcs.Util.Path ( AbsolutePath, toFilePath )
 import Darcs.Patch ( hunkMatches, listTouchedFiles )
+import Darcs.Patch.Bundle ( readContextFile )
 import Darcs.Patch.Info ( justName, justAuthor, justLog, makePatchname,
                           piDate, piTag )
 
@@ -194,67 +196,70 @@ parseMatch pattern =
                 "'.\n"++ unlines (map ("    "++) $ lines $ show err) -- indent
     Right m -> Right (makeMatcher pattern m)
 
-matchPattern :: String -> Matcher
-matchPattern pattern =
+patternmatch :: String -> Matcher
+patternmatch pattern =
     case parseMatch pattern of
     Left err -> error err
     Right m -> m
 
 matchParser :: CharParser st MatchFun
-matchParser = submatcher <?> helpfulErrorMsg
+matchParser = (option matchAnyPatch expr <* eof) <?> helpfulErrorMsg
   where
-    submatcher = do
-        m <- option matchAnyPatch submatch
-        eof
-        return m
-
     -- When using <?>, Parsec prepends "expecting " to the given error message,
     -- so the phrasing below makes sense.
-    helpfulErrorMsg = "valid expressions over: "
-                      ++ intercalate ", " (map (\(name, _, _, _, _) -> name) ps)
-                      ++ "\nfor more help, see `darcs help patterns`."
+    helpfulErrorMsg =
+      "valid expressions over: "
+      ++ intercalate ", " (map (\(name, _, _, _, _) -> name) primitiveMatchers)
+      ++ "\nfor more help, see `darcs help patterns`."
 
-    ps = primitiveMatchers
-
-    -- matchAnyPatch is returned if submatch fails without consuming any
-    -- input, i.e. if we pass --match '', we want to match anything.
+    -- matchAnyPatch is returned if expr fails without consuming any
+    -- input, i.e. if we pass --match '', we want to match anything
     matchAnyPatch = MatchFun (const True)
 
-submatch :: CharParser st MatchFun
-submatch = buildExpressionParser table match
+    -- parse a non-empty full match expression
+    expr :: CharParser st MatchFun
+    expr = buildExpressionParser table term
 
-table :: OperatorTable Char st MatchFun
-table   = [ [prefix "not" negate_match,
-             prefix "!" negate_match ]
-          , [binary "||" or_match,
-             binary "or" or_match,
-             binary "&&" and_match,
-            binary "and" and_match ]
-          ]
-    where binary name fun = Infix (tryNameAndUseFun name fun) AssocLeft
-          prefix name fun = Prefix $ tryNameAndUseFun name fun
-          tryNameAndUseFun name fun = do _ <- trystring name
-                                         spaces
-                                         return fun
-          negate_match (MatchFun m) = MatchFun $ \p -> not (m p)
-          or_match (MatchFun m1) (MatchFun m2) = MatchFun $ \p -> m1 p || m2 p
-          and_match (MatchFun m1) (MatchFun m2) = MatchFun $ \p -> m1 p && m2 p
+    table :: OperatorTable Char st MatchFun
+    table =
+      [ [ prefix "not" negate_match, prefix "!" negate_match ]
+      , [ binary "||" or_match
+        , binary "or" or_match
+        , binary "&&" and_match
+        , binary "and" and_match
+        ]
+      ]
+      where
+        binary name result = Infix (operator name result) AssocLeft
+        prefix name result = Prefix $ operator name result
+        operator name result = try (string name) >> spaces >> return result
+        negate_match (MatchFun m) = MatchFun $ \p -> not (m p)
+        or_match (MatchFun m1) (MatchFun m2) = MatchFun $ \p -> m1 p || m2 p
+        and_match (MatchFun m1) (MatchFun m2) = MatchFun $ \p -> m1 p && m2 p
 
-trystring :: String -> CharParser st String
-trystring s = try $ string s
-
-match :: CharParser st MatchFun
-match = between spaces spaces (parens submatch <|> choice matchers_)
-  where
-    matchers_ = map createMatchHelper primitiveMatchers
-
-createMatchHelper :: (String, String, String, [String], String -> MatchFun)
-                  -> CharParser st MatchFun
-createMatchHelper (key,_,_,_,matcher) =
-  do _ <- trystring key
-     spaces
-     q <- quoted
-     return $ matcher q
+    -- parse a term, i.e. anything we can combine with operators:
+    -- an expression in parentheses or a primitive match expression
+    term :: CharParser st MatchFun
+    term = between spaces spaces (parens expr <|> choice prims)
+      where
+        -- the primitive match expression parsers
+        prims = map prim primitiveMatchers
+        -- a primitive match expression is a keyword followed by an argument;
+        -- the result is the passed matcher applied to the argument
+        prim (key, _, _, _, matcher) =
+          fmap matcher $ try (string key) >> spaces >> argument
+        -- an argument in a primitive match expression
+        argument :: CharParser st String
+        argument = quoted <|> unquoted <?> "string"
+        -- quoted string
+        quoted =
+          between (char '"') (char '"') (many $ try escaped <|> noneOf "\"")
+        -- bare (unquoted) string
+        unquoted = between spaces spaces (many $ noneOf " ()")
+        -- backslash escaped double quote or backslash
+        escaped = char '\\' >> oneOf "\\\""
+        -- any expression in parentheses
+        parens = between (string "(") (string ")")
 
 -- | The string that is emitted when the user runs @darcs help patterns@.
 helpOnMatchers :: [String]
@@ -302,6 +307,9 @@ primitiveMatchers =
  , ("name", "REGEX", "match REGEX against patch name"
           , ["issue17", "\"^[Rr]esolve issue17\\>\""]
           , namematch )
+ , ("tag", "STRING", "check literal STRING is equal to tag name"
+           , ["2.16.5.1", "\"done fixing issue1999\""]
+           , exacttagmatch )
  , ("author", "REGEX", "match REGEX against patch author"
             , ["\"David Roundy\"", "droundy", "droundy@darcs.net"]
             , authormatch )
@@ -321,27 +329,16 @@ primitiveMatchers =
           , ["src/foo.c", "src/", "\"src/*.(c|h)\""]
           , touchmatch ) ]
 
-parens :: CharParser st MatchFun
-       -> CharParser st MatchFun
-parens = between (string "(") (string ")")
-
-quoted :: CharParser st String
-quoted = between (char '"') (char '"')
-                 (many $ do { _ <- char '\\' -- allow escapes
-                            ; try (oneOf "\\\"") <|> return '\\'
-                            }
-                         <|>  noneOf "\"")
-         <|> between spaces spaces (many $ noneOf " ()")
-         <?> "string"
-
 datematch, hashmatch, authormatch, exactmatch, namematch, logmatch,
-  hunkmatch, touchmatch :: String -> MatchFun
+  hunkmatch, touchmatch, exacttagmatch :: String -> MatchFun
 
 namematch r =
   MatchFun $ \(Sealed2 hp) ->
     isJust $ matchRegex (mkRegex r) $ justName (ident hp)
 
 exactmatch r = MatchFun $ \(Sealed2 hp) -> r == justName (ident hp)
+
+exacttagmatch r = MatchFun $ \(Sealed2 hp) -> Just r == piTag (ident hp)
 
 authormatch a =
   MatchFun $ \(Sealed2 hp) ->
@@ -388,7 +385,7 @@ data PatchSetMatch
 patchSetMatch :: [MatchFlag] -> Maybe PatchSetMatch
 patchSetMatch [] = Nothing
 patchSetMatch (OneTag t:_) = strictJust $ TagMatch $ tagmatch t
-patchSetMatch (OnePattern m:_) = strictJust $ PatchMatch $ matchPattern m
+patchSetMatch (OnePattern m:_) = strictJust $ PatchMatch $ patternmatch m
 patchSetMatch (OnePatch p:_) = strictJust $ PatchMatch $ patchmatch p
 patchSetMatch (OneHash h:_) = strictJust $ PatchMatch $ hashmatch' h
 patchSetMatch (OneIndex n:_) = strictJust $ IndexMatch n
@@ -455,11 +452,11 @@ strictJust x = Just $! x
 -- @--tag@ options are passed (or their plural variants).
 nonrangeMatcher :: [MatchFlag] -> Maybe Matcher
 nonrangeMatcher [] = Nothing
-nonrangeMatcher (OnePattern m:_) = strictJust $ matchPattern m
+nonrangeMatcher (OnePattern m:_) = strictJust $ patternmatch m
 nonrangeMatcher (OneTag t:_) = strictJust $ tagmatch t
 nonrangeMatcher (OnePatch p:_) = strictJust $ patchmatch p
 nonrangeMatcher (OneHash h:_) = strictJust $ hashmatch' h
-nonrangeMatcher (SeveralPattern m:_) = strictJust $ matchPattern m
+nonrangeMatcher (SeveralPattern m:_) = strictJust $ patternmatch m
 nonrangeMatcher (SeveralTag t:_) = strictJust $ tagmatch t
 nonrangeMatcher (SeveralPatch p:_) = strictJust $ patchmatch p
 nonrangeMatcher (_:fs) = nonrangeMatcher fs
@@ -470,8 +467,8 @@ nonrangeMatcher (_:fs) = nonrangeMatcher fs
 -- returns @Nothing@.
 firstMatcher :: [MatchFlag] -> Maybe Matcher
 firstMatcher [] = Nothing
-firstMatcher (OnePattern m:_) = strictJust $ matchPattern m
-firstMatcher (AfterPattern m:_) = strictJust $ matchPattern m
+firstMatcher (OnePattern m:_) = strictJust $ patternmatch m
+firstMatcher (AfterPattern m:_) = strictJust $ patternmatch m
 firstMatcher (AfterTag t:_) = strictJust $ tagmatch t
 firstMatcher (OnePatch p:_) = strictJust $ patchmatch p
 firstMatcher (AfterPatch p:_) = strictJust $ patchmatch p
@@ -486,8 +483,8 @@ firstMatcherIsTag (_:fs) = firstMatcherIsTag fs
 
 secondMatcher :: [MatchFlag] -> Maybe Matcher
 secondMatcher [] = Nothing
-secondMatcher (OnePattern m:_) = strictJust $ matchPattern m
-secondMatcher (UpToPattern m:_) = strictJust $ matchPattern m
+secondMatcher (OnePattern m:_) = strictJust $ patternmatch m
+secondMatcher (UpToPattern m:_) = strictJust $ patternmatch m
 secondMatcher (OnePatch p:_) = strictJust $ patchmatch p
 secondMatcher (UpToPatch p:_) = strictJust $ patchmatch p
 secondMatcher (OneHash h:_) = strictJust $ hashmatch' h
@@ -644,6 +641,17 @@ getMatchingTag m ps =
   case splitOnMatchingTag m ps of
     PatchSet NilRL _ -> throw $ userError $ "Couldn't find a tag matching " ++ show m
     PatchSet ps' _ -> seal $ PatchSet ps' NilRL
+
+-- | Return the patches in a 'PatchSet' up to the given 'PatchSetMatch'.
+matchOnePatchset
+  :: MatchableRP p
+  => PatchSet p Origin wR
+  -> PatchSetMatch
+  -> IO (SealedPatchSet p Origin)
+matchOnePatchset ps (IndexMatch   n   ) = return $ patchSetDrop (n - 1) ps
+matchOnePatchset ps (PatchMatch   m   ) = return $ matchAPatchset m ps
+matchOnePatchset ps (TagMatch     m   ) = return $ getMatchingTag m ps
+matchOnePatchset ps (ContextMatch path) = readContextFile ps (toFilePath path)
 
 -- | Rollback (i.e. apply the inverse) of what remains of a 'PatchSet' after we
 -- extract a 'PatchSetMatch'. This is the counterpart of 'getOnePatchset' and

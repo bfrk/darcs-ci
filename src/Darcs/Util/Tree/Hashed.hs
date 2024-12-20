@@ -27,6 +27,7 @@ module Darcs.Util.Tree.Hashed
 
 import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString.Lazy as BL
+import qualified Data.Set as S
 
 import Data.List ( sortBy )
 import Data.Maybe ( fromMaybe )
@@ -38,9 +39,10 @@ import Darcs.Util.Cache
     , fetchFileUsingCache
     , writeFileUsingCache
     )
+import Darcs.Util.Format
 import Darcs.Util.Hash
     ( Hash
-    , encodeBase16
+    , formatHash
     , encodeHash
     , sha256
     , showHash
@@ -78,20 +80,20 @@ import Darcs.Util.ValidHash
 --
 
 -- Precondition: all (immediate) items in the tree have hashes
-darcsFormatDir :: Tree m -> BL.ByteString
+darcsFormatDir :: Tree m -> Format
 darcsFormatDir =
-  BL.fromChunks . map formatItem . sortBy cmp . listImmediate
+  mconcat . map formatItem . sortBy cmp . listImmediate
   where
     cmp (a, _) (b, _) = compare a b
-    formatItem (name, item) = BC.unlines
+    formatItem (name, item) = vcat
       [ case item of
-          File _ -> kwFile
-          _      -> kwDir
-      , encodeWhiteName name
+          File _ -> byteString kwFile
+          _      -> byteString kwDir
+      , byteString (encodeWhiteName name)
       , case itemHash item of
           Nothing -> error "precondition of darcsFormatDir"
-          Just h  -> encodeBase16 h
-      ]
+          Just h  -> formatHash h
+      ] <> newline
 
 darcsParseDir
   :: FilePath -> BC.ByteString -> Either String [(ItemType, Name, PristineHash)]
@@ -123,7 +125,7 @@ kwDir = BC.pack "directory:"
 
 -- | Compute a darcs-compatible hash value for a tree-like structure.
 darcsTreeHash :: Tree m -> Hash
-darcsTreeHash = sha256 . darcsFormatDir
+darcsTreeHash = sha256 . toLazyByteString . darcsFormatDir
 
 darcsUpdateDirHashes :: Tree m -> Tree m
 darcsUpdateDirHashes = updateSubtrees update
@@ -199,7 +201,7 @@ writeDarcsHashed tree' cache = do
   let items = list t
   sequence_ [readAndWriteBlob b | (_, File b) <- items]
   let dirs = darcsFormatDir t : [darcsFormatDir d | (_, SubTree d) <- items]
-  mapM_ dump dirs
+  mapM_ (dump . toLazyByteString) dirs
   return (fromHash (darcsTreeHash t))
   where
     readAndWriteBlob b = readBlob b >>= dump
@@ -208,8 +210,7 @@ writeDarcsHashed tree' cache = do
 -- | Create a hashed file from a 'Cache' and file content. In case the file
 -- exists it is kept untouched and is assumed to have the right content.
 fsCreateHashedFile :: Cache -> BL.ByteString -> IO PristineHash
-fsCreateHashedFile cache content =
-  writeFileUsingCache cache (BL.toStrict content)
+fsCreateHashedFile cache content = writeFileUsingCache cache content
 
 fsReadHashedFile :: Cache -> PristineHash -> IO (FilePath, BC.ByteString)
 fsReadHashedFile = fetchFileUsingCache
@@ -247,18 +248,21 @@ hashedTreeIO action tree cache = runTreeMonad action tree (const dumpItem)
     dumpTree t = do
       debugMessage $ "hashedTreeIO.dumpTree: old hash=" ++ showHash (treeHash t)
       t' <- darcsAddMissingHashes t
-      nhash <- fsCreateHashedFile cache (darcsFormatDir t')
+      nhash <- fsCreateHashedFile cache (toLazyByteString (darcsFormatDir t'))
       debugMessage $ "hashedTreeIO.dumpTree: new hash=" ++ encodeValidHash nhash
       return t'
 
 -- | Return all 'PristineHash'es reachable from the given root set, which must
 -- consist of directory hashes only.
 followPristineHashes :: Cache -> [PristineHash] -> IO [PristineHash]
-followPristineHashes cache = followAll
+followPristineHashes cache = fmap S.toList . follow S.empty
   where
-    followAll roots = concat <$> mapM followOne roots
-    followOne root = do
-      x <- readDarcsHashedDir cache root
-      let subs   = [ ph | (TreeType, _, ph) <- x ]
-          hashes = root : [ ph | (_, _, ph) <- x ]
-      (hashes ++) <$> followAll subs
+    follow done [] = return done
+    follow done (root:roots)
+      | root `S.member` done = follow done roots
+      | otherwise = do
+        x <- readDarcsHashedDir cache root
+        let subTrees = [ ph | (TreeType, _, ph) <- x ]
+            blobs    = [ ph | (BlobType, _, ph) <- x ]
+            done'    = done `S.union` S.fromList (root:blobs)
+        follow done' (subTrees ++ roots)

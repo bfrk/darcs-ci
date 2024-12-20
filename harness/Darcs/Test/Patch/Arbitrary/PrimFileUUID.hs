@@ -17,6 +17,7 @@ import Darcs.Patch.Witnesses.Eq
 import Darcs.Patch.Witnesses.Unsafe
 import Darcs.Patch.Witnesses.Ordered
 import Darcs.Patch.Prim.FileUUID ()
+import Darcs.Patch.Prim.FileUUID.ObjectMap ( isBlob )
 import Darcs.Patch.Prim.FileUUID.Core ( Prim(..), Location(..), Hunk(..), UUID(..) )
 
 import Darcs.Test.Patch.FileUUIDModel
@@ -24,6 +25,7 @@ import Darcs.Test.Util.QuickCheck ( notIn, maybeOf )
 
 import qualified Data.ByteString as B
 import Data.Maybe ( fromJust, isJust )
+import qualified Data.List as L
 import qualified Data.Map as M
 
 type instance ModelOf Prim = FileUUIDModel
@@ -39,7 +41,6 @@ instance Shrinkable Prim where
   shrinkAtEnd _ = []
   shrinkAtStart _ = []
 
-instance MightBeEmptyHunk Prim
 instance MightHaveDuplicate Prim
 
 instance NullPatch Prim where
@@ -69,15 +70,15 @@ aHunk content = do
   return $ H pos old new
 
 aTextHunk :: (UUID, Object Fail) -> Gen (Prim wX wY)
-aTextHunk (uuid, (Blob text _)) =
-  do h <- aHunk (unFail text)
-     return $ Hunk uuid h
+aTextHunk (uuid, (Blob text _)) = do
+  h <- aHunk (unFail text)
+  return $ Hunk uuid h
 aTextHunk _ = error "impossible case"
 
 aManifest :: UUID -> (UUID, Object Fail) -> Gen (Prim wX wY)
-aManifest uuid (dirId, Directory dir) =
-  do filename <- aFilename `notIn` (M.keys dir)
-     return $ Manifest uuid (L dirId filename)
+aManifest uuid (dirId, Directory dir) = do
+  filename <- aFilename `notIn` (M.keys dir)
+  return $ Manifest uuid (L dirId filename)
 aManifest _ _ = error "impossible case"
 
 aDemanifest :: UUID -> Location -> Gen (Prim wX wY)
@@ -85,78 +86,83 @@ aDemanifest uuid loc = return $ Demanifest uuid loc
 
 -- | Generates any type of 'Prim' patch, except binary and setpref patches.
 aPrim :: FileUUIDModel wX -> Gen (Sealed (WithEndState FileUUIDModel (Prim wX)))
-aPrim repo
-  = do mbFile <- maybeOf repoFiles -- some file, not necessarily manifested
-       dir <- elements repoDirs -- some directory, not necessarily manifested
-       -- note, the root directory always exists and is never manifested nor demanifested
-       mbDemanifested <- maybeOf notManifested -- something not manifested
-       mbManifested <- maybeOf manifested -- something manifested
-       fresh <- anUUID `notIn` repoIds repo -- a fresh uuid
-       let whenjust m x = if isJust m then x else 0
-           whenfile = whenjust mbFile
-           whendemanifested = whenjust mbDemanifested
-           whenmanifested = whenjust mbManifested
-       patch <- frequency
-                  [ ( whenfile 12, aTextHunk $ fromJust mbFile ) -- edit an existing file
-                  , ( 2, aTextHunk (fresh, Blob (return "") Nothing) ) -- edit a new file
-                  , ( whendemanifested 2 -- manifest an existing object
-                    , aManifest (fromJust mbDemanifested) dir
-                    )
-                  , ( whenmanifested 2
-                    , uncurry aDemanifest $ fromJust mbManifested
-                    )
-                  ]
-       let repo' = unFail $ repoApply repo patch
-       return $ seal $ WithEndState patch repo'
+aPrim repo = do
+  mbFile <- maybeOf repoFiles -- some file, not necessarily manifested
+  dir <- elements repoDirs -- some directory, not necessarily manifested
+  mbDemanifested <- maybeOf notManifested -- something not manifested
+  mbManifested <- maybeOf manifested -- something manifested
+  fresh <- anUUID `notIn` repoIds repo -- a fresh uuid
+  let whenjust mo f x =
+        case mo of
+          Just o -> (f, x o)
+          Nothing -> (0, undefined)
+      whenfile = whenjust mbFile
+      whendemanifested = whenjust mbDemanifested
+      whenmanifested = whenjust mbManifested
+  patch <-
+    frequency
+      [ whenfile 12 aTextHunk -- edit a file
+      , (2, aTextHunk (fresh, emptyFile)) -- edit a new file
+      , whendemanifested 2 (flip aManifest dir)
+      , whenmanifested 2 (uncurry aDemanifest)
+      ]
+  let repo' = unFail $ repoApply repo patch
+  return $ seal $ WithEndState patch repo'
   where
-      manifested = [ (uuid, (L dirid name)) | (dirid, Directory dir) <- repoDirs
-                                          , (name, uuid) <- M.toList dir ]
-      notManifested = [ uuid | (uuid, _) <- nonRootObjects
-                           , not (uuid `elem` map fst manifested) ]
-      repoFiles = [ (uuid, Blob x y) | (uuid, Blob x y) <- repoObjects repo ]
-      repoDirs  = [ (uuid, Directory x) | (uuid, Directory x) <- repoObjects repo ]
-      nonRootObjects = filter notRoot $ repoObjects repo where
-        notRoot (uuid, _) = uuid == rootId
+    -- note, manifest does NOT mean it is reachable from the root, it just
+    -- means it has a parent (which in turn may be manifest or not)
+    manifested =
+      [ (uuid, (L dirid name))
+      | (dirid, Directory dir) <- repoDirs
+      , (name, uuid) <- M.toList dir
+      ]
+    -- note, the root directory always exists and is never manifested nor demanifested
+    notManifested =
+      [ uuid
+      | (uuid, _) <- repoObjects repo
+      , uuid /= Root
+      , uuid `notElem` map fst manifested
+      ]
+    (repoFiles, repoDirs) = L.partition (isBlob . snd) $ repoObjects repo
 
 ----------------------------------------------------------------------
 -- *** Pairs of primitive patches
 
 -- Try to generate commutable pairs of hunks
 hunkPair :: (UUID, Object Fail) -> Gen ((Prim :> Prim) wX wY)
-hunkPair (uuid, (Blob file _)) =
-  do h1@(H off1 old1 new1) <- aHunk (unFail file)
-     (delta, content') <- selectChunk h1 (unFail file)
-     H off2' old2 new2 <- aHunk content'
-     let off2 = off2' + delta
-     return (Hunk uuid (H off1 old1 new1) :> Hunk uuid (H off2 old2 new2))
+hunkPair (uuid, (Blob file _)) = do
+  h1@(H off1 old1 new1) <- aHunk (unFail file)
+  (delta, content') <- selectChunk h1 (unFail file)
+  H off2' old2 new2 <- aHunk content'
+  let off2 = off2' + delta
+  return (Hunk uuid (H off1 old1 new1) :> Hunk uuid (H off2 old2 new2))
   where
-     selectChunk (H off old new) content = elements [prefix, suffix]
-       where prefix = (0, B.take off content)
-             suffix = (off + B.length new, B.drop (off + B.length old) content)
+    selectChunk (H off old new) content = elements [prefix, suffix]
+      where
+        prefix = (0, B.take off content)
+        suffix = (off + B.length new, B.drop (off + B.length old) content)
 hunkPair _ = error "impossible case"
 
-aPrimPair :: FileUUIDModel wX
-          -> Gen (Sealed (WithEndState FileUUIDModel (Pair Prim wX)))
-aPrimPair repo
-  = do mbFile <- maybeOf repoFiles
-       frequency
-          [ ( if isJust mbFile then 1 else 0
-            , do p1 :> p2 <- hunkPair $ fromJust mbFile
-                 let repo'  = unFail $ repoApply repo  p1
-                     repo'' = unFail $ repoApply repo' p2
-                 return $ seal $ WithEndState (Pair (p1 :> p2)) repo''
-            )
-          , ( 1
-            , do
-                -- construct the underlying pair directly to avoid any
-                -- risk of indirectly calling arbitraryStatePair (which
-                -- would cause a loop).
-                Sealed (WithEndState pair repo') <- arbitraryState repo
-                return $ seal $ WithEndState (Pair pair) repo'
-            )
-          ]
+aPrimPair
+  :: FileUUIDModel wX -> Gen (Sealed (WithEndState FileUUIDModel (Pair Prim wX)))
+aPrimPair repo = do
+  mbFile <- maybeOf repoFiles
+  frequency
+    [ ( if isJust mbFile then 1 else 0
+      , do p1 :> p2 <- hunkPair $ fromJust mbFile
+           let repo' = unFail $ repoApply repo p1
+               repo'' = unFail $ repoApply repo' p2
+           return $ seal $ WithEndState (Pair (p1 :> p2)) repo'')
+    , ( 1
+        -- construct the underlying pair directly to avoid any
+        -- risk of indirectly calling arbitraryStatePair (which
+        -- would cause a loop).
+      , do Sealed (WithEndState pair repo') <- arbitraryState repo
+           return $ seal $ WithEndState (Pair pair) repo'
+      )
+    ]
   where
-      repoFiles = [ (uuid, Blob x y) | (uuid, Blob x y) <- repoObjects repo ]
+    repoFiles = [(uuid, Blob x y) | (uuid, Blob x y) <- repoObjects repo]
 
 ----------------------------------------------------------------------
 -- Arbitrary instances

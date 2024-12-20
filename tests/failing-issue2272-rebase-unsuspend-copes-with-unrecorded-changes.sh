@@ -41,8 +41,14 @@ darcs add 2.txt
 # Suspend the initial patch
 darcs rebase suspend -a -p 'adding original line'
 
+# save the repo so far
+rm -rf ../S
+cp -r . ../S
+
 # Now, unsuspend that patch. It should succeed despite unrecorded changes being present.
 darcs rebase unsuspend -a
+
+cd ../S
 
 # Additional case: An unrecorded change that conflicts with the suspended patch
 # This should succeed, but leave conflict markers.

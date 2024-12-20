@@ -15,17 +15,36 @@ import Darcs.Patch.Prim.Class ( primCleanMerge )
 
 -- For FileUUID it is easier to list the cases that do /not/ commute
 depends :: (Prim :> Prim) wX wY -> Bool
-depends (Manifest i1 l1 :> Demanifest i2 l2)
-  -- cannot commute add with remove of same object, regardless of location
-  | i1 == i2 = True
-  -- cannot commute add with remove of any two things at the same location
-  | l1 == l2 = True
+depends (Manifest _i1 l1 :> Demanifest _i2 l2)
+  -- after the first patch, i1 is in location l1, so the second patch can
+  -- only be valid if i1 == i2 => l1 == l2; so this case is redundant:
+  -- | i1 == i2 = True
+  -- cannot commute add with remove of any two things at the same location;
+  -- note that this implies i1 == i2
+  = l1 == l2
 depends (Demanifest i1 l1 :> Manifest i2 l2)
-  -- cannot commute remove with add of same object, regardless of location
+  -- this is effectively a move/rename and does not commute
   | i1 == i2 = True
   -- cannot commute remove with add of any two things at the same location
+  -- (the add depends on the location being empty)
   | l1 == l2 = True
 depends (_ :> _) = False
+
+{-
+-- alternative view:
+conflicts :: (Prim :\/: Prim) wX wY -> Bool
+conflicts (Manifest i1 l1 :\/: Manifest i2 l2)
+  -- cannot add the same object in two different or equal locations
+  -- (the former is invalid, the latter a duplicate); also cannot
+  -- add different objects in the same location
+  = i1 == i2 || l1 == l2
+conflicts (Demanifest i1 l1 :> Demanifest i2 l2)
+  -- the same object cannot be in two different locations, so we have
+  -- i1 == i2 => l1 == l2 (for prims valid in the same context).
+  -- | i1 == i1
+  -- this case implies i1 == i2 and thus is a duplicate
+  = l1 == l2
+-}
 
 instance Commute Prim where
   commute pair

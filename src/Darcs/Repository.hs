@@ -21,10 +21,8 @@ module Darcs.Repository
     , AccessType(..)
     , repoLocation
     , repoFormat
-    , repoPristineType
     , repoCache
     , RepoFormat(..)
-    , PristineType(..)
     , HashedDir(..)
     , Cache
     , CacheLoc(..)
@@ -55,9 +53,10 @@ module Darcs.Repository
     , tentativelyAddPatches
     , tentativelyRemovePatches
     , setTentativePending
-    , tentativelyRemoveFromPW
+    , tentativelyRemoveFromPending
     , withManualRebaseUpdate
     , tentativelyMergePatches
+    , oldTentativelyMergePatches
     , considerMergeToWorking
     , revertRepositoryChanges
     , UpdatePending(..)
@@ -124,7 +123,7 @@ import Darcs.Repository.Transaction
     , finalizeRepositoryChanges
     )
 import Darcs.Repository.Traverse ( cleanRepository )
-import Darcs.Repository.Pending ( setTentativePending, tentativelyRemoveFromPW )
+import Darcs.Repository.Pending ( setTentativePending, tentativelyRemoveFromPending )
 import Darcs.Repository.Working
     ( applyToWorking
     , setAllScriptsExecutable
@@ -139,9 +138,11 @@ import Darcs.Repository.Job
     , withUMaskFlag
     )
 import Darcs.Repository.Rebase ( withManualRebaseUpdate )
-import Darcs.Repository.Merge( tentativelyMergePatches
-                             , considerMergeToWorking
-                             )
+import Darcs.Repository.Merge
+    ( considerMergeToWorking
+    , oldTentativelyMergePatches
+    , tentativelyMergePatches
+    )
 import Darcs.Util.Cache
     ( Cache
     , CacheLoc(..)
@@ -155,11 +156,9 @@ import Darcs.Util.Cache
 import Darcs.Repository.InternalTypes
     ( Repository
     , AccessType(..)
-    , PristineType(..)
     , modifyCache
     , repoLocation
     , repoFormat
-    , repoPristineType
     , repoCache
     )
 import Darcs.Repository.Clone
