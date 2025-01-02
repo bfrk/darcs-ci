@@ -29,7 +29,7 @@ jobs:
 #           - 9.8.2
           - 9.10.1
         cabal:
-          - '3.10'
+#           - '3.10'
           - '3.12'
         exclude:
           # building text-2.1.2 fails with obscure assembler error
