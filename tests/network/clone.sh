@@ -3,11 +3,6 @@
 . lib
 . httplib
 
-# this should all work without a cache
-if ! grep no-cache $HOME/.darcs/defaults; then
-  echo ALL no-cache >> $HOME/.darcs/defaults
-fi
-
 rm -rf tabular
 unpack_testdata tabular
 serve_http # sets baseurl
