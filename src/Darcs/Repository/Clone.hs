@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module Darcs.Repository.Clone
     ( cloneRepository
     ) where
@@ -6,7 +5,8 @@ module Darcs.Repository.Clone
 import Darcs.Prelude
 
 import Control.Exception ( catch, SomeException )
-import Control.Monad ( unless, void, when )
+import Control.Monad ( forM, unless, void, when )
+import qualified Data.ByteString.Char8 as BC
 import Data.List( intercalate )
 import Data.Maybe( catMaybes )
 import Safe ( tailErr )
@@ -46,6 +46,7 @@ import Darcs.Repository.InternalTypes
     , repoCache
     , modifyCache
     )
+import Darcs.Repository.Job ( withUMaskFlag )
 import Darcs.Util.Cache
     ( filterRemoteCaches
     , fetchFileUsingCache
@@ -54,14 +55,23 @@ import Darcs.Util.Cache
     )
 
 import Darcs.Repository.ApplyPatches ( runDefault )
-import Darcs.Repository.Inventory ( PatchHash )
+import Darcs.Repository.Inventory
+    ( PatchHash
+    , encodeValidHash
+    , peekPristineHash
+    )
 import Darcs.Repository.Format
     ( RepoProperty ( HashedInventory, Darcs2, Darcs3 )
     , RepoFormat
     , formatHas
     )
 import Darcs.Repository.Prefs ( addRepoSource, deleteSources )
-import Darcs.Util.File ( Cachable(..), copyFileOrUrl )
+import Darcs.Repository.Match ( getOnePatchset )
+import Darcs.Util.File
+    ( copyFileOrUrl
+    , Cachable(..)
+    , gzFetchFilePS
+    )
 import Darcs.Repository.PatchIndex
     ( doesPatchIndexExist
     , createPIWithInterrupt
@@ -69,6 +79,7 @@ import Darcs.Repository.PatchIndex
 import Darcs.Repository.Packs
     ( fetchAndUnpackBasic
     , fetchAndUnpackPatches
+    , packsDir
     )
 import Darcs.Repository.Paths ( hashedInventoryPath, pristineDirPath )
 import Darcs.Repository.Resolution
@@ -77,7 +88,7 @@ import Darcs.Repository.Resolution
     , announceConflicts
     )
 import Darcs.Repository.Working ( applyToWorking )
-import Darcs.Util.Lock ( writeTextFile )
+import Darcs.Util.Lock ( writeTextFile, withNewDirectory )
 import Darcs.Repository.Flags
     ( UpdatePending(..)
     , UseCache(..)
@@ -86,6 +97,7 @@ import Darcs.Repository.Flags
     , CloneKind (..)
     , Verbosity (..)
     , DryRun (..)
+    , UMask (..)
     , SetScriptsExecutable (..)
     , SetDefault (..)
     , InheritDefault (..)
@@ -105,12 +117,13 @@ import Darcs.Patch.Set
     ( Origin
     , patchSet2FL
     , patchSet2RL
+    , patchSetInventoryHashes
     , progressPatchSet
     )
-import Darcs.Patch.Match ( MatchFlag(..), patchSetMatch, matchOnePatchset )
+import Darcs.Patch.Match ( MatchFlag(..), patchSetMatch )
 import Darcs.Patch.Progress ( progressRLShowTags, progressFL )
 import Darcs.Patch.Apply ( Apply(..) )
-import Darcs.Patch.Witnesses.Sealed ( Sealed(..), Sealed2(..) )
+import Darcs.Patch.Witnesses.Sealed ( Sealed(..) )
 import Darcs.Patch.Witnesses.Ordered
     ( (:\/:)(..)
     , FL(..)
@@ -126,7 +139,6 @@ import Darcs.Util.Tree( Tree )
 
 import Darcs.Util.Exception ( catchall )
 import Darcs.Util.English ( englishNum, Noun(..) )
-import Darcs.Util.File ( removeFileMayNotExist )
 import Darcs.Util.Global ( darcsdir )
 import Darcs.Util.URL ( isValidLocalPath )
 import Darcs.Util.SignalHandler ( catchInterrupt, withSignalsBlocked )
@@ -143,26 +155,27 @@ import Darcs.Util.Progress
 joinUrl :: [String] -> String
 joinUrl = intercalate "/"
 
-cloneRepository
-    :: String    -- origin repository path
-    -> Verbosity
-    -> UseCache
+cloneRepository ::
+    String    -- origin repository path
+    -> String -- new repository name (for relative path)
+    -> Verbosity -> UseCache
     -> CloneKind
-    -> RemoteDarcs
+    -> UMask -> RemoteDarcs
     -> SetScriptsExecutable
     -> SetDefault
     -> InheritDefault
     -> [MatchFlag]
     -> RepoFormat
     -> WithWorkingDir
-    -> WithPatchIndex
+    -> WithPatchIndex   -- use patch index
     -> Bool   -- use packs
     -> ForgetParent
     -> WithPrefsTemplates
     -> IO ()
-cloneRepository repourl v useCache cloneKind rdarcs sse
+cloneRepository repourl mysimplename v useCache cloneKind um rdarcs sse
                 setDefault inheritDefault matchFlags rfsource withWorkingDir
-                usePatchIndex usePacks forget withPrefsTemplates = do
+                usePatchIndex usePacks forget withPrefsTemplates =
+  withUMaskFlag um $ withNewDirectory mysimplename $ do
       let patchfmt
             | formatHas Darcs3 rfsource = PatchFormat3
             | formatHas Darcs2 rfsource = PatchFormat2
@@ -175,7 +188,7 @@ cloneRepository repourl v useCache cloneKind rdarcs sse
       addRepoSource repourl NoDryRun setDefault inheritDefault False
 
       debugMessage "Identifying remote repository..."
-      Sealed2 fromRepo <- identifyRepositoryFor Reading _toRepo useCache repourl
+      fromRepo <- identifyRepositoryFor Reading _toRepo useCache repourl
       let fromLoc = repoLocation fromRepo
 
       debugMessage "Copying prefs..."
@@ -198,7 +211,7 @@ cloneRepository repourl v useCache cloneKind rdarcs sse
          else copyBasicRepoNotPacked fromRepo _toRepo v rdarcs withWorkingDir
        when (cloneKind /= LazyClone) $ do
          when (cloneKind /= CompleteClone) $
-           putInfo v "Copying patches, to get lazy repository hit ctrl-C..."
+           putInfo v $ text "Copying patches, to get lazy repository hit ctrl-C..."
          debugMessage "Copying complete repository (inventories and patches)"
          if usePacks && (not . isValidLocalPath) fromLoc
            then copyCompleteRepoPacked    fromRepo _toRepo v cloneKind
@@ -211,11 +224,11 @@ cloneRepository repourl v useCache cloneKind rdarcs sse
       case patchSetMatch matchFlags of
        Nothing -> return ()
        Just psm -> do
-        putInfo v "Going to specified version..."
+        putInfo v $ text "Going to specified version..."
         -- the following is necessary to be able to read _toRepo's patches
         _toRepo <- revertRepositoryChanges _toRepo
         patches <- readPatches _toRepo
-        Sealed context <- matchOnePatchset patches psm
+        Sealed context <- getOnePatchset _toRepo psm
         to_remove :\/: only_in_context <- return $ findUncommon patches context
         case only_in_context of
           NilFL -> do
@@ -235,14 +248,10 @@ cloneRepository repourl v useCache cloneKind rdarcs sse
             -- This can only happen if the user supplied a context file that
             -- doesn't specify a subset of the remote repo.
             fail $ unsafeRenderStringColored
-              $ "Missing patches from context:"
+              $ text "Missing patches from context:"
               $$ description only_in_context
       when (forget == YesForgetParent) deleteSources
-      -- TODO Checking for unresolved conflicts means we have to download
-      -- at least all the patches referenced by hashed_inventory, even if
-      -- --lazy is in effect. This can take a long time, and in extreme
-      -- cases can even result in --lazy being slower than --complete.
-      putVerbose v $ text "Checking for unresolved conflicts..."
+      -- check for unresolved conflicts
       patches <- readPatches _toRepo
       let conflicts = patchsetConflictResolutions patches
       _ <- announceConflicts "clone" (YesAllowConflicts MarkConflicts) conflicts
@@ -260,79 +269,113 @@ putVerbose _ _ = return ()
 
 copyBasicRepoNotPacked  :: forall p wU wR.
                            Repository 'RO p wU wR -- remote
-                        -> Repository 'RO p Origin Origin -- empty local
+                        -> Repository 'RO p wU wR -- existing empty local
                         -> Verbosity
                         -> RemoteDarcs
                         -> WithWorkingDir
                         -> IO ()
 copyBasicRepoNotPacked fromRepo toRepo verb rdarcs withWorkingDir = do
-  putVerbose verb "Copying hashed inventory from remote repo..."
+  putVerbose verb $ text "Copying hashed inventory from remote repo..."
   copyHashedInventory toRepo rdarcs (repoLocation fromRepo)
-  putVerbose verb "Writing pristine and working tree contents..."
+  putVerbose verb $ text "Writing pristine and working tree contents..."
   createPristineDirectoryTree toRepo "." withWorkingDir
 
-copyCompleteRepoNotPacked
-  :: forall rt p wU wR vU vR
-   . (RepoPatch p, ApplyState p ~ Tree)
-  => Repository 'RO p wU wR -- remote
-  -> Repository rt p vU vR  -- basic local
-  -> Verbosity
-  -> CloneKind
-  -> IO ()
+copyCompleteRepoNotPacked :: forall rt p wU wR. (RepoPatch p, ApplyState p ~ Tree)
+                        => Repository 'RO p wU wR -- remote
+                        -> Repository rt p wU wR -- existing basic local
+                        -> Verbosity
+                        -> CloneKind
+                        -> IO ()
 copyCompleteRepoNotPacked _ toRepo verb cloneKind = do
-  let cleanup = putInfo verb "Using lazy repository."
-  allowCtrlC cloneKind cleanup $ do
-    fetchPatchesIfNecessary toRepo
-    pi <- doesPatchIndexExist (repoLocation toRepo)
-    ps <- readPatches toRepo
-    when pi $ createPIWithInterrupt toRepo ps
+       let cleanup = putInfo verb $ text "Using lazy repository."
+       allowCtrlC cloneKind cleanup $ do
+         fetchPatchesIfNecessary toRepo
+         pi <- doesPatchIndexExist (repoLocation toRepo)
+         ps <- readPatches toRepo
+         when pi $ createPIWithInterrupt toRepo ps
 
-copyBasicRepoPacked
-  :: forall p wU wR
-   . Repository 'RO p wU wR -- remote
-  -> Repository 'RO p Origin Origin -- empty local
+copyBasicRepoPacked ::
+  forall p wU wR.
+     Repository 'RO p wU wR -- remote
+  -> Repository 'RO p wU wR -- existing empty local repository
   -> Verbosity
   -> RemoteDarcs
   -> WithWorkingDir
   -> IO ()
-copyBasicRepoPacked fromRepo toRepo verb rdarcs withWorkingDir = do
-  putVerbose verb "Trying to clone packed basic repository."
-  cleanDir pristineDirPath
-  removeFileMayNotExist hashedInventoryPath
-  do
-    fetchAndUnpackBasic (repoCache toRepo) (repoLocation fromRepo)
-    putInfo verb "Done fetching and unpacking basic pack."
-   `catch` \(_ :: SomeException) -> do
-      putVerbose verb
-        "Remote repo has no basic pack, copying normally."
-  -- Calling copyBasicRepoNotPacked here will overwrite hashed_inventory
-  -- in case the basic pack was outdated. It then proceeds with a call
-  -- to createPristineDirectoryTree which will download any missing
-  -- pristine files.
-  copyBasicRepoNotPacked fromRepo toRepo verb rdarcs withWorkingDir
+copyBasicRepoPacked fromRepo toRepo verb rdarcs withWorkingDir =
+  do let fromLoc = repoLocation fromRepo
+     let hashURL = joinUrl [fromLoc, darcsdir, packsDir, "pristine"]
+     mPackHash <- (Just <$> gzFetchFilePS hashURL Uncachable) `catchall` (return Nothing)
+     let hiURL = fromLoc </> hashedInventoryPath
+     i <- gzFetchFilePS hiURL Uncachable
+     let currentHash = BC.pack $ encodeValidHash $ peekPristineHash i
+     let copyNormally = copyBasicRepoNotPacked fromRepo toRepo verb rdarcs withWorkingDir
+     case mPackHash of
+      Just packHash | packHash == currentHash
+              -> ( do copyBasicRepoPacked2 fromRepo toRepo verb withWorkingDir
+                      -- need to obtain a fresh copy of hashed_inventory as reference
+                      putVerbose verb $ text "Copying hashed inventory from remote repo..."
+                      copyHashedInventory toRepo rdarcs (repoLocation fromRepo)
+                   `catch` \(e :: SomeException) ->
+                               do putStrLn ("Exception while getting basic pack:\n" ++ show e)
+                                  copyNormally)
+      _       -> do putVerbose verb $
+                      text "Remote repo has no basic pack or outdated basic pack, copying normally."
+                    copyNormally
 
-copyCompleteRepoPacked
-  :: forall rt p wU wR vU vR
-   . (RepoPatch p, ApplyState p ~ Tree)
+copyBasicRepoPacked2 ::
+  forall rt p wU wR.
+     Repository 'RO p wU wR -- remote
+  -> Repository rt p wU wR -- existing empty local repository
+  -> Verbosity
+  -> WithWorkingDir
+  -> IO ()
+copyBasicRepoPacked2 fromRepo toRepo verb withWorkingDir = do
+  putVerbose verb $ text "Cloning packed basic repository."
+  -- unpack inventory & pristine cache
+  cleanDir pristineDirPath
+  removeFile hashedInventoryPath
+  fetchAndUnpackBasic (repoCache toRepo) (repoLocation fromRepo)
+  putInfo verb $ text "Done fetching and unpacking basic pack."
+  createPristineDirectoryTree toRepo "." withWorkingDir
+
+copyCompleteRepoPacked ::
+  forall rt p wU wR. (RepoPatch p, ApplyState p ~ Tree)
   => Repository 'RO p wU wR -- remote
-  -> Repository rt p vU vR  -- basic local
+  -> Repository rt p wU wR -- existing basic local repository
   -> Verbosity
   -> CloneKind
   -> IO ()
-copyCompleteRepoPacked fromRepo toRepo verb cloneKind = do
-    us <- readPatches toRepo
-    -- get old patches
-    let cleanup = putInfo verb "Using lazy repository."
-    allowCtrlC cloneKind cleanup $ do
-      putInfo verb "Downloading inventories and patches, using patches pack..."
-      fetchAndUnpackPatches us (repoCache toRepo) (repoLocation fromRepo)
-      pi <- doesPatchIndexExist (repoLocation toRepo)
-      when pi $ createPIWithInterrupt toRepo us -- TODO or do another readPatches?
+copyCompleteRepoPacked from to verb cloneKind =
+    copyCompleteRepoPacked2 from to verb cloneKind
   `catch`
     \(e :: SomeException) -> do
       putStrLn ("Exception while getting patches pack:\n" ++ show e)
-      putVerbose verb "Problem while copying patches pack, copying normally."
-      copyCompleteRepoNotPacked fromRepo toRepo verb cloneKind
+      putVerbose verb $ text "Problem while copying patches pack, copying normally."
+      copyCompleteRepoNotPacked from to verb cloneKind
+
+copyCompleteRepoPacked2 ::
+  forall rt p wU wR. (RepoPatch p, ApplyState p ~ Tree)
+  => Repository 'RO p wU wR
+  -> Repository rt p wU wR
+  -> Verbosity
+  -> CloneKind
+  -> IO ()
+copyCompleteRepoPacked2 fromRepo toRepo verb cloneKind = do
+  us <- readPatches toRepo
+  -- get old patches
+  let cleanup = putInfo verb $ text "Using lazy repository."
+  allowCtrlC cloneKind cleanup $ do
+    putVerbose verb $ text "Using patches pack."
+    is <-
+      forM (patchSetInventoryHashes us) $
+        maybe (fail "unexpected unhashed inventory") return
+    hs <-
+      forM (mapRL hashedPatchHash $ patchSet2RL us) $
+        maybe (fail "unexpected unhashed patch") return
+    fetchAndUnpackPatches is hs (repoCache toRepo) (repoLocation fromRepo)
+    pi <- doesPatchIndexExist (repoLocation toRepo)
+    when pi $ createPIWithInterrupt toRepo us -- TODO or do another readPatches?
 
 cleanDir :: FilePath -> IO ()
 cleanDir d = mapM_ (\x -> removeFile $ d </> x) =<< listDirectory d
@@ -356,7 +399,7 @@ copyRepoOldFashioned fromRepo _toRepo verb withWorkingDir = do
   let patchesToApply = progressFL "Applying patch" $ patchSet2FL local_patches
   applyToTentativePristine _toRepo (mkInvertible patchesToApply)
   _toRepo <- finalizeRepositoryChanges _toRepo NoDryRun
-  putVerbose verb "Writing the working tree..."
+  putVerbose verb $ text "Writing the working tree..."
   createPristineDirectoryTree _toRepo "." withWorkingDir
 
 -- | This function fetches all patches that the given repository has

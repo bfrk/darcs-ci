@@ -22,15 +22,15 @@ serve_http # sets baseurl
 
 # check that default behaviour is to get packs
 rm -rf S
-darcs clone $baseurl/repo S --verbose | grep "Trying to clone packed basic repository"
+darcs clone $baseurl/repo S --verbose |grep "Cloning packed basic repository"
 
 # check that it does really not get packs when --no-packs is passed
 rm -rf S
-darcs clone $baseurl/repo S --no-packs --verbose | not grep "Trying to clone packed basic repository"
+darcs clone $baseurl/repo S --no-packs --verbose  |not grep "Cloning packed basic repository"
 
 # check that it does not claim getting packs when there are not
 rm -rf S
 rm -rf repo/_darcs/packs/
 # sleep for a second to avoid spurious false positives on MacOS:
 sleep 1
-darcs clone $baseurl/repo S --verbose | grep "Remote repo has no basic pack"
+darcs clone $baseurl/repo S --verbose |not grep "Cloning packed basic repository"

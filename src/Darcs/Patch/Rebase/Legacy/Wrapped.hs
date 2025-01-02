@@ -7,12 +7,14 @@ module Darcs.Patch.Rebase.Legacy.Wrapped
 import Darcs.Prelude
 
 import Control.Applicative ( (<|>) )
+import Data.Coerce ( coerce )
 
 import Darcs.Patch.Effect ( Effect(..) )
+import Darcs.Patch.Format ( PatchListFormat(..), ListFormat )
 import Darcs.Patch.Info ( PatchInfo )
 import Darcs.Patch.FromPrim ( FromPrim, PrimPatchBase(..) )
 import Darcs.Patch.Named ( Named(..) )
-import Darcs.Patch.Read ( ReadPatch(..), ReadPatches(..), legacyReadPatchFL' )
+import Darcs.Patch.Read ( ReadPatch(..) )
 import Darcs.Patch.Rebase.Suspended ( Suspended, readSuspended )
 import Darcs.Patch.RepoPatch ( RepoPatch )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(..), mapSeal )
@@ -71,9 +73,9 @@ instance RepoPatch p => ReadPatch (WrappedNamed p) where
     unRead (ReadNormal p) = p
     unRead (ReadSuspended _) = error "unexpected suspended patch"
 
+instance PatchListFormat p => PatchListFormat (ReadRebasing p) where
+  patchListFormat = coerce (patchListFormat :: ListFormat p)
+
 instance RepoPatch p => ReadPatch (ReadRebasing p) where
   readPatch' =
     Sealed . ReadSuspended <$> readSuspended <|> mapSeal ReadNormal <$> readPatch'
-
-instance RepoPatch p => ReadPatches (ReadRebasing p) where
-  readPatchFL' = legacyReadPatchFL'

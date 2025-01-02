@@ -3,24 +3,32 @@ module Darcs.Patch.Prim.Canonize ( canonizeFL ) where
 
 import Darcs.Prelude
 
-import qualified Data.ByteString as B ( empty )
+import qualified Data.ByteString as B (ByteString, empty)
 
 import Darcs.Patch.FileHunk ( FileHunk(..), IsHunk(..) )
-import Darcs.Patch.Prim.Class ( PrimCoalesce(sortCoalesceFL) )
-import Darcs.Patch.Witnesses.Ordered ( FL(..), mapFL_FL, concatFL )
+import Darcs.Patch.Prim.Class
+    ( PrimConstruct(primFromHunk)
+    , PrimCoalesce(sortCoalesceFL)
+    )
+import Darcs.Patch.Witnesses.Ordered ( FL(..), joinGapsFL, mapFL_FL, concatFL )
+import Darcs.Patch.Witnesses.Sealed ( unseal, Gap(..), unFreeLeft )
 import Darcs.Patch.Witnesses.Unsafe ( unsafeCoercePEnd )
 import Darcs.Util.Diff ( DiffAlgorithm, getChanges )
 
-canonizeHunk :: DiffAlgorithm -> FileHunk xd oid wX wY -> FL (FileHunk xd oid) wX wY
-canonizeHunk da h@(FileHunk xd f line old new)
-  | null old || null new || old == [B.empty] || new == [B.empty] = h :>: NilFL
-  | otherwise =
-      buildFL (\(l, o, n) -> FileHunk xd f (l + line) o n) $ getChanges da old new
+canonizeHunk :: Gap w => DiffAlgorithm -> FileHunk oid wX wY -> w (FL (FileHunk oid))
+canonizeHunk _ (FileHunk f line old new)
+  | null old || null new || old == [B.empty] || new == [B.empty] =
+      freeGap (FileHunk f line old new :>: NilFL)
+canonizeHunk da (FileHunk f line old new) =
+  makeHoley f line $ getChanges da old new
 
-buildFL
-  :: (forall wA wB . a -> FileHunk xd oid wA wB) -> [a] -> FL (FileHunk xd oid) wX wY
-buildFL _ [] = unsafeCoercePEnd NilFL
-buildFL f (x:xs) = f x :>: buildFL f xs
+makeHoley :: Gap w
+          => oid
+          -> Int
+          -> [(Int, [B.ByteString], [B.ByteString])]
+          -> w (FL (FileHunk oid))
+makeHoley f line =
+  joinGapsFL . map (\(l, o, n) -> freeGap (FileHunk f (l + line) o n))
 
 -- | It can sometimes be handy to have a canonical representation of a given
 -- patch.  We achieve this by defining a canonical form for each patch type,
@@ -28,10 +36,10 @@ buildFL f (x:xs) = f x :>: buildFL f xs
 -- canonical form.  This routine is used by the diff function to create an
 -- optimal patch (based on an LCS algorithm) from a simple hunk describing the
 -- old and new version of a file.
-canonize :: IsHunk prim
+canonize :: (IsHunk prim, PrimConstruct prim)
          => DiffAlgorithm -> prim wX wY -> FL prim wX wY
 canonize da p | Just fh <- isHunk p =
-  mapFL_FL fromHunk $ canonizeHunk da fh
+  mapFL_FL primFromHunk $ unseal unsafeCoercePEnd $ unFreeLeft $ canonizeHunk da fh
 canonize _ p = p :>: NilFL
 
 -- | Put a sequence of primitive patches into canonical form.
@@ -45,7 +53,12 @@ canonize _ p = p :>: NilFL
 -- sortCoalesceFL and then invokes the diff algorithm for each hunk. How can
 -- that be any different to applying the sequence and then taking the diff?
 -- Is this merely because diff does not sort by file path?
-canonizeFL :: (IsHunk prim, PrimCoalesce prim)
+--
+-- Besides, diff and apply /must/ be inverses in the sense that for any two
+-- states {start, end}, we have
+--
+-- prop> diff start (apply (diff start end)) == end
+canonizeFL :: (IsHunk prim, PrimCoalesce prim, PrimConstruct prim)
            => DiffAlgorithm -> FL prim wX wY -> FL prim wX wY
 -- Note: it is important to first coalesce and then canonize, since
 -- coalescing can produce non-canonical hunks (while hunks resulting

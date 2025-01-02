@@ -32,9 +32,11 @@ import Darcs.UI.Completion ( noArgs )
 import Darcs.Repository
     ( Repository
     , RepoFormat
+    , PristineType
     , Cache
     , repoFormat
     , repoLocation
+    , repoPristineType
     , repoCache
     , withRepository
     , RepoJob(..)
@@ -108,6 +110,7 @@ repoCmd _ opts _ = do
 data RepoInfo = RepoInfo
   { riFormat :: RepoFormat
   , riRoot :: String
+  , riPristineType :: PristineType
   , riCache :: Cache
   , riPatchIndex :: String
   , riTestPref :: Maybe String
@@ -127,6 +130,7 @@ getRepoInfo
 getRepoInfo r opts = do
   let riFormat = repoFormat r
   let riRoot = repoLocation r
+  let riPristineType = repoPristineType r
   let riCache = repoCache r
   piExists <- doesPatchIndexExist riRoot
   piDisabled <- isPatchIndexDisabled riRoot
@@ -153,6 +157,7 @@ instance XML.Node RepoInfo where
     XML.node qn $
       [ XML.unode "format" $ showInOneLine riFormat
       , XML.unode "root" riRoot
+      , XML.unode "pristinetype" (show riPristineType)
       , XML.unode "cache" (showInOneLine riCache)
       , XML.unode "patchindex" riPatchIndex
       ]
@@ -174,6 +179,7 @@ showRepoInfo RepoInfo{..} =
   unlines $
     [ out "Format" $ showInOneLine riFormat
     , out "Root" riRoot
+    , out "PristineType" $ show riPristineType
     , out "Cache" $ showInOneLine $ riCache
     , out "PatchIndex" $ riPatchIndex
     ]

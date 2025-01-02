@@ -26,7 +26,7 @@ module Darcs.UI.Commands.Pull ( -- * Commands.
 import Darcs.Prelude
 
 import System.Exit ( exitSuccess )
-import Control.Monad ( forM, when, unless, (>=>) )
+import Control.Monad ( when, unless, (>=>) )
 import Data.List ( nub )
 import Data.Maybe ( fromMaybe )
 import Safe ( headErr, tailErr )
@@ -73,7 +73,7 @@ import Darcs.Patch ( RepoPatch, description )
 import qualified Darcs.Patch.Bundle as Bundle ( makeBundle )
 import Darcs.Patch.Apply( ApplyState )
 import Darcs.Patch.Set ( PatchSet, Origin, emptyPatchSet, SealedPatchSet )
-import Darcs.Patch.Witnesses.Sealed ( Sealed(..), Sealed2(..), seal )
+import Darcs.Patch.Witnesses.Sealed ( Sealed(..), seal )
 import Darcs.Patch.Witnesses.Ordered
     ( (:>)(..), FL(..), Fork(..)
     , mapFL, nullFL, mapFL_FL )
@@ -100,7 +100,6 @@ import Darcs.UI.SelectChanges
     , selectionConfig
     )
 import qualified Darcs.UI.SelectChanges as S ( PatchSelectionOptions (..) )
-import Darcs.Util.Format ( putFormat )
 import Darcs.Util.Printer
     ( Doc
     , ($$)
@@ -108,11 +107,12 @@ import Darcs.Util.Printer
     , (<+>)
     , formatWords
     , hsep
+    , putDoc
     , quoted
     , text
     , vcat
     )
-import Darcs.Util.Lock ( writeFormatBinFile )
+import Darcs.Util.Lock ( writeDocBinFile )
 import Darcs.Util.Path ( useAbsoluteOrStd, stdOut, AbsolutePath )
 import Darcs.Util.Workaround ( getCurrentDirectory )
 import Darcs.Util.Tree( Tree )
@@ -319,40 +319,44 @@ makeBundle :: forall p wR . (RepoPatch p, ApplyState p ~ Tree)
            -> IO ()
 makeBundle opts (Sealed (Fork common _ to_be_fetched)) =
     do
-      let bundle = Bundle.makeBundle common $ mapFL_FL hopefully to_be_fetched
+      bundle <- Bundle.makeBundle Nothing common $
+                 mapFL_FL hopefully to_be_fetched
       let fname = case to_be_fetched of
                     (x:>:_)-> getUniqueDPatchName $ patchDesc x
                     _ -> error "impossible case"
       o <- fromMaybe (return stdOut) (getOutput opts fname)
-      useAbsoluteOrStd writeFormatBinFile putFormat o bundle
+      useAbsoluteOrStd writeDocBinFile putDoc o bundle
 
-{- | Read in the specified pull-from repositories, and depending on whether
-to perform intersection, union, or complement, return two 'PatchSet's: the
-patches we want to pull and the ones we do not want to pull. In set-algebra
-terms (using + for union, & for intersection):
+{- Read in the specified pull-from repositories.  Perform
+Intersection, Union, or Complement read.  In patch-theory terms
+(stated in set algebra, where + is union and & is intersection
+and \ is complement):
 
-[union]
-    > (R1 + R2 + ... + Rn, {})
-[intersection]
-    > (R1 & R2 & ... & Rn, {})
-[complement]
-    > (R1, R2 + R3 + ... + Rn)
+    Union =         ((R1 + R2 + ... + Rn) \ Rc)
+    Intersection =  ((R1 & R2 & ... & Rn) \ Rc)
+    Complement =    (R1 \ Rc) \ ((R2 + R3 + ... + Rn) \ Rc)
 
+                        where Rc = local repo
+                              R1 = 1st specified pull repo
+                              R2, R3, Rn = other specified pull repo
+
+Since Rc is not provided here yet, the result of readRepos is a
+tuple: the first patchset(s) to be complemented against Rc and then
+the second patchset(s) to be complemented against Rc.
 -}
+
 readRepos :: RepoPatch p
           => Repository rt p wU wR -> [DarcsFlag] -> [String]
           -> IO (SealedPatchSet p Origin,SealedPatchSet p Origin)
 readRepos _ _ [] = error "impossible case"
-readRepos to_repo opts locations = do
-  pss <-
-    forM locations $ \loc -> do
-      Sealed2 r <- identifyRepositoryFor Reading to_repo (useCache ? opts) loc
-      Sealed <$> readPatches r
-  return $
-    case parseFlags O.repoCombinator opts of
-      O.Intersection -> (patchSetIntersection pss, seal emptyPatchSet)
-      O.Complement -> (headErr pss, patchSetUnion $ tailErr pss)
-      O.Union -> (patchSetUnion pss, seal emptyPatchSet)
+readRepos to_repo opts us =
+    do rs <- mapM (\u -> do r <- identifyRepositoryFor Reading to_repo (useCache ? opts) u
+                            ps <- readPatches r
+                            return $ seal ps) us
+       return $ case parseFlags O.repoCombinator opts of
+                  O.Intersection -> (patchSetIntersection rs, seal emptyPatchSet)
+                  O.Complement -> (headErr rs, patchSetUnion $ tailErr rs)
+                  O.Union -> (patchSetUnion rs, seal emptyPatchSet)
 
 pullPatchSelOpts :: [DarcsFlag] -> S.PatchSelectionOptions
 pullPatchSelOpts flags = S.PatchSelectionOptions

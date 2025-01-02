@@ -27,7 +27,6 @@ module Darcs.Util.Tree.Hashed
 
 import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString.Lazy as BL
-import qualified Data.Set as S
 
 import Data.List ( sortBy )
 import Data.Maybe ( fromMaybe )
@@ -39,10 +38,9 @@ import Darcs.Util.Cache
     , fetchFileUsingCache
     , writeFileUsingCache
     )
-import Darcs.Util.Format
 import Darcs.Util.Hash
     ( Hash
-    , formatHash
+    , encodeBase16
     , encodeHash
     , sha256
     , showHash
@@ -80,20 +78,20 @@ import Darcs.Util.ValidHash
 --
 
 -- Precondition: all (immediate) items in the tree have hashes
-darcsFormatDir :: Tree m -> Format
+darcsFormatDir :: Tree m -> BL.ByteString
 darcsFormatDir =
-  mconcat . map formatItem . sortBy cmp . listImmediate
+  BL.fromChunks . map formatItem . sortBy cmp . listImmediate
   where
     cmp (a, _) (b, _) = compare a b
-    formatItem (name, item) = vcat
+    formatItem (name, item) = BC.unlines
       [ case item of
-          File _ -> byteString kwFile
-          _      -> byteString kwDir
-      , byteString (encodeWhiteName name)
+          File _ -> kwFile
+          _      -> kwDir
+      , encodeWhiteName name
       , case itemHash item of
           Nothing -> error "precondition of darcsFormatDir"
-          Just h  -> formatHash h
-      ] <> newline
+          Just h  -> encodeBase16 h
+      ]
 
 darcsParseDir
   :: FilePath -> BC.ByteString -> Either String [(ItemType, Name, PristineHash)]
@@ -125,7 +123,7 @@ kwDir = BC.pack "directory:"
 
 -- | Compute a darcs-compatible hash value for a tree-like structure.
 darcsTreeHash :: Tree m -> Hash
-darcsTreeHash = sha256 . toLazyByteString . darcsFormatDir
+darcsTreeHash = sha256 . darcsFormatDir
 
 darcsUpdateDirHashes :: Tree m -> Tree m
 darcsUpdateDirHashes = updateSubtrees update
@@ -201,7 +199,7 @@ writeDarcsHashed tree' cache = do
   let items = list t
   sequence_ [readAndWriteBlob b | (_, File b) <- items]
   let dirs = darcsFormatDir t : [darcsFormatDir d | (_, SubTree d) <- items]
-  mapM_ (dump . toLazyByteString) dirs
+  mapM_ dump dirs
   return (fromHash (darcsTreeHash t))
   where
     readAndWriteBlob b = readBlob b >>= dump
@@ -210,7 +208,8 @@ writeDarcsHashed tree' cache = do
 -- | Create a hashed file from a 'Cache' and file content. In case the file
 -- exists it is kept untouched and is assumed to have the right content.
 fsCreateHashedFile :: Cache -> BL.ByteString -> IO PristineHash
-fsCreateHashedFile cache content = writeFileUsingCache cache content
+fsCreateHashedFile cache content =
+  writeFileUsingCache cache (BL.toStrict content)
 
 fsReadHashedFile :: Cache -> PristineHash -> IO (FilePath, BC.ByteString)
 fsReadHashedFile = fetchFileUsingCache
@@ -248,21 +247,18 @@ hashedTreeIO action tree cache = runTreeMonad action tree (const dumpItem)
     dumpTree t = do
       debugMessage $ "hashedTreeIO.dumpTree: old hash=" ++ showHash (treeHash t)
       t' <- darcsAddMissingHashes t
-      nhash <- fsCreateHashedFile cache (toLazyByteString (darcsFormatDir t'))
+      nhash <- fsCreateHashedFile cache (darcsFormatDir t')
       debugMessage $ "hashedTreeIO.dumpTree: new hash=" ++ encodeValidHash nhash
       return t'
 
 -- | Return all 'PristineHash'es reachable from the given root set, which must
 -- consist of directory hashes only.
 followPristineHashes :: Cache -> [PristineHash] -> IO [PristineHash]
-followPristineHashes cache = fmap S.toList . follow S.empty
+followPristineHashes cache = followAll
   where
-    follow done [] = return done
-    follow done (root:roots)
-      | root `S.member` done = follow done roots
-      | otherwise = do
-        x <- readDarcsHashedDir cache root
-        let subTrees = [ ph | (TreeType, _, ph) <- x ]
-            blobs    = [ ph | (BlobType, _, ph) <- x ]
-            done'    = done `S.union` S.fromList (root:blobs)
-        follow done' (subTrees ++ roots)
+    followAll roots = concat <$> mapM followOne roots
+    followOne root = do
+      x <- readDarcsHashedDir cache root
+      let subs   = [ ph | (TreeType, _, ph) <- x ]
+          hashes = root : [ ph | (_, _, ph) <- x ]
+      (hashes ++) <$> followAll subs

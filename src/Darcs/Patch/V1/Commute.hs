@@ -62,9 +62,8 @@ import Darcs.Patch.Permutations
     , nubFL
     )
 import Darcs.Util.Printer ( renderString, text, vcat, ($$) )
-import Darcs.Patch.V1.Show ()
+import Darcs.Patch.V1.Show ( showPatch_ )
 import Data.List.Ordered ( nubSort )
-import Darcs.Patch.Show ( ShowPatchBasic (..) )
 import Darcs.Patch.Summary
     ( Summary(..)
     , ConflictState(..)
@@ -313,7 +312,7 @@ reconcileUnwindings p (p1s:<:p1) p2s@(tp2s:<:p2) =
                 error $ renderString
                   $ text "in function reconcileUnwindings"
                   $$ text "Original patch:"
-                  $$ showPatch p
+                  $$ showPatch_ p
     _ -> error "in reconcileUnwindings"
 
 -- This code seems wrong, shouldn't the commute be invert p1 :> p2 ? And why isn't p1' re-inverted?
@@ -424,12 +423,10 @@ instance PrimPatch prim => Effect (RepoPatchV1 prim) where
     effect p@(Regrem{}) = invert $ effect $ invert p
     effect (PP p) = p :>: NilFL
 
-instance (ApplyState prim ~ ApplyState (RepoPatchV1 prim), IsHunk prim) =>
+instance (PrimPatch prim, ApplyState prim ~ ApplyState (RepoPatchV1 prim)) =>
          IsHunk (RepoPatchV1 prim) where
-    type ExtraData (RepoPatchV1 prim) = ExtraData prim
-    isHunk (PP p) = isHunk p
-    isHunk _ = Nothing
-    fromHunk = PP . fromHunk
+    isHunk p = do PP p' <- return p
+                  isHunk p'
 
 newUr :: PrimPatch prim
     => RepoPatchV1 prim wA wB -> RL (RepoPatchV1 prim) wX wY -> [Sealed (RL (RepoPatchV1 prim) wX)]
@@ -438,9 +435,9 @@ newUr p (ps :<: Merger _ _ p1 p2) =
    ((ps':<:_):_) -> newUr p (ps':<:unsafeCoercePStart p1) ++ newUr p (ps':<:unsafeCoercePStart p2)
    _ -> error $ renderString $ text "in function newUr"
                  $$ text "Original patch:"
-                 $$ showPatch p
+                 $$ showPatch_ p
                  $$ text "Unwound:"
-                 $$ vcat (unseal (mapRL showPatch) $ unwind p)
+                 $$ vcat (unseal (mapRL showPatch_) $ unwind p)
 
 newUr op ps =
     case filter (\(_:<:p) -> isMerger p) $ headPermutationsRL ps of

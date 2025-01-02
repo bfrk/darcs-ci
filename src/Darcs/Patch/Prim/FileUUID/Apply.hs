@@ -15,7 +15,7 @@ import Darcs.Patch.ApplyMonad
     , ApplyMonadOperations
     )
 import Darcs.Patch.Prim.Class ( PrimApply(..) )
-import Darcs.Patch.Prim.FileUUID.Core ( Prim(..), Hunk(..) )
+import Darcs.Patch.Prim.FileUUID.Core ( Prim(..), Hunk(..), HunkMove(..) )
 import Darcs.Patch.Prim.FileUUID.Show
 import Darcs.Patch.Prim.FileUUID.ObjectMap
 import Darcs.Patch.Repair ( RepairToFL(..) )
@@ -29,6 +29,8 @@ instance Apply Prim where
   apply (Manifest i (L dirid name)) = editDirectory dirid (addObject name i dirid)
   apply (Demanifest i (L dirid name)) = editDirectory dirid (delObject name i dirid)
   apply (Hunk i hunk) = editFile i (hunkEdit hunk)
+  apply (HunkMove (HM fs ls ft lt c)) =
+    editFile fs (hunkEdit (H ls c B.empty)) >> editFile ft (hunkEdit (H lt B.empty c))
   apply Identity = return ()
 
 instance RepairToFL Prim where

@@ -7,8 +7,10 @@ module Darcs.Test.Patch.Arbitrary.PrimV1
 import Prelude ()
 import Darcs.Prelude
 
+import qualified Darcs.Test.Patch.Arbitrary.Generic as T
 import Darcs.Test.Patch.Arbitrary.Generic
     ( NullPatch(..)
+    , MightBeEmptyHunk
     , MightHaveDuplicate
     , ArbitraryPrim
     )
@@ -60,6 +62,12 @@ deriving instance NullPatch Prim2
 instance NullPatch FilePatchType where
   nullPatch (Hunk _ [] []) = unsafeCoerceP IsEq -- is this safe?
   nullPatch _ = NotEq
+
+instance MightBeEmptyHunk Prim.Prim where
+  isEmptyHunk (Prim.FP _ (Hunk _ [] [])) = True
+  isEmptyHunk _ = False
+deriving instance MightBeEmptyHunk Prim1
+deriving instance MightBeEmptyHunk Prim2
 
 instance MightHaveDuplicate Prim1
 instance MightHaveDuplicate Prim2
@@ -121,19 +129,12 @@ aTokReplace :: Content -> Gen (String, String, String)
 aTokReplace []
   = do w <- vectorOf 1 alpha
        w' <- vectorOf 1 alpha
-       s <- alpha `suchThat` (\c -> all (c <=) (w<>w'))
-       e <- alpha `suchThat` (\c -> all (<= c) (w<>w'))
-       -- note: both w and w' must contain only chars in tokchars
-       tokchars <- elements $ [defaultToks, w<>w', [s,'-',e]]
-       return (tokchars, w, w')
+       return (defaultToks, w, w')
 aTokReplace content
   = do let fileWords = concatMap BC.words content
-       w <- elements fileWords
+       wB <- elements fileWords
        w' <- alphaBS `notIn` fileWords
-       s <- alpha `suchThat` (\c -> BC.all (c <=) (w<>w'))
-       e <- alpha `suchThat` (\c -> BC.all (<= c) (w<>w'))
-       tokchars <- elements [defaultToks, BC.unpack (w<>w'), [s,'-',e]]
-       return (tokchars, BC.unpack w, BC.unpack w')
+       return (defaultToks, BC.unpack wB, BC.unpack w')
   where
       alphaBS = do x <- alpha; return $ BC.pack [x]
 

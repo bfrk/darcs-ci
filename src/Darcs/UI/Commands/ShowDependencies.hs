@@ -25,7 +25,7 @@ import Darcs.Util.Printer
     , formatText
     , formatWords
     , hsep
-    , prefix
+    , prefixLines
     , putDocLn
     , quoted
     , renderString
@@ -152,7 +152,7 @@ depsGraph (ps :<: p) =
 renderDepsGraphAsDot :: M.Map PatchInfo (S.Set PatchInfo, S.Set PatchInfo) -> Doc
 renderDepsGraphAsDot g = vcat ["digraph {", indent body, "}"]
   where
-    indent = prefix "  "
+    indent = prefixLines ("  ")
     body = vcat
       [ "graph [rankdir=LR];"
       , "node [imagescale=true];"

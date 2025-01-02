@@ -58,11 +58,9 @@ propOtherInverseValid (Sealed2 p1) = checkAPatch (p1:>:invert p1:>:NilFL)
 propCommuteTwice :: Sealed2 (FL Patch :> FL Patch) -> Property
 propCommuteTwice (Sealed2 (p1:>p2)) =
     (doesCommute p1 p2) ==> (Just (p1:>p2) == (commute (p1:>p2) >>= commute))
-
 doesCommute :: (Eq2 p, Invert p, Commute p, Check p) => p wX wY -> p wY wZ -> Bool
 doesCommute p1 p2 =
     commute (p1:>p2) /= Nothing && checkAPatch (p1:>:p2:>:NilFL)
-
 propCommuteEquivalency :: Sealed2 (FL Patch :> FL Patch) -> Property
 propCommuteEquivalency (Sealed2 (p1:>p2)) =
     (doesCommute p1 p2) ==>
@@ -112,7 +110,6 @@ propMergeIsCommutableAndCorrect (Sealed2 (p1:\/:p2)) =
         case commute (p1:>p2') of
         Nothing -> False
         Just (p2'':>p1'') -> isIsEq (p2'' =\/= p2) && isIsEq (p1' =/\= p1'')
-
 propMergeIsSwapable :: Sealed2 (FL Patch :\/: FL Patch) -> Property
 propMergeIsSwapable (Sealed2 (p1:\/:p2)) =
     checkAPatch (invert p1:>:p2:>:NilFL) ==>

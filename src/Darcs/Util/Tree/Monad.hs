@@ -39,13 +39,7 @@ module Darcs.Util.Tree.Monad
 
 import Darcs.Prelude hiding ( readFile, writeFile )
 
-import Darcs.Util.Path
-    ( AnchoredPath
-    , anchoredRoot
-    , displayPath
-    , isPrefix
-    , movedirfilename
-    )
+import Darcs.Util.Path ( AnchoredPath, anchoredRoot, displayPath, movedirfilename )
 import Darcs.Util.Tree
 
 import Data.List( sortBy )
@@ -146,6 +140,16 @@ renameChanged from to = modify $ \st -> st {changed = rename' $ changed st}
   where
     rename' = M.mapKeys (movedirfilename from to)
 
+-- | Replace an item with a new version without modifying the content of the
+-- tree. This does not do any change tracking. Ought to be only used from a
+-- 'sync' implementation for a particular storage format. The presumed use-case
+-- is that an existing in-memory Blob is replaced with a one referring to an
+-- on-disk file.
+replaceItem :: Monad m
+            => AnchoredPath -> TreeItem m -> TreeMonad m ()
+replaceItem path item = do
+  modify $ \st -> st { tree = modifyTree (tree st) path (Just item) }
+
 -- | Flush a single item to disk. This is the only procedure that (directly)
 -- uses the Reader part of the environment (the procedure of type @'DumpItem' m@).
 flushItem :: forall m . Monad m => AnchoredPath -> TreeMonad m ()
@@ -154,10 +158,7 @@ flushItem path = do
   dumpItem <- ask
   case find current path of
     Nothing -> return () -- vanished, do nothing
-    Just item -> do
-      let replaceItem item' =
-            modify $ \st -> st { tree = modifyTree current path (Just item') }
-      lift (dumpItem path item) >>= replaceItem
+    Just item -> lift (dumpItem path item) >>= replaceItem path
 
 -- | If buffers are becoming large, sync, otherwise do nothing.
 flushSome :: Monad m => TreeMonad m ()
@@ -268,9 +269,6 @@ rename from to = do
   unless (isNothing found_to) $
     throwM $
       mkIOError AlreadyExists "rename" Nothing (Just (displayPath to))
-  when (isPrefix from to) $
-    throwM $
-      mkIOError InvalidArgument "rename" Nothing (Just (displayPath to))
   modifyItem from Nothing
   modifyItem to item
   renameChanged from to

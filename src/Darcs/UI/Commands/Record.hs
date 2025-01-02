@@ -49,7 +49,7 @@ import Darcs.Repository
     , readPristine
     , readPatches
     , tentativelyAddPatch
-    , tentativelyRemoveFromPending
+    , tentativelyRemoveFromPW
     , withRepoLock
     )
 import Darcs.Repository.Flags ( UpdatePending(..) )
@@ -306,7 +306,7 @@ doActualRecord :: (RepoPatch p, ApplyState p ~ Tree)
                -> [PatchInfo] -> FL (PrimOf p) wR wX
                -> (FL (PrimOf p) :> FL (PrimOf p)) wR wU -> IO ()
 doActualRecord _repository cfg name date my_author my_log logf deps chs
-      (pending :> _) = do
+      (pending :> working) = do
     debugMessage "Writing the patch file..."
     myinfo <- patchinfo date name my_author my_log
     let mypatch = infopatch myinfo $ progressFL "Writing changes" chs
@@ -317,7 +317,7 @@ doActualRecord _repository cfg name date my_author my_log logf deps chs
     testTentativeAndMaybeExit tp cfg
       ("you have a bad patch: '" ++ name ++ "'")
       "record it" (Just failuremessage)
-    tentativelyRemoveFromPending _repository chs pending
+    tentativelyRemoveFromPW _repository chs pending working
     _repository <-
       finalizeRepositoryChanges _repository (O.dryRun ? cfg)
       `clarifyErrors` failuremessage

@@ -200,7 +200,7 @@ markconflictsCmd fps opts args = do
     let post_pending_affected_paths = forward_renames <$> affected_paths
     putInfo opts $ "Marking conflicts in:" <+> showPathSet post_pending_affected_paths <> "."
 
-    debugDocLn $ "::: res = " $$ vsep (mapFL showPatch res)
+    debugDocLn $ "::: res = " $$ vsep (mapFL displayPatch res)
     when (O.yes (dryRun ? opts)) $ do
         putInfo opts $ "Conflicts will not be marked: this is a dry run."
         exitSuccess

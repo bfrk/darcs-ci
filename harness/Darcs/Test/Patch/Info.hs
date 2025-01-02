@@ -24,11 +24,9 @@ module Darcs.Test.Patch.Info ( testSuite ) where
 import Prelude hiding ( pi )
 
 import Control.Applicative ( (<|>) )
-import qualified Data.ByteString as B
-import qualified Data.ByteString.Char8 as BC
-import qualified Data.ByteString.Short as BS
+import qualified Data.ByteString as B ( ByteString, pack )
+import qualified Data.ByteString.Char8 as BC ( pack, unpack )
 import Data.List ( sort , isPrefixOf, partition )
-import Data.String ( fromString )
 import Data.Maybe ( isNothing )
 import Data.Text as T ( find, any )
 import Data.Text.Encoding ( decodeUtf8With )
@@ -38,23 +36,24 @@ import Numeric ( showHex )
 import Test.QuickCheck ( Arbitrary(arbitrary), oneof, listOf, choose, shrink
                        , Gen, suchThat, scale )
 import Test.QuickCheck.Gen ( chooseAny )
-import Test.Tasty.QuickCheck ( testProperty )
-import Test.Tasty (TestTree, testGroup)
+import Test.Framework.Providers.QuickCheck2 ( testProperty )
+import Test.Framework (Test, testGroup)
 -- import Text.Show.Pretty ( ppShow )
 
 import Darcs.Patch.Info
-    ( PatchInfo(..), rawPatchInfo, formatPatchInfo, readPatchInfo
+    ( PatchInfo(..), rawPatchInfo, showPatchInfo, readPatchInfo
     , piLog, piAuthor, piName, validLog, validAuthor
     , validLogPS, validAuthorPS, piDateString
     )
 import Darcs.Test.TestOnly.Instance ()
 import Darcs.Util.Parser ( parse )
+import Darcs.Patch.Show ( ShowPatchFor(..) )
 import Darcs.Util.ByteString
-    ( decodeLocale, packStringToUTF8, unpackPSFromUTF8 )
-import Darcs.Util.Format ( toStrictByteString )
+    ( decodeLocale, packStringToUTF8, unpackPSFromUTF8, linesPS )
+import Darcs.Util.Printer ( renderPS )
 import Darcs.Util.IsoDate (showIsoDateTime, theBeginning)
 
-testSuite :: TestTree
+testSuite :: Test
 testSuite = testGroup "Darcs.Patch.Info"
   [ metadataDecodingTest
   , metadataEncodingTest
@@ -129,20 +128,21 @@ arbitraryUTF8PatchInfo = do
 --   inverted" setting.
 arbitraryUnencodedPatchInfo :: Gen PatchInfo
 arbitraryUnencodedPatchInfo = do
-    let d = BS.toShort $ BC.pack (showIsoDateTime theBeginning)
+    let d = BC.pack (showIsoDateTime theBeginning)
     n <- arbitraryByteString `suchThat` validLogPS
     a <- arbitraryByteString `suchThat` validAuthorPS
-    l <- BS.split 10 `fmap` scale (* 2) arbitraryByteString
+    l <- linesPS `fmap` scale (* 2) arbitraryByteString
     junk <- generateJunk
     i <- arbitrary
-    return (PatchInfo d n a (l ++ [fromString junk]) i)
-  where
-    arbitraryByteString = BS.pack <$> listOf arbitrary
+    return (PatchInfo d n a (l ++ [BC.pack junk]) i)
+
+arbitraryByteString :: Gen B.ByteString
+arbitraryByteString = B.pack <$> listOf arbitrary
 
 -- | Test that anything produced by the 'patchinfo' function is valid UTF-8
-metadataEncodingTest :: TestTree
+metadataEncodingTest :: Test
 metadataEncodingTest =
-    testProperty "patch metadata encoding" propMetadataEncoding
+    testProperty "Testing patch metadata encoding" propMetadataEncoding
 
 propMetadataEncoding :: UTF8PatchInfo -> Bool
 propMetadataEncoding (UTF8PatchInfo patchInfo) =
@@ -150,13 +150,12 @@ propMetadataEncoding (UTF8PatchInfo patchInfo) =
     && encodingOK (_piName patchInfo)
     && all encodingOK (_piLog patchInfo)
   where
-    encodingOK =
-      isNothing . T.find (=='\xfffd') . decodeUtf8With lenientDecode . BS.fromShort
+    encodingOK = isNothing . T.find (=='\xfffd') . decodeUtf8With lenientDecode
 
 -- | Test that metadata in patches are decoded as UTF-8 or locale depending on
 -- whether they're valid UTF-8.
-metadataDecodingTest :: TestTree
-metadataDecodingTest = testProperty "patch metadata decoding" propMetadataDecoding
+metadataDecodingTest :: Test
+metadataDecodingTest = testProperty "Testing patch metadata decoding" propMetadataDecoding
 
 propMetadataDecoding :: UTF8OrNotPatchInfo -> Bool
 propMetadataDecoding (UTF8OrNotPatchInfo patchInfo) =
@@ -165,14 +164,13 @@ propMetadataDecoding (UTF8OrNotPatchInfo patchInfo) =
     && map utf8OrLocale (_piLog patchInfo) `superset` piLog patchInfo
   where
     utf8OrLocale bs =
-      if isValidUTF8 bs
-        then unpackPSFromUTF8 (BS.fromShort bs)
-        else decodeLocale (BS.fromShort bs)
-    isValidUTF8 =
-      not . T.any (=='\xfffd') . decodeUtf8With lenientDecode . BS.fromShort
+      if isValidUTF8 bs then unpackPSFromUTF8 bs else decodeLocale bs
 
-packUnpackTest :: TestTree
-packUnpackTest = testProperty "UTF-8 packing and unpacking" $
+isValidUTF8 :: B.ByteString -> Bool
+isValidUTF8 = not . T.any (=='\xfffd') . decodeUtf8With lenientDecode
+
+packUnpackTest :: Test
+packUnpackTest = testProperty "Testing UTF-8 packing and unpacking" $
     \uString -> asString uString == (unpackPSFromUTF8 . packStringToUTF8) (asString uString)
 
 superset :: Ord a => [a] -> [a] -> Bool
@@ -190,14 +188,14 @@ withUTF8OrNotPatchInfo :: (PatchInfo -> a) -> UTF8OrNotPatchInfo -> a
 withUTF8OrNotPatchInfo f mpi = case mpi of
                                  UTF8OrNotPatchInfo pinf -> f pinf
 
-parseUnparseTest :: TestTree
-parseUnparseTest = testProperty "parse . format == id" propParseUnparse
+parseUnparseTest :: Test
+parseUnparseTest = testProperty "parse . show == id" propParseUnparse
 
 parsePatchInfo :: B.ByteString -> Either String PatchInfo
 parsePatchInfo = fmap fst . parse readPatchInfo
 
 unparsePatchInfo :: PatchInfo -> B.ByteString
-unparsePatchInfo = toStrictByteString . formatPatchInfo
+unparsePatchInfo = renderPS . showPatchInfo ForStorage
 
 -- Once generated, we assume that shrinking will preserve UTF8ness etc,
 -- so we reuse this function for all the various Arbitrary instances
@@ -217,8 +215,7 @@ shrinkPatchInfo pi =
     -- We need to be careful to preserve the junk lines to prevent creating
     -- two identical PatchInfos from different ones, which would break darcs' invariants
     -- and cause a genuine failure to be shrunk into a spurious one.
-    (junkLines, logLines) =
-      partition (isPrefixOf "Ignore-this:") . map (BC.unpack . BS.fromShort) . _piLog $ pi
+    (junkLines, logLines) = partition (isPrefixOf "Ignore-this:") . map BC.unpack . _piLog $ pi
 
 instance Arbitrary PatchInfo where
     arbitrary = arbitraryUnencodedPatchInfo

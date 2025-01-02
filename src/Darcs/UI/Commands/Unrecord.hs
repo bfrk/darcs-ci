@@ -92,10 +92,9 @@ import Darcs.UI.PrintPatch ( printFriendly )
 import Darcs.UI.SelectChanges ( WhichChanges(..), runSelection, selectionConfig )
 import qualified Darcs.UI.SelectChanges as S ( PatchSelectionOptions(..) )
 import Darcs.Util.English ( presentParticiple )
-import Darcs.Util.Format ( putFormat )
-import Darcs.Util.Lock ( writeFormatBinFile )
+import Darcs.Util.Lock ( writeDocBinFile )
 import Darcs.Util.Path ( AbsolutePath, toFilePath, useAbsoluteOrStd )
-import Darcs.Util.Printer ( Doc, formatWords, text, ($+$), (<+>) )
+import Darcs.Util.Printer ( Doc, formatWords, putDoc, sentence, text, ($+$), (<+>) )
 import Darcs.Util.Progress ( debugMessage )
 import Darcs.Util.Prompt ( promptYorn )
 import Darcs.Util.SignalHandler ( catchInterrupt, withSignalsBlocked )
@@ -288,7 +287,7 @@ savetoBundle
 savetoBundle _ NilFL _ = return ()
 savetoBundle opts removed@(x :>: _) orig = do
   let kept = fromJust $ removeFromPatchSet removed orig
-      genFullBundle = return $ makeBundle kept (mapFL_FL hopefully removed)
+      genFullBundle = makeBundle Nothing kept (mapFL_FL hopefully removed)
   bundle <-
     if not (minimize ? opts)
       then genFullBundle
@@ -297,15 +296,15 @@ savetoBundle opts removed@(x :>: _) orig = do
           "Minimizing context, to generate bundle with full context hit ctrl-C..."
         (case minContext kept removed of
           Sealed (kept' :> removed') ->
-            return $ makeBundle kept' (mapFL_FL hopefully removed'))
+            makeBundle Nothing kept' (mapFL_FL hopefully removed'))
           `catchInterrupt` genFullBundle
   let filename = getUniqueDPatchName (patchDesc x)
   outname <- fromJust (getOutput opts filename)
   exists <- useAbsoluteOrStd (doesPathExist . toFilePath) (return False) outname
   when exists $
     fail $ "Directory or file named '" ++ (show outname) ++ "' already exists."
-  useAbsoluteOrStd writeFormatBinFile putFormat outname bundle
-  putInfo opts $ (<> ".") $
+  useAbsoluteOrStd writeDocBinFile putDoc outname bundle
+  putInfo opts $ sentence $
     useAbsoluteOrStd
       (("Saved patch bundle" <+>) . text . toFilePath)
       (text "stdout")

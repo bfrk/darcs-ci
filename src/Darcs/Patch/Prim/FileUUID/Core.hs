@@ -24,6 +24,7 @@
 module Darcs.Patch.Prim.FileUUID.Core
     ( Prim(..)
     , Hunk(..)
+    , HunkMove(..)
     -- re-exports
     , Object(..)
     , UUID(..)
@@ -47,7 +48,7 @@ import Darcs.Patch.Prim.FileUUID.ObjectMap
 -- Hunk
 
 data Hunk wX wY = H !Int !FileContent !FileContent
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Show)
 
 type role Hunk nominal nominal
 
@@ -62,16 +63,31 @@ instance Eq2 Hunk where
   unsafeCompare p q = unsafeCoerceP p == q
 
 -- -----------------------------------------------------------------------------
+-- HunkMove
+
+data HunkMove wX wY = HM !UUID !Int !UUID !Int !FileContent
+  deriving (Eq, Show)
+
+type role HunkMove nominal nominal
+
+invertHunkMove :: HunkMove wX wY -> HunkMove wY wX
+invertHunkMove (HM sid soff tid toff content) = HM tid toff sid soff content
+
+instance Eq2 HunkMove where
+  unsafeCompare (HM sid1 soff1 tid1 toff1 c1) (HM sid2 soff2 tid2 toff2 c2) =
+    sid1 == sid2 && soff1 == soff2 && tid1 == tid2 && toff1 == toff2 && c1 == c2
+
+-- -----------------------------------------------------------------------------
 -- Prim
 
 data Prim wX wY where
   Hunk :: !UUID -> !(Hunk wX wY) -> Prim wX wY
+  HunkMove :: !(HunkMove wX wY) -> Prim wX wY
   Manifest :: !UUID -> !Location -> Prim wX wY
   Demanifest :: !UUID -> !Location -> Prim wX wY
   Identity :: Prim wX wX
 
 deriving instance Eq (Prim wX wY)
-deriving instance Ord (Prim wX wY)
 deriving instance Show (Prim wX wY)
 
 instance Show1 (Prim wX)
@@ -89,14 +105,14 @@ instance PrimConstruct Prim where
   hunk _ _ _ _ = error "PrimConstruct hunk"
   tokreplace _ _ _ _ = error "PrimConstruct tokreplace"
   binary _ _ _ = error "PrimConstruct binary"
+  primFromHunk _ = error "PrimConstruct primFromHunk"
 
 instance IsHunk Prim where
-  type ExtraData Prim = ()
   isHunk _ = Nothing
-  fromHunk _ = error "PrimConstruct fromHunk"
 
 instance Invert Prim where
   invert (Hunk x h) = Hunk x $ invertHunk h
+  invert (HunkMove hm) = HunkMove $ invertHunkMove hm
   invert (Manifest x y) = Demanifest x y
   invert (Demanifest x y) = Manifest x y
   invert Identity = Identity

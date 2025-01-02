@@ -6,8 +6,8 @@ import Darcs.Prelude
 import Control.Monad ( unless )
 import Data.Maybe
 
-import Test.Tasty ( TestTree )
-import Test.Tasty.HUnit ( testCase )
+import Test.Framework ( Test )
+import Test.Framework.Providers.HUnit ( testCase )
 import Test.HUnit ( assertFailure )
 
 import Darcs.Patch
@@ -23,7 +23,7 @@ import Darcs.Test.TestOnly.Instance ()
 
 import Darcs.Util.Path ( unsafeFloatPath )
 
-testSuite :: forall p . (RepoPatch p, ArbitraryPrim (PrimOf p)) => [TestTree]
+testSuite :: forall p . (RepoPatch p, ArbitraryPrim (PrimOf p)) => [Test]
 testSuite =
     if isJust (hasPrimConstruct @(PrimOf p))
         then
@@ -35,7 +35,7 @@ testSuite =
 
 data WX
 
-duplicateConflictedEffect :: forall p . RepoPatch p => TestTree
+duplicateConflictedEffect :: forall p . RepoPatch p => Test
 duplicateConflictedEffect =
     testCase "duplicate in rebase fixup has a conflicted effect" $
         unless (all (/= Okay) cStatuses) $

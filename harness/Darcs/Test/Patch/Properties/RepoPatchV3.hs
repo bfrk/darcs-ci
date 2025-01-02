@@ -15,7 +15,7 @@ import Darcs.Patch.Ident
 import Darcs.Patch.Invert
 import Darcs.Patch.Permutations ( headPermutationsRL, partitionRL' )
 import Darcs.Patch.Prim ( PrimPatch )
-import Darcs.Patch.Show ( showPatch )
+import Darcs.Patch.Show ( displayPatch, ShowPatchFor(..) )
 import Darcs.Patch.Witnesses.Ordered
 import Darcs.Patch.V3 ( RepoPatchV3 )
 import Darcs.Patch.V3.Contexted
@@ -70,9 +70,9 @@ prop_onlyFirstConflictorReverts ps p
   | S.null doubly_reverted = succeeded
   | otherwise = failed
       $ text "undone patches are already undone:"
-      $$ vcat (map showId (S.toList doubly_reverted))
+      $$ vcat (map (showId ForStorage) (S.toList doubly_reverted))
       $$ text "in the sequence:"
-      $$ vcat (mapRL showPatch (ps :<: p))
+      $$ vcat (mapRL displayPatch (ps :<: p))
   where
     doubly_reverted = S.intersection this_rids preceding_rids
     this_rids = revertedIds p
@@ -94,11 +94,11 @@ prop_conflictsCommutePastConflictor ps p
   | not (xids `S.isSubsetOf` rids)
   = failed
       $ text "conflicting patches not found in repo:"
-      $$ vcat (mapRL showPatch (ps :<: p))
-  | not (revertedIds p `S.isSubsetOf` xids)
+      $$ vcat (mapRL displayPatch (ps :<: p))
+  | not (revertedIds p `S.isSubsetOf` rids)
   = failed
-      $ text "undone patches not a subset of conflicting patches:"
-      $$ vcat (mapRL showPatch (ps :<: p))
+      $ text "undone patches not found in repo:"
+      $$ vcat (mapRL displayPatch (ps :<: p))
   | otherwise =
       case partitionRL' ((`S.member` xids) . ident) ps of
         _ :> dragged :> xs ->
@@ -109,11 +109,11 @@ prop_conflictsCommutePastConflictor ps p
             Just _ ->
               failed
                 $ text "commuting conflicts past conflictor does not result in a Prim:"
-                $$ showPatch (ps :<: p)
+                $$ displayPatch (ps :<: p)
             Nothing ->
               failed
                 $ text "cannot commute conflicts past conflictor:"
-                $$ showPatch (ps :<: p)
+                $$ displayPatch (ps :<: p)
   where
     xids = conflictIds p
     rids = idsRL ps
@@ -137,9 +137,9 @@ prop_containedCtxEq =
       | otherwise =
           failed
           $ text "prop_ctxEq: cp="
-          $$ showCtx cp
+          $$ showCtx ForStorage cp
           $$ text "cq="
-          $$ showCtx cq
+          $$ showCtx ForStorage cq
     allSucceeded = foldr (<>) succeeded
 
 idsFL :: Ident p => FL p wX wY -> S.Set (PatchId p)

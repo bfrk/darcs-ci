@@ -6,7 +6,6 @@ module Darcs.Test.Util.TestResult
   , maybeFailed
   , assertNotFailed
   , isFailed
-  , classify
   ) where
 
 import Darcs.Prelude
@@ -24,17 +23,17 @@ import qualified Test.HUnit as H
 -- failed, rejecting if both results are rejected, and otherwise
 -- succeeding.
 data TestResult
-  = TestSucceeded [(Bool,String)]
+  = TestSucceeded
   | TestFailed Doc
   | TestRejected
 
 instance Show TestResult where
-  show (TestSucceeded _) = "TestSucceeded"
+  show TestSucceeded = "TestSucceeded"
   show (TestFailed reason) = "TestFailed: " ++ unsafeRenderStringColored reason
   show TestRejected = "TestRejected"
 
 succeeded :: TestResult
-succeeded = TestSucceeded []
+succeeded = TestSucceeded
 
 failed :: Doc -> TestResult
 failed = TestFailed
@@ -42,17 +41,13 @@ failed = TestFailed
 rejected :: TestResult
 rejected = TestRejected
 
-classify :: Bool -> String -> TestResult -> TestResult
-classify cond label (TestSucceeded cs) = TestSucceeded ((cond,label):cs)
-classify _ _ tr = tr
-
 instance Semigroup TestResult where
   -- Succeed even if one of the arguments is rejected.
   t@(TestFailed _) <> _s = t
   _t <> s@(TestFailed _) = s
   TestRejected <> s = s
   t <> TestRejected = t
-  TestSucceeded cs1 <> TestSucceeded cs2 = TestSucceeded (cs1 <> cs2)
+  TestSucceeded <> TestSucceeded = TestSucceeded
 
 instance Monoid TestResult where
   mempty = TestRejected
@@ -69,16 +64,14 @@ isFailed _other = False
 
 -- | Convert 'TestResult' to HUnit testable assertion
 assertNotFailed :: TestResult -> H.Assertion
-assertNotFailed (TestSucceeded _) = return ()
+assertNotFailed TestSucceeded = return ()
 assertNotFailed TestRejected = return ()
 assertNotFailed (TestFailed msg) = H.assertString (unsafeRenderStringColored msg)
 
 -- | 'Testable' instance is defined by converting 'TestResult' to
 -- 'QuickCheck.Property.Result'
 instance Q.Testable TestResult where
-  property (TestSucceeded []) = Q.property Q.succeeded
-  property (TestSucceeded (c:cs)) =
-    uncurry Q.classify c (Q.property (TestSucceeded cs))
+  property TestSucceeded = Q.property Q.succeeded
   property (TestFailed errorMsg) =
     Q.property (Q.failed {Q.reason = unsafeRenderStringColored errorMsg})
   property TestRejected = Q.property Q.rejected

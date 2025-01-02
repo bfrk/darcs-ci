@@ -39,6 +39,9 @@ instance Shrinkable prim => Shrinkable (PrimWithName n prim) where
   shrinkAtEnd (PrimWithName n p) = mapSeal (PrimWithName n) <$> shrinkAtEnd p
   shrinkAtStart (PrimWithName n p) = mapFlipped (PrimWithName n) <$> shrinkAtStart p
 
+instance MightBeEmptyHunk p => MightBeEmptyHunk (NamedPrim p) where
+  isEmptyHunk = isEmptyHunk . wnPatch
+
 instance MightHaveDuplicate (NamedPrim p)
 
 instance NullPatch p => NullPatch (NamedPrim p) where

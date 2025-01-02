@@ -7,7 +7,6 @@ module Darcs.Util.ValidHash
     , encodeValidHash
     , decodeValidHash
     , parseValidHash
-    , formatValidHash
     , getHash
     , getSize
     , fromHash
@@ -17,24 +16,13 @@ module Darcs.Util.ValidHash
     ) where
 
 import qualified Data.ByteString as B
-import qualified Data.ByteString.Lazy as BL
 import Data.Maybe ( isJust )
-import Data.Int ( Int64 )
 import Text.Read ( readMaybe )
 
 import Prelude ( (^) )
 import Darcs.Prelude
 
-import Darcs.Util.Format ( Format, ascii )
-import Darcs.Util.Hash
-    ( Hash
-    , decodeBase16
-    , decodeHash
-    , encodeHash
-    , formatHash
-    , sha256
-    , sha256strict
-    )
+import Darcs.Util.Hash ( Hash, decodeBase16, decodeHash, encodeHash, sha256strict )
 import qualified Darcs.Util.Parser as P
 
 -- | Semantically, this is the type of hashed objects. Git has a type tag
@@ -51,35 +39,32 @@ class (Eq h, IsSizeHash h) => ValidHash h where
   -- | The 'HashedDir' belonging to this type of hash
   dirofValidHash :: h -> HashedDir
   -- | Compute hash from file content.
-  calcValidHash :: BL.ByteString -> h
+  calcValidHash :: B.ByteString -> h
   -- default definitions
-  calcValidHash content = fromSizeAndHash (BL.length content) (sha256 content)
+  calcValidHash content = fromSizeAndHash (B.length content) (sha256strict content)
 
 newtype InventoryHash = InventoryHash SizeHash
-  deriving (Eq, Ord, Show, IsSizeHash)
+  deriving (Eq, Show, IsSizeHash)
 
 instance ValidHash InventoryHash where
   dirofValidHash _ = HashedInventoriesDir
 
 newtype PatchHash = PatchHash SizeHash
-  deriving (Eq, Ord, Show, IsSizeHash)
+  deriving (Eq, Show, IsSizeHash)
 
 instance ValidHash PatchHash where
   dirofValidHash _ = HashedPatchesDir
 
 newtype PristineHash = PristineHash SizeHash
-  deriving (Eq, Ord, Show, IsSizeHash)
+  deriving (Eq, Show, IsSizeHash)
 
 instance ValidHash PristineHash where
   dirofValidHash _ = HashedPristineDir
   -- note: not the default definition here
-  calcValidHash = fromHash . sha256
+  calcValidHash = fromHash . sha256strict
 
 encodeValidHash :: ValidHash h => h -> String
 encodeValidHash = encodeSizeHash . getSizeHash
-
-formatValidHash :: ValidHash h => h -> Format
-formatValidHash = formatSizeHash . getSizeHash
 
 decodeValidHash :: ValidHash h => String -> Maybe h
 decodeValidHash = fmap fromSizeHash . decodeSizeHash
@@ -105,14 +90,12 @@ fromHash h = fromSizeHash (NoSize h)
 numSizeDigits :: Int
 numSizeDigits = 10
 
-sizeLimit :: Int64
+sizeLimit :: Int
 sizeLimit = 10 ^ numSizeDigits
 
-fromSizeAndHash :: ValidHash h => Int64 -> Hash -> h
+fromSizeAndHash :: ValidHash h => Int -> Hash -> h
 fromSizeAndHash size hash =
-  fromSizeHash $ if size < sizeLimit
-    then WithSize (fromIntegral size) hash
-    else NoSize hash
+  fromSizeHash $ if size < sizeLimit then WithSize size hash else NoSize hash
 
 -- | Check that the given 'String' is an encoding of some 'ValidHash'.
 okayHash :: String -> Bool
@@ -141,7 +124,7 @@ checkHash vh content =
 data SizeHash
   = WithSize !Int !Hash
   | NoSize !Hash
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Show)
 
 -- | Methods to wrap and unwrap 'ValidHash'es
 class IsSizeHash h where
@@ -169,12 +152,6 @@ encodeSizeHash (WithSize size hash) =
     padZero (show size) ++ '-' : encodeHash hash
   where padZero s = replicate (numSizeDigits - length s) '0' ++ s
 
-formatSizeHash :: SizeHash -> Format
-formatSizeHash (NoSize hash) = formatHash hash
-formatSizeHash (WithSize size hash) =
-    ascii (padZero (show size)) <> ascii "-" <> formatHash hash
-  where padZero s = replicate (numSizeDigits - length s) '0' ++ s
-
 decodeSizeHash :: String -> Maybe SizeHash
 decodeSizeHash s =
   case splitAt numSizeDigits s of
@@ -185,7 +162,7 @@ decodeSizeHash s =
     decodeSize :: String -> Maybe Int
     decodeSize ss =
       case readMaybe ss of
-        Just size | size >= 0 && size < sizeLimit -> Just (fromIntegral size)
+        Just size | size >= 0 && size < sizeLimit -> Just size
         _ -> Nothing
 
 parseSizeHash :: P.Parser SizeHash

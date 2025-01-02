@@ -5,6 +5,8 @@ module Darcs.Patch.Prim
     , PrimDetails(..)
     , PrimMangleUnravelled(..)
     , PrimPatch
+    , PrimRead(..)
+    , PrimShow(..)
     , PrimSift(..)
     , Mangled
     , Unravelled
@@ -19,6 +21,8 @@ import Darcs.Patch.Prim.Class
     , PrimDetails(..)
     , PrimMangleUnravelled(..)
     , PrimPatch
+    , PrimRead(..)
+    , PrimShow(..)
     , PrimSift(..)
     , Mangled
     , Unravelled

@@ -19,15 +19,16 @@ import Darcs.Util.Graph
   , prop_components
   )
 
-import Test.Tasty
-    ( TestTree
-    , localOption
+import Test.Framework
+    ( Test
+    , plusTestOptions
     , testGroup
+    , topt_maximum_generated_tests
     )
-import Test.Tasty.LeanCheck ( LeanCheckTests(..), testProperty )
+import Test.Framework.Providers.LeanCheck ( testProperty )
 import Test.LeanCheck
 
-testSuite :: TestTree
+testSuite :: Test
 testSuite =
   {- Unfortunately, test-framework is a bit limited in that it doesn't allow
   to scale the number of tests, just to set them to a fixed value. We opt to
@@ -36,7 +37,7 @@ testSuite =
   account for graphs with more than one component; however, the overall
   error is not big because the majority of graphs have only one component,
   e.g. for graphs of size 6 the average number of components is 1.22. -}
-  localOption (LeanCheckTests 0x8000) $
+  plusTestOptions (mempty { topt_maximum_generated_tests = Just 0x8000 }) $
   testGroup "Darcs.Util.Graph"
   [ testProperty "ltmis is equivalent to bkmis" prop_ltmis_eq_bkmis
   , testProperty

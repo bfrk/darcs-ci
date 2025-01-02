@@ -45,7 +45,7 @@ import Darcs.UI.PatchHeader
 import Darcs.Repository
     ( Repository, RepoJob(..), AccessType(..), withRepoLock, withRepository
     , tentativelyAddPatches, finalizeRepositoryChanges
-    , tentativelyRemovePatches, readPatches, readUnrecorded
+    , tentativelyRemovePatches, readPatches
     , setTentativePending, unrecordedChanges, applyToWorking
     )
 import Darcs.Repository.Flags
@@ -71,7 +71,7 @@ import Darcs.Repository.Transaction ( upgradeOldStyleRebase )
 import Darcs.Patch ( PrimOf, invert, effect, commute, RepoPatch )
 import Darcs.Patch.Apply ( ApplyState )
 import Darcs.Patch.CommuteFn ( commuterFLId, commuterIdFL )
-import Darcs.Patch.Info ( showPatchInfo, piName )
+import Darcs.Patch.Info ( displayPatchInfo, piName )
 import Darcs.Patch.Match ( secondMatch, splitSecondFL )
 import Darcs.Patch.Merge ( cleanMerge )
 import Darcs.Patch.Named ( fmapFL_Named, patchcontents, patch2patchinfo )
@@ -83,13 +83,11 @@ import Darcs.Patch.Rebase.Change
     , partitionUnconflicted
     , WithDroppedDeps(..), WDDNamed, commuterIdWDD
     , simplifyPush, simplifyPushes
-    , forceCommuteRebaseChange
     )
 import Darcs.Patch.Rebase.Fixup
     ( RebaseFixup(..)
     , commuteNamedFixup
     , flToNamesPrims
-    , primNamedToFixups
     )
 import Darcs.Patch.Rebase.Name ( RebaseName(..), commuteNameNamed )
 import Darcs.Patch.Rebase.Suspended ( Suspended(..), addToEditsToSuspended )
@@ -131,7 +129,7 @@ import Darcs.Patch.Witnesses.Ordered
     , (+>>+)
     )
 import Darcs.Patch.Witnesses.Sealed
-    ( Sealed(..), seal, unseal, mapSeal
+    ( Sealed(..), seal, unseal
     , Sealed2(..)
     )
 import Darcs.Patch.Witnesses.Unsafe ( unsafeCoerceP )
@@ -154,7 +152,7 @@ import Darcs.Util.SignalHandler ( withSignalsBlocked )
 import Darcs.Util.Tree ( Tree )
 
 import Control.Exception ( throwIO, try )
-import Control.Monad ( mplus, unless, when, void )
+import Control.Monad ( unless, when, void )
 import Control.Monad.Trans ( liftIO )
 import System.Exit ( ExitCode(ExitSuccess), exitSuccess )
 
@@ -440,8 +438,6 @@ unsuspendCmd cmd reifyFixups _ opts _args =
     _repository <-
       tentativelyAddPatches _repository NoUpdatePending unsuspended_ps
     let effect_unsuspended = concatFL (mapFL_FL effect unsuspended_ps)
-    -- FIXME issue2272: ask the user if we should revert the
-    -- conflicting changes for them, as we do for suspend and obliterate
     case cleanMerge (effect_unsuspended :\/: unrec) of
       Nothing ->
         fail $ "Can't "++cmd++" because there are conflicting unrecorded changes."
@@ -478,9 +474,9 @@ unsuspendCmd cmd reifyFixups _ opts _args =
                       putDocLnWith fancyPrinters $
                         redText ("Dropping the following explicit " ++
                           englishNum (length deps) (Noun "dependency") ":") $$
-                        showPatchInfo (patch2patchinfo (wddPatch p)) $$
+                        displayPatchInfo (patch2patchinfo (wddPatch p)) $$
                         indent 1 (redText "depended on:") $$
-                        indent 2 (vcat (map showPatchInfo deps))
+                        indent 2 (vcat (map displayPatchInfo deps))
 
               -- TODO should catch logfiles (fst value from updatePatchHeader)
               -- and clean them up as in AmendRecord
@@ -529,7 +525,7 @@ inject = DarcsCommand
     , commandOptions = injectOpts
     }
   where
-    injectBasicOpts = O.keepDate ^ O.author ^ O.diffAlgorithm ^ O.withSummary
+    injectBasicOpts = O.keepDate ^ O.author ^ O.diffAlgorithm
     injectOpts = injectBasicOpts `withStdOpts` O.umask
     injectDescription =
       "Merge a change from the fixups of a patch into the patch itself."
@@ -604,7 +600,7 @@ obliterate = DarcsCommand
     , commandOptions = obliterateOpts
     }
   where
-    obliterateBasicOpts = O.diffAlgorithm ^ O.withSummary
+    obliterateBasicOpts = O.diffAlgorithm
     obliterateOpts = obliterateBasicOpts `withStdOpts` O.umask
     obliterateDescription =
       "Obliterate a patch that is currently suspended."
@@ -646,31 +642,12 @@ obliterateOne
   -> RebaseChange prim wX wY
   -> Sealed (FL (RebaseChange prim) wY)
   -> Sealed (FL (RebaseChange prim) wX)
-obliterateOne da rc = unseal (simplifyPushes da (rcToFixups rc))
-
-rcToFixups :: RebaseChange prim wX wY -> FL (RebaseFixup prim) wX wY
-rcToFixups (RC fs e) = fs +>+ primNamedToFixups e
-
-forceCommute
-  :: PrimPatch prim
-  => O.DiffAlgorithm
-  -> RebaseChange prim wX wY
-  -> RebaseChange prim wY wZ
-  -> Sealed (FL (RebaseChange prim) wZ)
-  -> Maybe (Sealed (FL (RebaseChange prim) wX))
-forceCommute da rc1 rc2 (Sealed rcs) =
-  do
-    rc2' :> rc1' <- commute (rc1 :> rc2)
-    return $ Sealed (rc2' :>: rc1' :>: rcs)
-  `mplus`
-  do
-    RC fs2' e2' :> RC fs1' e1' <- forceCommuteRebaseChange (rc1 :> rc2)
-    return $
-      unseal (simplifyPushes da fs2') $
-      mapSeal (RC NilFL e2' :>:) $
-      unseal (simplifyPushes da fs1') $
-      mapSeal (RC NilFL e1' :>:) $
-      Sealed rcs
+obliterateOne da (RC fs e) =
+  unseal (simplifyPushes da fs) .
+  -- since Named doesn't have any witness context for the
+  -- patch names, the AddName here will be inferred to be wX wX
+  unseal (simplifyPush da (NameFixup (AddName (patch2patchinfo e)))) .
+  unseal (simplifyPushes da (mapFL_FL PrimFixup (patchcontents e)))
 
 edit :: DarcsCommand
 edit = DarcsCommand
@@ -728,13 +705,6 @@ interactiveEdit opts redos s@EditState{..} undos =
   -- invariants:
   --  * the "todo" patches are empty only if the "done" patches are; formally:
   --      case patches of Sealed (done :> todo) -> nullFL todo ==> nullRL done
-  -- TODO
-  --  * Commuting of patches: move current patch forward/backward in the
-  --    sequence; if they don't commute, do we want to force-commte them?
-  --    Or is that an extra command?
-  --  * Injecting fixups is simple but often insufficient i.e. not what we want.
-  --    Instead we could offer "in-place" conflict resolution: present the
-  --    conflict as markup in a text editor (like with hunk editing).
   case patches of
     Sealed (_ :> NilFL) -> prompt
     Sealed (_ :> p :>: _) -> defaultPrintFriendly p >> prompt
@@ -797,9 +767,8 @@ interactiveEdit opts redos s@EditState{..} undos =
               , PromptChoice 'e' True reword "edit name and/or long comment (log)"
               , PromptChoice 's' (index > 0) squash "squash with previous patch"
               , PromptChoice 'i' can_inject inject' "inject fixups"
-              , PromptChoice 'c' (index > 0) comm "(force-)commute with previous patch)"
               -- TODO
-              -- , PromptChoice '???' True ??? "select individual changes for editing"
+              -- , PromptChoice 'c' True ??? "select individual changes for editing"
               ]
             choicesView =
               [ PromptChoice 'v' True view "view this patch in full"
@@ -842,19 +811,6 @@ interactiveEdit opts redos s@EditState{..} undos =
             reword = do
               Sealed todo'' <- rewordOne da p todo'
               edit' "reword" s { patches = Sealed (done :> todo'') }
-            comm = do
-              case done of
-                NilRL -> error "impossible"
-                done' :<: q ->
-                  case forceCommute da q p (Sealed todo') of
-                    Just (Sealed todo'') ->
-                      edit' "commute" s
-                        { patches = Sealed (done' :> todo'')
-                        , index = index - 1
-                        }
-                    Nothing -> do
-                      putStrLn "Failed to commute fixups backward, try inject first."
-                      prompt
             squash =
               case done of
                 NilRL -> error "impossible"
@@ -875,9 +831,6 @@ interactiveEdit opts redos s@EditState{..} undos =
 
             -- viewing
             view = printContent p >> prompt
-            -- FIXME when we quit the pager hitting 'q', this leaks
-            -- as the new command key, quitting the whole command.
-            -- Why does this happen here but not in other commands?
             pager = printContentWithPager p >> prompt
             display = defaultPrintFriendly p >> prompt
             summary = printSummary p >> prompt
@@ -917,7 +870,7 @@ squashOne da (RC fs1 e1) (RC fs2 e2) rest = do
       Sealed rest' -> simplifyPushes da (fs1 +>+ fs2') (RC NilFL e1'' :>: rest')
 
 rewordOne
-  :: PrimPatch prim
+  :: (PrimPatch prim, ApplyState prim ~ Tree)
   => O.DiffAlgorithm
   -> RebaseChange prim wX wY
   -> FL (RebaseChange prim) wY wZ
@@ -1044,28 +997,22 @@ applyPatchesForRebaseCmd cmdName opts _repository (Fork common us' to_be_applied
     -- the new rebase patch containing the suspended patches is now in the repo
     -- and the suspended patches have been removed
 
-    -- We must apply the suspend to working so that tentativelyMergePatches
-    -- and readUnrecorded below see the intermediate working tree.
-    _repository <-
-      withSignalsBlocked $
+    -- We must apply the suspend to working because tentativelyMergePatches
+    -- calls unrecordedChanges. We also have to update the index, since that is
+    -- used to filter the working tree (unless --ignore-times is in effect).
+    updateIndex _repository
+    _repository <- withSignalsBlocked $ do
         applyToWorking _repository (verbosity ? opts) toWorking
 
-    -- For the same reason we have to update the index here, since both
-    -- readUnrecorded and unrecordedChanges filter the working tree using the
-    -- index (unless --ignore-times is in effect).
-    when (O.yes (O.useIndex ? opts)) $ updateIndex _repository
-
-    -- this is the working tree without un-added items (but with pending adds)
-    old_working <- readUnrecorded _repository (O.useIndex ? opts) Nothing
-
-    pw <- tentativelyMergePatches
+    Sealed pw <-
+        tentativelyMergePatches
             _repository cmdName
             (allowConflicts opts)
             (wantGuiPause opts)
             (reorder ? opts) (diffingOpts opts)
             (Fork common (usOk +>+ usKeep) to_be_applied)
 
-    applyPatchesFinish cmdName opts _repository old_working pw (nullFL to_be_applied)
+    applyPatchesFinish cmdName opts _repository pw (nullFL to_be_applied)
 
 applyPatchSelOpts :: S.PatchSelectionOptions
 applyPatchSelOpts = S.PatchSelectionOptions

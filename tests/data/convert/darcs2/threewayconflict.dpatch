@@ -28,13 +28,12 @@ tester**20101016222814
 ] addfile ./wibble
 hunk ./wibble 1
 +wibble
-
 [A
 tester**20101016222814
  Ignore-this: 653be63c1f8a6f4bc1de1e45c0ae9084
 ] hunk ./wibble 2
+ wibble
 +A
-
 [B
 tester**20101016222814
  Ignore-this: 1a8e3f57d2baeca09f2dda003e4df58d
@@ -45,7 +44,6 @@ hunk ./wibble 2
 :
 hunk ./wibble 2
 +B
-
 [C
 tester**20101016222814
  Ignore-this: 9d40b33ef1b73b9a950f39c4e8a75dfe

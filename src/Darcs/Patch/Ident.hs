@@ -27,6 +27,7 @@ import Darcs.Prelude
 
 import Darcs.Patch.Commute ( Commute, commute, commuteFL, commuteRL )
 import Darcs.Patch.Permutations ( partitionFL', partitionRL' )
+import Darcs.Patch.Show ( ShowPatchFor )
 import Darcs.Patch.Witnesses.Eq ( Eq2(..), EqCheck(..), isIsEq )
 import Darcs.Patch.Witnesses.Ordered
     ( (:>)(..)
@@ -43,7 +44,6 @@ import Darcs.Patch.Witnesses.Ordered
     )
 import Darcs.Patch.Witnesses.Unsafe ( unsafeCoercePEnd, unsafeCoercePStart )
 
-import Darcs.Util.Format ( Format )
 import Darcs.Util.Parser ( Parser )
 import Darcs.Util.Printer ( Doc )
 
@@ -167,8 +167,7 @@ prop> 'parse' 'readId' . 'renderPS' . 'showId' 'ForStorage' == 'id'
 -}
 class StorableId a where
   readId :: Parser a
-  showId :: a -> Doc
-  formatId :: a -> Format
+  showId :: ShowPatchFor -> a -> Doc
 
 {-# INLINABLE fastRemoveFL #-}
 -- | Remove a patch from an FL of patches with an identity. The result is

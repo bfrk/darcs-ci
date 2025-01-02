@@ -33,6 +33,7 @@ import Darcs.Patch.ApplyMonad ( ApplyMonadTrans )
 import Darcs.Patch.Show
     ( ShowContextPatch
     , ShowPatch
+    , ShowPatchFor(ForDisplay)
     , showPatchWithContext
     )
 import Darcs.UI.External ( viewDocWith )
@@ -76,4 +77,4 @@ contextualPrintPatchWithPager
   -> p wX wY
   -> IO ()
 contextualPrintPatchWithPager s p = do
-    showPatchWithContext s p >>= viewDocWith fancyPrinters
+    showPatchWithContext ForDisplay s p >>= viewDocWith fancyPrinters

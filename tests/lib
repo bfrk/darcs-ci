@@ -134,14 +134,4 @@ grep -q darcs-1 .darcs/defaults && format=darcs-1
 #
 # export XDG_CACHE_HOME=`mktemp -d -p /run/darcs-test`
 
-# ask darcs where its global cache dir is, unless we have no-cache in the defaults
-if ! grep no-cache $DARCS_TESTING_PREFS_DIR/defaults > /dev/null; then
-  rm -rf darcs_show_repo
-  darcs init darcs_show_repo
-  cd darcs_show_repo
-  DARCS_TESTING_CACHE_DIR=$(darcs show repo | grep Cache: | sed -E 's/.*cache:([^ ]+).*/\1/')
-  cd ..
-  rm -rf darcs_show_repo
-fi
-
 set -vex -o pipefail

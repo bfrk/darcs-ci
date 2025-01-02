@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-## Test that we produce exactly correct output when sending
+## Test that we produce exactly correct output when sending v2 patches
 ##
 ## Copyright (C) 2010 Ganesh Sittampalam
 ##
@@ -24,19 +24,9 @@
 ## CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 ## SOFTWARE.
 
-. lib
+. lib                  # Load some portability helpers.
 
-case $format in
-  darcs-1)
-    v=v1
-    ;;
-  darcs-2)
-    v=v2
-    ;;
-  darcs-3)
-    v=v3
-    ;;
-esac
+only-format darcs-2
 
 rm -rf empty
 mkdir empty
@@ -45,17 +35,17 @@ darcs init
 cd ..
 
 rm -rf repo
-unpack_testdata simple-$v
+unpack_testdata simple-v2
 cd repo
 darcs send --no-minimize -o repo.dpatch -a ../empty
 
-compare_bundles $TESTDATA/simple-$v.dpatch repo.dpatch
+compare_bundles $TESTDATA/simple-v2.dpatch repo.dpatch
 cd ..
 
-# test that we are including some context lines in hunk patches
+# context-v2 tests that we are including some context lines in hunk patches
 rm -rf repo
-unpack_testdata context-$v
+unpack_testdata context-v2
 cd repo
 darcs send --no-minimize -o repo.dpatch -a ../empty
-compare_bundles $TESTDATA/context-$v.dpatch repo.dpatch
+compare_bundles $TESTDATA/context-v2.dpatch repo.dpatch
 cd ..

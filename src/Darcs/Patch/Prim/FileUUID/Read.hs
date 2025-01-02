@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ViewPatterns, OverloadedStrings #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 module Darcs.Patch.Prim.FileUUID.Read () where
 
@@ -6,7 +6,8 @@ import Darcs.Prelude hiding ( take )
 
 import Control.Monad ( liftM, liftM2 )
 
-import Darcs.Patch.Read ( ReadPatch(..), ReadPatches(..) )
+import Darcs.Patch.Read ( ReadPatch(..) )
+import Darcs.Patch.Prim.Class( PrimRead(..) )
 import Darcs.Patch.Prim.FileUUID.Core( Prim(..), Hunk(..) )
 import Darcs.Patch.Prim.FileUUID.ObjectMap
 import Darcs.Patch.Witnesses.Sealed( seal )
@@ -14,8 +15,8 @@ import Darcs.Patch.Witnesses.Sealed( seal )
 import Darcs.Util.Path ( decodeWhiteName )
 import Darcs.Util.Parser
 
-instance ReadPatch Prim where
-  readPatch' = do
+instance PrimRead Prim where
+  readPrim _ = do
     skipSpace
     choice $ map (liftM seal)
       [ identity
@@ -27,12 +28,7 @@ instance ReadPatch Prim where
       manifest kind ctor = liftM2 ctor (patch kind) location
       identity = lexString "identity" >> return Identity
       patch x = string x >> uuid
-      uuid =
-        const Root <$> lexString "root"
-        <|>
-        Recorded <$> (lexString "r" >> lexWord)
-        <|>
-        Unrecorded <$> (lexString "u" >> unsigned)
+      uuid = UUID <$> lexWord
       filename = do
         word <- lexWord
         either fail return $ decodeWhiteName word
@@ -49,4 +45,5 @@ instance ReadPatch Prim where
         new <- content
         return $ ctor uid (H offset old new)
 
-instance ReadPatches Prim
+instance ReadPatch Prim where
+  readPatch' = readPrim undefined

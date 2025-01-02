@@ -8,22 +8,13 @@ module Darcs.Util.HTTP
     , configureHttpConnectionManager
     ) where
 
-import Control.Concurrent.Async ( async, cancel )
-import Control.Concurrent.Chan ( Chan, newChan, readChan, writeChan )
-import Control.Concurrent.STM
-    ( STM
-    , TVar
-    , atomically
-    , newTVarIO
-    , readTVar
-    , writeTVar
-    )
+import Control.Concurrent.Async ( async, cancel, poll )
 import Control.Exception ( catch )
-import Control.Monad ( void, when, (>=>) )
+import Control.Monad ( void , (>=>) )
 import Crypto.Random ( seedNew, seedToInteger )
 import qualified Data.ByteString as B
-import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString.Lazy as BL
+import qualified Data.ByteString.Char8 as BC
 
 import Data.Conduit.Combinators ( sinkLazy )
 
@@ -68,7 +59,6 @@ import qualified Network.TLS as TLS
 import Numeric ( showHex )
 import System.Directory ( renameFile )
 import System.Environment ( lookupEnv )
-import System.IO.Unsafe ( unsafePerformIO )
 import Text.Read ( readMaybe )
 
 import Darcs.Prelude
@@ -110,42 +100,21 @@ copyRemoteLazy url cachable = do
 
 speculateRemote :: String -> FilePath -> IO ()
 speculateRemote url path = do
-  writeChan speculateQ (url,path)
-  (_, qsize) <- atomically $ modifyTVar speculateQSize (+1)
-  numThreads <- atomically $ readTVar speculateNumThreads
-  when (numThreads < speculateNumThreadsMax && qsize > 10) $ do
-    _ <- atomically $ modifyTVar speculateNumThreads (+1)
-    tid <- async speculateThread
-    atexit $ cancel tid
-
-speculateThread :: IO ()
-speculateThread = do
-  _ <- atomically $ modifyTVar speculateQSize (subtract 1)
-  (url, path) <- readChan speculateQ
-  debugMessage $ "Start speculating on " ++ url
-  -- speculations are always Cachable
-  copyRemote url path Cachable
-  debugMessage $ "Completed speculating on " ++ url
-  speculateThread
-
-modifyTVar :: TVar a -> (a -> a) -> STM (a, a)
-modifyTVar v f = do
-  x <- readTVar v
-  let x' = f x
-  writeTVar v x'
-  return (x, x')
-
-speculateNumThreadsMax :: Int
-speculateNumThreadsMax = 200
-
-speculateNumThreads :: TVar Int
-speculateNumThreads = unsafePerformIO $ newTVarIO 0
-
-speculateQSize :: TVar Int
-speculateQSize = unsafePerformIO $ newTVarIO 0
-
-speculateQ :: Chan (String,FilePath)
-speculateQ = unsafePerformIO newChan
+  r <- async $ do
+    debugMessage $ "Start speculating on " ++ url
+    -- speculations are always Cachable
+    copyRemote url path Cachable
+    debugMessage $ "Completed speculating on " ++ url
+  atexit $ do
+    result <- poll r
+    case result of
+      Just (Right ()) ->
+        debugMessage $ "Already completed speculating on " ++ url
+      Just (Left e) ->
+        debugMessage $ "Speculating on " ++ url ++ " failed: " ++ show e
+      Nothing -> do
+        debugMessage $ "Abort speculating on " ++ url
+        cancel r
 
 postUrl
   :: String -- ^ url

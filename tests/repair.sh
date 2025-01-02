@@ -51,7 +51,6 @@ darcs record -lam moo
 darcs repair | grep 'already consistent'
 cd ..
 
-# TODO [V3INTEGRATION]
 # We cannot currently implement repair for the darcs-3 format
 # because that risks inconsistencies in conflictors that refer
 # to removed or added prims. Fixing this requires refactoring

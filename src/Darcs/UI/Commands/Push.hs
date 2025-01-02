@@ -59,15 +59,16 @@ import Darcs.Patch.Apply( ApplyState )
 import Darcs.Patch.Witnesses.Ordered
     ( (:>)(..), RL, FL, nullRL,
     nullFL, reverseFL, mapFL_FL, mapRL )
-import Darcs.Patch.Witnesses.Sealed ( Sealed(..), Sealed2(..) )
 import Darcs.Repository.Prefs
     ( Pref(Defaultrepo, Repos)
     , addRepoSource
     , getPreflist
     )
-import Darcs.UI.External ( darcsProgram, pipeFormat, pipeFormatSSH, signFormat )
+import Darcs.UI.External ( signString, darcsProgram
+                         , pipeDoc, pipeDocSSH )
 import Darcs.Util.Exception ( die )
-import Darcs.Util.URL ( SshFilePath(..), isHttpUrl, isSshUrl, splitSshUrl )
+import Darcs.Util.URL ( isHttpUrl, isValidLocalPath
+                      , isSshUrl, splitSshUrl, SshFilePath(..) )
 import Darcs.Util.Path ( AbsolutePath )
 import Darcs.UI.SelectChanges
     ( WhichChanges(..)
@@ -79,7 +80,6 @@ import Darcs.Patch.Depends ( findCommonWithThem, countUsThem )
 import Darcs.Patch.Bundle ( makeBundle )
 import Darcs.Patch.Show( ShowPatch )
 import Darcs.Patch.Set ( PatchSet, Origin )
-import Darcs.Util.Format ( Format )
 import Darcs.Util.Printer.Color ( ePutDocLn )
 import Darcs.Util.Printer
     ( Doc
@@ -92,6 +92,7 @@ import Darcs.Util.Printer
     , text
     , vcat
     )
+import Darcs.UI.Email ( makeEmail )
 import Darcs.Util.English (englishNum, Noun(..))
 import Darcs.Util.Workaround ( getCurrentDirectory )
 import Darcs.Util.Tree( Tree )
@@ -175,8 +176,12 @@ pushCmd (_, o) opts [unfixedrepodir] = do
   when (repodir == here) $ die "Cannot push from repository to itself."
   bundle <-
     withRepository (useCache ? opts) $ RepoJob $ prepareBundle opts repodir
-  sbundle <- signFormat (O.sign ? opts) bundle
-  rval <- remoteApply opts repodir sbundle
+  sbundle <- signString (O.sign ? opts) bundle
+  let body =
+        if isValidLocalPath repodir
+          then sbundle
+          else makeEmail repodir [] Nothing Nothing sbundle Nothing
+  rval <- remoteApply opts repodir body
   case rval of
     ExitFailure ec -> do
       ePutDocLn (text "Apply failed!")
@@ -186,15 +191,13 @@ pushCmd _ _ [] = die "No default repository to push to, please specify one."
 pushCmd _ _ _ = die "Cannot push to more than one repo."
 
 prepareBundle :: (RepoPatch p, ApplyState p ~ Tree)
-              => [DarcsFlag] -> String -> Repository rt p wU wR -> IO Format
+              => [DarcsFlag] -> String -> Repository rt p wU wR -> IO Doc
 prepareBundle opts repodir repository = do
   old_default <- getPreflist Defaultrepo
   when (old_default == [repodir]) $
        let pushing = if dryRun ? opts == YesDryRun then "Would push" else "Pushing"
        in  putInfo opts $ text pushing <+> "to" <+> quoted repodir <> "..."
-  Sealed them <- do
-    Sealed2 r <- identifyRepositoryFor Writing repository (useCache ? opts) repodir
-    Sealed <$> readPatches r
+  them <- identifyRepositoryFor Writing repository (useCache ? opts) repodir >>= readPatches
   addRepoSource repodir (dryRun ? opts) (setDefault False opts)
       (O.inheritDefault ? opts) (isInteractive True opts)
   us <- readPatches repository
@@ -224,7 +227,7 @@ prePushChatter opts us only_us them = do
 bundlePatches :: (RepoPatch p, ApplyState p ~ Tree)
               => [DarcsFlag] -> PatchSet p wA wZ
               -> (FL (PatchInfoAnd p) :> t) wZ wW
-              -> IO Format
+              -> IO Doc
 bundlePatches opts common (to_be_pushed :> _) =
     do
       setEnvDarcsPatches to_be_pushed
@@ -239,7 +242,7 @@ bundlePatches opts common (to_be_pushed :> _) =
           putInfo opts $
             text "You don't want to push any patches, and that's fine with me!"
           exitSuccess
-      return $ makeBundle common (mapFL_FL hopefully to_be_pushed)
+      makeBundle Nothing common (mapFL_FL hopefully to_be_pushed)
 
 checkOptionsSanity :: [DarcsFlag] -> String -> IO ()
 checkOptionsSanity opts repodir =
@@ -262,7 +265,7 @@ pushPatchSelOpts flags = S.PatchSelectionOptions
     , S.withSummary = O.withSummary ? flags
     }
 
-remoteApply :: [DarcsFlag] -> String -> Format -> IO ExitCode
+remoteApply :: [DarcsFlag] -> String -> Doc -> IO ExitCode
 remoteApply opts repodir bundle
     = case applyAs ? opts of
         Nothing
@@ -272,18 +275,18 @@ remoteApply opts repodir bundle
             | isSshUrl repodir -> applyViaSshAndSudo opts (splitSshUrl repodir) un bundle
             | otherwise -> applyViaSudo opts un repodir bundle
 
-applyViaSudo :: [DarcsFlag] -> String -> String -> Format -> IO ExitCode
+applyViaSudo :: [DarcsFlag] -> String -> String -> Doc -> IO ExitCode
 applyViaSudo opts user repo bundle =
   darcsProgram >>= \darcs ->
-    pipeFormat "sudo" ("-u" : user : darcs : darcsArgs opts repo) bundle
+    pipeDoc "sudo" ("-u" : user : darcs : darcsArgs opts repo) bundle
 
-applyViaLocal :: [DarcsFlag] -> String -> Format -> IO ExitCode
+applyViaLocal :: [DarcsFlag] -> String -> Doc -> IO ExitCode
 applyViaLocal opts repo bundle =
-  darcsProgram >>= \darcs -> pipeFormat darcs (darcsArgs opts repo) bundle
+  darcsProgram >>= \darcs -> pipeDoc darcs (darcsArgs opts repo) bundle
 
-applyViaSsh :: [DarcsFlag] -> SshFilePath -> Format -> IO ExitCode
+applyViaSsh :: [DarcsFlag] -> SshFilePath -> Doc -> IO ExitCode
 applyViaSsh opts repo =
-  pipeFormatSSH
+  pipeDocSSH
     (O.compress ? opts)
     repo
     [ unwords $
@@ -291,9 +294,9 @@ applyViaSsh opts repo =
         darcsArgs opts (shellQuote (sshRepo repo))
     ]
 
-applyViaSshAndSudo :: [DarcsFlag] -> SshFilePath -> String -> Format -> IO ExitCode
+applyViaSshAndSudo :: [DarcsFlag] -> SshFilePath -> String -> Doc -> IO ExitCode
 applyViaSshAndSudo opts repo username =
-  pipeFormatSSH
+  pipeDocSSH
     (O.compress ? opts)
     repo
     [ unwords $

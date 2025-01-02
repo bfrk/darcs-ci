@@ -4,8 +4,8 @@ module Darcs.Test.Misc.URL ( testSuite ) where
 import Darcs.Prelude
 
 import Test.HUnit ( assertEqual )
-import Test.Tasty.HUnit ( testCase )
-import Test.Tasty ( TestTree, testGroup )
+import Test.Framework.Providers.HUnit ( testCase )
+import Test.Framework ( Test, testGroup )
 
 import Darcs.Util.URL ( isValidLocalPath, isHttpUrl, isSshUrl )
 
@@ -56,11 +56,11 @@ cases =
   , ("host:/path:with/colons/",           False,  False,  True)
   ]
 
-test :: (String, Bool, Bool, Bool) -> TestTree
+test :: (String, Bool, Bool, Bool) -> Test
 test (input, local, http, ssh) = testCase input $ do
   assertEqual "isValidLocalPath" (isValidLocalPath input) local
   assertEqual "isHttpUrl" (isHttpUrl input) http
   assertEqual "isSshUrl" (isSshUrl input) ssh
 
-testSuite :: TestTree
+testSuite :: Test
 testSuite = testGroup "Darcs.Util.URL" $ map test cases

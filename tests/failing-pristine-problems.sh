@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-## Test for issue1210 - 'global cache gets recorded in _darcs/prefs/sources'
+## Check for correct behaviour with missing files in pristine
 ##
-## Copyright (C) 2010  Adolfo Builes
+## Copyright (C) 2010 Ganesh Sittampalam
 ##
 ## Permission is hereby granted, free of charge, to any person
 ## obtaining a copy of this software and associated documentation
@@ -23,12 +23,33 @@
 ## CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 ## SOFTWARE.
 
-. ./lib
+. lib                           # Load some portability helpers.
 
-cacheDir=$HOME/.cache/darcs
+rm -rf foo
+mkdir foo
+cd foo
+darcs init
 
-rm -rf R S
-darcs init  --repo R
-darcs get R S
-not grep "$cacheDir" S/_darcs/prefs/sources
-not grep "cache:" S/_darcs/prefs/sources
+echo 'wibble' > wibble
+darcs rec -lam 'wibble'
+
+darcs check
+
+roothash=`darcs show pristine | grep ' ./$' | cut -d' ' -f1`
+wibblehash=`darcs show pristine | grep ' wibble$' | cut -d' ' -f1`
+
+rm _darcs/pristine.hashed/$roothash
+
+not darcs check
+not darcs check
+# At the time of writing this test goes wrong at the line above
+# I'm not 100% certain if the rest of it is right.
+darcs repair | grep -v 'The repository is already consistent'
+darcs check
+
+rm _darcs/pristine.hashed/$wibblehash
+
+not darcs check
+not darcs check
+darcs repair | grep -v 'The repository is already consistent'
+darcs check

@@ -53,7 +53,7 @@ import Darcs.Repository
 import Darcs.Patch.Set ( PatchSet, Origin )
 import Darcs.Patch ( RepoPatch )
 import Darcs.Patch.Apply( ApplyState )
-import Darcs.Patch.Info ( PatchInfo, showPatchInfo )
+import Darcs.Patch.Info ( PatchInfo, displayPatchInfo )
 import Darcs.Patch.Witnesses.Ordered
     ( Fork(..), (:>)(..)
     , mapFL, nullFL )
@@ -231,7 +231,7 @@ applyCmdCommon patchApplier patchProxy opts bundle repository = do
   unless (null bad) $
     fail $
     renderString $
-      (vcat $ map showPatchInfo bad) $$ text "" $$
+      (vcat $ map displayPatchInfo bad) $$ text "" $$
       text "Cannot apply this bundle. We are missing the above patches."
 
   (hadConflicts, Sealed their_ps)

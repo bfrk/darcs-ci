@@ -4,11 +4,11 @@ module Darcs.UI.External
     ( sendEmail
     , generateEmail
     , sendEmailDoc
-    , signFormat
+    , signString
     , verifyPS
-    , execFormatPipe
-    , pipeFormat
-    , pipeFormatSSH
+    , execDocPipe
+    , pipeDoc
+    , pipeDocSSH
     , viewDoc
     , viewDocWith
     , checkDefaultSendmail
@@ -54,7 +54,7 @@ import GHC.IO.Encoding
 #endif
 
 import Control.Concurrent ( forkIO, newEmptyMVar, putMVar, takeMVar )
-import Control.Exception ( IOException, catch, finally, throwIO, try )
+import Control.Exception ( IOException, finally, try )
 import System.IO.Error ( ioeGetErrorType )
 import GHC.IO.Exception ( IOErrorType(ResourceVanished) )
 #ifdef WIN32
@@ -73,7 +73,7 @@ import Darcs.Util.Path
     )
 import Darcs.Util.Progress ( withoutProgress, debugMessage )
 
-import Darcs.Util.ByteString ( gzWriteHandleBL, linesPS, unlinesPS )
+import Darcs.Util.ByteString (linesPS, unlinesPS)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC
 
@@ -86,7 +86,6 @@ import Darcs.Util.English ( orClauses )
 #endif
 import Darcs.Util.Exception ( catchall )
 import Darcs.Util.Exec ( execInteractive, exec, Redirect(..), withoutNonBlock )
-import Darcs.Util.Format ( Format, byteString, hPutFormat, toLazyByteString )
 import Darcs.Util.URL ( SshFilePath, sshUhost )
 import Darcs.Util.Printer
     ( Doc
@@ -96,6 +95,8 @@ import Darcs.Util.Printer
     , hPutDocLn
     , hPutDocLnWith
     , hPutDocWith
+    , packedString
+    , renderPS
     , renderString
     , simplePrinters
     , text
@@ -128,35 +129,22 @@ diffProgram = do
 darcsProgram :: IO String
 darcsProgram = getExecutablePath
 
-pipeFormat :: String -> [String] -> Format -> IO ExitCode
-pipeFormat = pipeInternal (writeFormat (PipeToOther simplePrinters))
+pipeDoc :: String -> [String] -> Doc -> IO ExitCode
+pipeDoc = pipeDocInternal (PipeToOther simplePrinters)
 
 data WhereToPipe = PipeToSsh Compression -- ^ if pipe to ssh, can choose to compress or not
                  | PipeToOther Printers  -- ^ otherwise, can specify printers
 
-type Writer a = Handle -> a -> IO ()
-type Reader a = Handle -> IO a
-
-writeDoc :: WhereToPipe -> Writer Doc
-writeDoc wtp h inp =
-  case wtp of
-    PipeToSsh GzipCompression -> hPutDocCompr h inp
-    PipeToSsh NoCompression   -> hPutDoc h inp
-    PipeToOther printers      -> hPutDocWith printers h inp
-
-writeFormat :: WhereToPipe -> Writer Format
-writeFormat wtp h inp =
-  case wtp of
-    PipeToSsh GzipCompression -> gzWriteHandleBL h (toLazyByteString inp)
-    _                         -> hPutFormat h inp
-
-pipeInternal :: Writer a -> String -> [String] -> a -> IO ExitCode
-pipeInternal write c args inp = withoutNonBlock $ withoutProgress $
+pipeDocInternal :: WhereToPipe -> String -> [String] -> Doc -> IO ExitCode
+pipeDocInternal whereToPipe c args inp = withoutNonBlock $ withoutProgress $
     do debugMessage $ "Exec: " ++ unwords (map show (c:args))
        (Just i,_,_,pid) <- createProcess (proc c args){ std_in = CreatePipe
                                                       , delegate_ctlc = True}
        debugMessage "Start transferring data"
-       write i inp
+       case whereToPipe of
+          PipeToSsh GzipCompression -> hPutDocCompr i inp
+          PipeToSsh NoCompression   -> hPutDoc i inp
+          PipeToOther printers      -> hPutDocWith printers i inp
        hClose i
        rval <- waitForProcess pid
        debugMessage "Finished transferring data"
@@ -164,11 +152,10 @@ pipeInternal write c args inp = withoutNonBlock $ withoutProgress $
             putStrLn $ "Command not found:\n   "++ show (c:args)
        return rval
 
-pipeFormatSSH :: Compression -> SshFilePath -> [String] -> Format -> IO ExitCode
-pipeFormatSSH compress remoteAddr args input = do
+pipeDocSSH :: Compression -> SshFilePath -> [String] -> Doc -> IO ExitCode
+pipeDocSSH compress remoteAddr args input = do
     (ssh, ssh_args) <- getSSH SSH
-    pipeInternal (writeFormat (PipeToSsh compress))
-        ssh (ssh_args ++ ("--":sshUhost remoteAddr:args)) input
+    pipeDocInternal (PipeToSsh compress) ssh (ssh_args ++ ("--":sshUhost remoteAddr:args)) input
 
 sendEmail :: String -> String -> String -> String -> Maybe String -> String -> IO ()
 sendEmail f t s cc scmd body =
@@ -295,19 +282,13 @@ foreign import ccall "win32/send_email.h send_email" c_send_email
 #endif
 
 execPSPipe :: String -> [String] -> B.ByteString -> IO B.ByteString
-execPSPipe = execPipe B.hPut B.hGetContents
-
-execFormatPipe :: String -> [String] -> Format -> IO Format
-execFormatPipe = execPipe hPutFormat (fmap byteString . B.hGetContents)
-
-execPipe :: Writer a -> Reader b -> String -> [String] -> a -> IO b
-execPipe put get command args input =
+execPSPipe command args input =
   withoutProgress $ do
     (hi, ho, he, pid) <- runInteractiveProcess command args Nothing Nothing
-    _ <- forkIO $ put hi input >> hClose hi
+    _ <- forkIO $ B.hPut hi input >> hClose hi
     done <- newEmptyMVar
     _ <- forkIO $ (B.hGetContents he >>= B.hPut stderr) `finally` putMVar done ()
-    output <- get ho
+    output <- B.hGetContents ho
     rval <- waitForProcess pid
     takeMVar done
     case rval of
@@ -316,20 +297,21 @@ execPipe put get command args input =
         "External program '" ++ command ++ "' failed with exit code " ++ show ec
       ExitSuccess -> return output
 
-signFormat :: Sign -> Format -> IO Format
-signFormat NoSign d = return d
-signFormat Sign d = signFormatPGP [] d
-signFormat (SignAs keyid) d = signFormatPGP ["--local-user", keyid] d
-signFormat (SignSSL idf) d = signFormatSSL idf d
+execDocPipe :: String -> [String] -> Doc -> IO Doc
+execDocPipe command args input =
+  packedString <$> execPSPipe command args (renderPS input)
 
-signFormatPGP :: [String] -> Format -> IO Format
-signFormatPGP args = execFormatPipe "gpg" ("--clearsign":args)
+signString :: Sign -> Doc -> IO Doc
+signString NoSign d = return d
+signString Sign d = signPGP [] d
+signString (SignAs keyid) d = signPGP ["--local-user", keyid] d
+signString (SignSSL idf) d = signSSL idf d
 
-signFormatSSL :: String -> Format -> IO Format
-signFormatSSL = signSSL execFormatPipe
+signPGP :: [String] -> Doc -> IO Doc
+signPGP args = execDocPipe "gpg" ("--clearsign":args)
 
-signSSL :: (String -> [String] -> t -> IO t) -> String -> t -> IO t
-signSSL execWhatPipe idfile t =
+signSSL :: String -> Doc -> IO Doc
+signSSL idfile t =
     withTemp $ \cert -> do
     opensslPS ["req", "-new", "-key", idfile,
                "-outform", "PEM", "-days", "365"]
@@ -339,9 +321,9 @@ signSSL execWhatPipe idfile t =
                                "-outform", "PEM", "-days", "365"]
                 >>= opensslPS ["x509", "-outform", "PEM"]
                 >>= B.writeFile cert
-    openssl ["smime", "-sign", "-signer", cert,
+    opensslDoc ["smime", "-sign", "-signer", cert,
                 "-inkey", idfile, "-noattr", "-text"] t
-    where openssl = execWhatPipe "openssl"
+    where opensslDoc = execDocPipe "openssl"
           opensslPS = execPSPipe "openssl"
 
 
@@ -423,10 +405,9 @@ viewDocWith pr msg = do
 #endif
                `ortryrunning` pipeDocToPager "" [] pr msg
      else pipeDocToPager "" [] pr msg
-  `catch` \e -> if e==ExitSuccess then return () else throwIO e
-  where lengthGreaterThan n _ | n <= 0 = True
-        lengthGreaterThan _ [] = False
-        lengthGreaterThan n (_:xs) = lengthGreaterThan (n-1) xs
+              where lengthGreaterThan n _ | n <= 0 = True
+                    lengthGreaterThan _ [] = False
+                    lengthGreaterThan n (_:xs) = lengthGreaterThan (n-1) xs
 
 getViewer :: IO (Maybe String)
 getViewer = Just `fmap` (getEnv "DARCS_PAGER" `catchall` getEnv "PAGER")
@@ -434,14 +415,12 @@ getViewer = Just `fmap` (getEnv "DARCS_PAGER" `catchall` getEnv "PAGER")
             return Nothing
 
 pipeDocToPager :: String -> [String] -> Printers -> Doc -> IO ExitCode
+
 pipeDocToPager "" _ pr inp = do
   hPutDocLnWith pr stdout inp
   return ExitSuccess
-pipeDocToPager c args pr inp =
-  -- Evaluate pr with the current stdout, not the pipe's write end,
-  -- so we get colored output with less. Note that we pass it -R so
-  -- that it doesn't escape color codes.
-  pipeInternal (writeDoc (PipeToOther (const (pr stdout)))) c args inp
+
+pipeDocToPager c args pr inp = pipeDocInternal (PipeToOther pr) c args inp
 
 -- | Given two shell commands as arguments, execute the former.  The
 -- latter is then executed if the former failed because the executable

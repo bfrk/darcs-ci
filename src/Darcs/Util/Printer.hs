@@ -6,13 +6,12 @@
 -- This code was made generic in the element type by Juliusz Chroboczek.
 module Darcs.Util.Printer
     (
-    -- * Class 'Print'
-    Print(..)
     -- * 'Doc' type and structural combinators
-    , Doc(Doc,unDoc)
+      Doc(Doc,unDoc)
     , empty, (<>), (<?>), (<+>), ($$), ($+$), vcat, vsep, hcat, hsep
+    , minus, newline, plus, space, backslash, lparen, rparen
+    , parens, sentence
     -- * Constructing 'Doc's
-    , newline
     , text
     , hiddenText
     , invisibleText
@@ -23,6 +22,7 @@ module Darcs.Util.Printer
     , userchunk, packedString
     , prefix
     , hiddenPrefix
+    , prefixLines
     , invisiblePS, userchunkPS
     , fromXml
     -- * Rendering to 'String'
@@ -37,6 +37,8 @@ module Darcs.Util.Printer
     , simplePrinters, invisiblePrinter, simplePrinter
     -- * Printables
     , Printable(..)
+    , doc
+    , printable, invisiblePrintable, hiddenPrintable, userchunkPrintable
     -- * Constructing colored 'Doc's
     , Color(..)
     , blueText, redText, greenText, magentaText, cyanText
@@ -60,18 +62,8 @@ import qualified Data.ByteString as B ( ByteString, hPut, concat )
 import qualified Data.ByteString.Char8 as BC ( singleton )
 import qualified Text.XML.Light as XML
 
-import Darcs.Util.ByteString ( decodeLocale, encodeLocale, gzWriteHandle )
+import Darcs.Util.ByteString ( linesPS, decodeLocale, encodeLocale, gzWriteHandle )
 import Darcs.Util.Global ( debugMessage )
-
-
-class Print a where
-  print :: a -> Doc
-
-instance (Print a, Print b) => Print (a, b) where
-  print (a, b) = print a $$ print b
-
-instance Print () where
-  print () = empty
 
 -- | A 'Printable' is either a String, a packed string, or a chunk of
 -- text with both representations.
@@ -87,9 +79,41 @@ spaceP   = Both " "  (BC.singleton ' ')
 newlineP :: Printable
 newlineP = S "\n"
 
+-- | A 'Doc' representing a space (\" \")
+space :: Doc
+space = unsafeBoth " "  (BC.singleton ' ')
+
 -- | A 'Doc' representing a newline
 newline :: Doc
 newline = unsafeChar '\n'
+
+-- | A 'Doc' representing a \"-\"
+minus :: Doc
+minus = unsafeBoth "-"  (BC.singleton '-')
+
+-- | A 'Doc' representing a \"+\"
+plus :: Doc
+plus = unsafeBoth "+"  (BC.singleton '+')
+
+-- | A 'Doc' representing a \"\\\"
+backslash :: Doc
+backslash = unsafeBoth "\\" (BC.singleton '\\')
+
+-- | A 'Doc' that represents @\"(\"@
+lparen :: Doc
+lparen = unsafeBoth  "(" (BC.singleton '(')
+
+-- | A 'Doc' that represents @\")\"@
+rparen :: Doc
+rparen = unsafeBoth ")" (BC.singleton ')')
+
+-- | prop> parens d = lparen <> d <> rparen
+parens :: Doc -> Doc
+parens d = lparen <> d <> rparen
+
+-- | Turn a 'Doc' into a sentence. This appends a ".".
+sentence :: Doc -> Doc
+sentence = (<> text ".")
 
 -- | Format a list of 'FilePath's as quoted text. It deliberately refuses to
 -- use English.andClauses but rather separates the quoted strings only with a
@@ -244,6 +268,12 @@ prefix s (Doc d) = Doc $ \st ->
                    case d st' of
                      Document d'' -> Document $ (p:) . d''
                      Empty -> Empty
+
+-- TODO try to find another way to do this, it's rather a violation
+-- of the Doc abstraction
+prefixLines :: Doc -> Doc -> Doc
+prefixLines prefixer prefixee =
+  vcat $ map (prefixer <+>) $ map packedString $ linesPS $ renderPS prefixee
 
 lineColor :: Color -> Doc -> Doc
 lineColor c d = Doc $ \st -> case lineColorT (printers st) c d of

@@ -5,8 +5,9 @@ import Darcs.Prelude
 
 import Darcs.Patch.Invert ( invert )
 import Darcs.Patch.Prim ( PrimPatch )
-import Darcs.Patch.Read ( ReadPatch(..), ReadPatches(..), legacyReadPatchFL' )
-import Darcs.Util.Parser ( Parser, choice, lexChar, lexWord, skipSpace, string )
+import Darcs.Patch.Read ( ReadPatch(..) )
+import Darcs.Util.Parser ( Parser, choice, string,
+                                lexChar, lexWord, skipSpace )
 
 import Darcs.Patch.V1.Core ( RepoPatchV1(..) )
 import Darcs.Patch.V1.Commute ( merger )
@@ -20,17 +21,11 @@ import qualified Data.ByteString       as B  (ByteString )
 
 
 instance PrimPatch prim => ReadPatch (RepoPatchV1 prim) where
-  readPatch' =
-    choice
-      [ liftM seal $ skipSpace >> readMerger True
-      , liftM seal $ skipSpace >> readMerger False
-      , liftM (mapSeal PP) readPatch'
-      ]
-
-instance PrimPatch prim => ReadPatches (RepoPatchV1 prim) where
-  readPatchFL' = legacyReadPatchFL'
-
-
+ readPatch'
+   = choice [ liftM seal $ skipSpace >> readMerger True
+            , liftM seal $ skipSpace >> readMerger False
+            , liftM (mapSeal PP) readPatch'
+            ]
 readMerger :: (PrimPatch prim) => Bool -> Parser (RepoPatchV1 prim wX wY)
 readMerger b = do string s
                   g <- lexWord
