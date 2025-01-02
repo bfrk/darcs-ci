@@ -13,7 +13,7 @@ import Darcs.Repository.Prefs ( globalCacheDir )
 
 import Control.Exception ( SomeException )
 import Data.List ( intercalate )
-import Data.Maybe ( fromJust )
+import Data.Maybe ( fromMaybe )
 import Data.Tagged ( Tagged(..) )
 import Data.Text ( Text, pack, unpack )
 import qualified Data.Text as T
@@ -117,7 +117,7 @@ runtest' ShellTest{..} srcdir =
           , ("TESTDATA", EnvFilePath (srcdir </> "tests" </> "data"))
           , ("TESTBIN", EnvFilePath (srcdir </> "tests" </> "bin"))
           , ("DARCS_TESTING_PREFS_DIR"   , EnvFilePath $ wd </> ".darcs")
-          , ("DARCS_TESTING_CACHE_DIR"   , EnvFilePath $ fromJust cacheDir)
+          , ("DARCS_TESTING_CACHE_DIR"   , EnvFilePath $ fromMaybe (wd </> ".cache") cacheDir)
           , ("EMAIL"                     , EnvString "tester")
           , ("GIT_AUTHOR_NAME"           , EnvString "tester")
           , ("GIT_AUTHOR_EMAIL"          , EnvString "tester")
