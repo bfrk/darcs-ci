@@ -28,5 +28,7 @@
 rm -rf R S
 darcs init  --repo R
 darcs get R S
-not grep "$DARCS_TESTING_CACHE_DIR" S/_darcs/prefs/sources
+if test -n "$DARCS_TESTING_CACHE_DIR"; then
+  not grep "$DARCS_TESTING_CACHE_DIR" S/_darcs/prefs/sources
+fi
 not grep "cache:" S/_darcs/prefs/sources
