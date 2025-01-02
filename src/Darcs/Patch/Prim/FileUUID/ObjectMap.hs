@@ -41,7 +41,7 @@ import System.Posix.Types ( FileID, CIno(..) )
 type FileContent = B.ByteString
 
 unFileID :: FileID -> Word64
-unFileID (CIno x) = x
+unFileID (CIno x) = fromIntegral x
 
 data UUID
   = Root
