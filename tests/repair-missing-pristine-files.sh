@@ -40,7 +40,7 @@ wibblehash=`darcs show pristine | grep ' wibble$' | cut -d' ' -f1`
 
 rm _darcs/pristine.hashed/$roothash
 # also remove it from the cache
-find $HOME/.cache/darcs/pristine.hashed -name $roothash -exec rm -f {} \; || true
+find $DARCS_TESTING_CACHE_DIR/pristine.hashed -name $roothash -exec rm -f {} \; || true
 
 not darcs check
 not darcs check
@@ -49,7 +49,7 @@ darcs check
 
 rm _darcs/pristine.hashed/$wibblehash
 # also remove it from the cache
-find $HOME/.cache/darcs/pristine.hashed -name $wibblehash -exec rm -f {} \; || true
+find $DARCS_TESTING_CACHE_DIR/pristine.hashed -name $wibblehash -exec rm -f {} \; || true
 
 not darcs check
 not darcs check
