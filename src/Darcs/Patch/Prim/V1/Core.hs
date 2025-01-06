@@ -85,11 +85,12 @@ instance ObjectIdOf (ApplyState Prim) ~ AnchoredPath => PrimConstruct Prim where
     hunk f line old new = FP f (Hunk line old new)
     tokreplace f tokchars old new = FP f (TokReplace tokchars old new)
     binary f old new = FP f $ Binary old new
-    primFromHunk (FileHunk f line before after) = FP f (Hunk line before after)
 
 instance ObjectIdOf (ApplyState Prim) ~ AnchoredPath => IsHunk Prim where
-    isHunk (FP f (Hunk line before after)) = Just (FileHunk f line before after)
+    type ExtraData Prim = ()
+    isHunk (FP f (Hunk line before after)) = Just (FileHunk () f line before after)
     isHunk _ = Nothing
+    fromHunk (FileHunk () f line before after) = FP f (Hunk line before after)
 
 instance Invert Prim where
     invert (FP f p)  = FP f (invert p)

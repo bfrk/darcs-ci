@@ -43,19 +43,19 @@ tester**20101016222721
 ] addfile ./wibble
 hunk ./wibble 1
 +wibble
+
 [A1
 tester**20101016222721
  Ignore-this: d749f48333e6ff2e994b1df71e76933b
 ] hunk ./wibble 2
- wibble
 +A1
+
 [A2
 tester**20101016222721
  Ignore-this: 6f006a52975a708a8038d52e5e39ef0f
 ] hunk ./wibble 3
- wibble
- A1
 +A2
+
 [B1
 tester**20101016222721
  Ignore-this: f4d4b5b1c73bd6fa8abe6e5e680d66a7
@@ -68,6 +68,7 @@ hunk ./wibble 3
 :
 hunk ./wibble 2
 +B1
+
 [B2
 tester**20101016222721
  Ignore-this: 1d60b6c0ba913fff4d1e32ad26ae07bb
@@ -89,6 +90,7 @@ hunk ./wibble 2
 :
 hunk ./wibble 3
 +B2
+
 [C1
 tester**20101016222721
  Ignore-this: 25b6a6959d19980ad16983a542c6825
@@ -113,6 +115,7 @@ hunk ./wibble 3
 :
 hunk ./wibble 2
 +C1
+
 [C2
 tester**20101016222721
  Ignore-this: c16d607216c36d5f7727c64d2ec103d4

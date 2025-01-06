@@ -19,13 +19,13 @@ import Darcs.Util.Path ( unsafeFloatPath )
 
 import Darcs.Test.TestOnly.Instance ()
 
-import Test.Framework (Test, testGroup)
-import Test.Framework.Providers.HUnit (testCase)
-import Test.HUnit (assertFailure)
+import Test.HUnit ( assertFailure )
+import Test.Tasty ( TestTree, testGroup )
+import Test.Tasty.HUnit ( testCase )
 
 type Patch = RepoPatchV2 V2.Prim
 
-testSuite :: Test
+testSuite :: TestTree
 testSuite = testGroup "Darcs.Patch.Depends" $
   [ test1
   ]
@@ -33,7 +33,7 @@ testSuite = testGroup "Darcs.Patch.Depends" $
 data WA
 data WB
 
-test1 :: Test
+test1 :: TestTree
 test1 = testCase "findCommonWithThem: \"them\" patch contents should not be inspected" $ do
   let
     mkPatch :: PatchInfo -> FL V2.Prim wA wB -> PatchInfoAnd Patch wA wB

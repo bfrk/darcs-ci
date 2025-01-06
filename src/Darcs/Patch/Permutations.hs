@@ -130,16 +130,14 @@ partitionRL :: forall p wX wY. Commute p
             => (forall wU wV . p wU wV -> Bool) -- ^predicate; if true we would like the patch in the "right" list
             -> RL p wX wY                       -- ^input 'RL'
             -> (RL p :> RL p) wX wY             -- ^"left" and "right" results
-partitionRL keepright = go . (:> NilFL)
+partitionRL cond input = go (input :> NilFL :> NilFL)
   where
-    go :: (RL p :> FL p) wA wB -> (RL p :> RL p) wA wB
-    go (NilRL :> qs) = (reverseFL qs :> NilRL)
-    go (ps :<: p :> qs)
-      | keepright p
-      , Just (qs' :> p') <- commuteFL (p :> qs) =
-          case go (ps :> qs') of
-            a :> b -> a :> b :<: p'
-      | otherwise = go (ps :> p :>: qs)
+    go :: (RL p :> FL p :> FL p) wA wB -> (RL p :> RL p) wA wB
+    go (NilRL :> no :> yes) = (reverseFL no :> reverseFL yes)
+    go (ps :<: p :> no :> yes)
+      | cond p
+      , Just (no' :> p') <- commuteFL (p :> no) = go (ps :> no' :> p' :>: yes)
+      | otherwise = go (ps :> p :>: no :> yes)
 
 commuteWhatWeCanFL :: Commute p => (p :> FL p) wX wY -> (FL p :> p :> FL p) wX wY
 commuteWhatWeCanFL = genCommuteWhatWeCanFL commute

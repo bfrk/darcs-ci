@@ -16,7 +16,6 @@ import Darcs.Patch ( ApplyState, PatchInfoAnd, RepoPatch )
 import qualified Darcs.Patch.Rebase.Legacy.Wrapped as W
 import Darcs.Patch.Rebase.Suspended ( Suspended(..), showSuspended )
 import Darcs.Patch.Set ( Origin, PatchSet(..), Tagged(..) )
-import Darcs.Patch.Show ( ShowPatchFor(..) )
 import Darcs.Patch.Witnesses.Ordered ( FL(..), RL(..), (:>)(..) )
 import Darcs.Patch.Witnesses.Sealed ( Dup(..), Sealed(..) )
 
@@ -44,7 +43,6 @@ import Darcs.Repository.InternalTypes
     , unsafeCoerceR
     , unsafeEndTransaction
     , unsafeStartTransaction
-    , withRepoDir
     )
 import Darcs.Repository.Inventory ( readOneInventory )
 import qualified Darcs.Repository.Old as Old ( oldRepoFailMsg )
@@ -88,16 +86,15 @@ revertRepositoryChanges :: RepoPatch p
                         => Repository 'RO p wU wR
                         -> IO (Repository 'RW p wU wR)
 revertRepositoryChanges r
-  | formatHas HashedInventory (repoFormat r) =
-      withRepoDir r $ do
-        checkIndexIsWritable
-          `catchIOError` \e -> fail (unlines ["Cannot write index", show e])
-        revertTentativeUnrevert
-        revertPending r
-        revertTentativeChanges r
-        let r' = unsafeCoerceR r
-        revertTentativeRebase r'
-        return $ unsafeStartTransaction r'
+  | formatHas HashedInventory (repoFormat r) = do
+      checkIndexIsWritable
+        `catchIOError` \e -> fail (unlines ["Cannot write index", show e])
+      revertTentativeUnrevert
+      revertPending r
+      revertTentativeChanges r
+      let r' = unsafeCoerceR r
+      revertTentativeRebase r'
+      return $ unsafeStartTransaction r'
   | otherwise = fail Old.oldRepoFailMsg
 
 -- | Atomically copy the tentative state to the recorded state,
@@ -108,26 +105,25 @@ finalizeRepositoryChanges :: (RepoPatch p, ApplyState p ~ Tree)
                           -> DryRun
                           -> IO (Repository 'RO p wU wR)
 finalizeRepositoryChanges r dryrun
-    | formatHas HashedInventory (repoFormat r) =
-        withRepoDir r $ do
-          let r' = unsafeEndTransaction $ unsafeCoerceR r
-          when (dryrun == NoDryRun) $ do
-            debugMessage "Finalizing changes..."
-            withSignalsBlocked $ do
-                updateRebaseFormat r
-                finalizeTentativeRebase
-                finalizeTentativeChanges r
-                finalizePending r
-                finalizeTentativeUnrevert
-            debugMessage "Done finalizing changes..."
-            ps <- readPatches r'
-            pi_exists <- doesPatchIndexExist (repoLocation r')
-            when pi_exists $
-              createOrUpdatePatchIndexDisk r' ps
-              `catchIOError` \e ->
-                hPutStrLn stderr $ "Cannot create or update patch index: "++ show e
-            updateIndex r'
-          return r'
+    | formatHas HashedInventory (repoFormat r) = do
+        let r' = unsafeEndTransaction $ unsafeCoerceR r
+        when (dryrun == NoDryRun) $ do
+          debugMessage "Finalizing changes..."
+          withSignalsBlocked $ do
+              updateRebaseFormat r
+              finalizeTentativeRebase
+              finalizeTentativeChanges r
+              finalizePending r
+              finalizeTentativeUnrevert
+          debugMessage "Done finalizing changes..."
+          ps <- readPatches r'
+          pi_exists <- doesPatchIndexExist (repoLocation r')
+          when pi_exists $
+            createOrUpdatePatchIndexDisk r' ps
+            `catchIOError` \e ->
+              hPutStrLn stderr $ "Cannot create or update patch index: "++ show e
+          updateIndex r'
+        return r'
     | otherwise = fail Old.oldRepoFailMsg
 
 -- | Upgrade a possible old-style rebase in progress to the new style.
@@ -159,7 +155,7 @@ upgradeOldStyleRebase repo = do
             $  "A new-style rebase is already in progress, not overwriting it."
             $$ "This should not have happened! This is the old-style rebase I found"
             $$ "and removed from the repository:"
-            $$ showSuspended ForDisplay r
+            $$ showSuspended r
 
 checkIndexIsWritable :: IO ()
 checkIndexIsWritable = do

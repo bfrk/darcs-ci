@@ -1,23 +1,24 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
 {-# LANGUAGE OverloadedStrings, UndecidableInstances #-}
 module Darcs.Patch.Prim.FileUUID.Show
-    ( displayHunk )
+    ( displayHunk, showUUID )
     where
 
 import Darcs.Prelude
 
 import qualified Data.ByteString as B
 
-import Darcs.Patch.Apply ( Apply(..) )
-import Darcs.Patch.Format ( PatchListFormat, FileNameFormat(..) )
+import Darcs.Patch.Apply ( Apply(..), ObjectIdOfPatch )
+import Darcs.Patch.Object ( ObjectId(..) )
 import Darcs.Patch.Show
     ( ShowPatchBasic(..), ShowPatch(..)
-    , ShowContextPatch(..), ShowPatchFor(..) )
-import Darcs.Patch.Summary ( plainSummaryPrim )
-import Darcs.Patch.Prim.Class ( PrimShow(..) )
+    , ShowContextPatch(..) )
+import Darcs.Patch.Summary ( plainSummaryPrim, plainSummaryPrims )
+import Darcs.Patch.Prim.Class ( showPrimWithContextAndApply )
 import Darcs.Patch.Prim.FileUUID.Core
-    ( Prim(..), Hunk(..), HunkMove(..), UUID(..), Location(..), FileContent )
+    ( Prim(..), Hunk(..), UUID(..), Location(..), FileContent )
 import Darcs.Patch.Prim.FileUUID.Details ()
+import Darcs.Patch.Prim.FileUUID.ObjectMap ()
 import Darcs.Util.ByteString ( linesPS )
 import Darcs.Util.Path ( Name, encodeWhiteName )
 import Darcs.Util.Printer
@@ -25,76 +26,34 @@ import Darcs.Util.Printer
     , (<+>), ($$), Doc, vcat
     )
 
--- TODO this instance shouldn't really be necessary, as Prims aren't used generically
-instance PatchListFormat Prim
-
-fileNameFormat :: ShowPatchFor -> FileNameFormat
-fileNameFormat ForDisplay = FileNameFormatDisplay
-fileNameFormat ForStorage = FileNameFormatV2
-
 instance ShowPatchBasic Prim where
-  showPatch fmt = showPrim (fileNameFormat fmt)
+  showPatch (Hunk u h) = displayHunk (Just u) h
+  showPatch (Manifest f (L d p)) = showManifest "manifest" d f p
+  showPatch (Demanifest f (L d p)) = showManifest "demanifest" d f p
+  showPatch Identity = blueText "identity"
 
--- dummy instance, does not actually show any context
-instance Apply Prim => ShowContextPatch Prim where
-  -- showPatchWithContextAndApply f = showPrimWithContextAndApply (fileNameFormat f)
-  showPatchWithContextAndApply f p = apply p >> return (showPatch f p)
+instance (Apply Prim, ObjectId UUID, ObjectIdOfPatch Prim ~ UUID) => ShowContextPatch Prim where
+  showPatchWithContextAndApply = showPrimWithContextAndApply
 
 instance ShowPatch Prim where
   summary = plainSummaryPrim
-  -- summaryFL = plainSummaryPrims False
+  summaryFL = plainSummaryPrims False
   thing _ = "change"
-
-instance PrimShow Prim where
-  showPrim FileNameFormatDisplay (Hunk u h) = displayHunk (Just u) h
-  showPrim _ (Hunk u h) = storeHunk u h
-  showPrim FileNameFormatDisplay (HunkMove hm) = displayHunkMove hm
-  showPrim _ (HunkMove hm) = storeHunkMove hm
-  showPrim _ (Manifest f (L d p)) = showManifest "manifest" d f p
-  showPrim _ (Demanifest f (L d p)) = showManifest "demanifest" d f p
-  showPrim _ Identity = blueText "identity"
-  showPrimWithContextAndApply _ _ = error "show with context not implemented"
 
 showManifest :: String -> UUID -> UUID -> Name -> Doc
 showManifest txt dir file name =
   blueText txt <+>
-  formatUUID file <+>
-  formatUUID dir <+>
+  showUUID file <+>
+  showUUID dir <+>
   packedString (encodeWhiteName name)
 
 displayHunk :: Maybe UUID -> Hunk wX wY -> Doc
 displayHunk uid (H off old new) =
   blueText "hunk" <+>
-  maybe (text "<nil>") formatUUID uid <+>
+  maybe (text "<nil>") showUUID uid <+>
   text (show off) $$
   displayFileContent "-" old $$
   displayFileContent "+" new
-
-storeHunk :: UUID -> Hunk wX wY -> Doc
-storeHunk uid (H off old new) =
-  text "hunk" <+>
-  formatUUID uid <+>
-  text (show off) $$
-  storeFileContent old $$
-  storeFileContent new
-
-displayHunkMove :: HunkMove wX wY -> Doc
-displayHunkMove (HM sid soff tid toff c) =
-  blueText "hunkmove" <+>
-  formatUUID sid <+>
-  text (show soff) <+>
-  formatUUID tid <+>
-  text (show toff) $$
-  displayFileContent "|" c
-
-storeHunkMove :: HunkMove wX wY -> Doc
-storeHunkMove (HM sid soff tid toff c) =
-  text "hunkmove" <+>
-  formatUUID sid <+>
-  text (show soff) <+>
-  formatUUID tid <+>
-  text (show toff) $$
-  storeFileContent c
 
 -- TODO add some heuristics to recognize binary content
 displayFileContent :: String -> FileContent -> Doc
@@ -110,9 +69,7 @@ displayFileContent pre = vcat . map (prefix pre) . showLines . linesPS
       map packedString (init xs) ++
       [packedString (last xs) <> context]
 
-storeFileContent :: FileContent -> Doc
-storeFileContent c =
-  text "content" <+> text (show (B.length c)) $$ packedString c
-
-formatUUID :: UUID -> Doc
-formatUUID (UUID x) = packedString x
+showUUID :: UUID -> Doc
+showUUID Root = "root"
+showUUID (Recorded x) = "r" <+> packedString x
+showUUID (Unrecorded x) = "u" <+> text (show x)

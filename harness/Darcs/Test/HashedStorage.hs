@@ -22,7 +22,7 @@ import Darcs.Util.Cache ( mkRepoCache )
 import Darcs.Util.Path hiding ( setCurrentDirectory )
 import Darcs.Util.Lock ( withPermDir )
 import Darcs.Util.Tree hiding ( lookup )
-import Darcs.Util.Index
+import Darcs.Util.Tree.Index
 import Darcs.Util.Tree.Hashed
 import Darcs.Util.Hash
 import Darcs.Util.Tree.Monad hiding ( tree, createDirectory )
@@ -32,14 +32,12 @@ import System.Mem( performGC )
 
 import qualified Data.Set as S
 
-import Test.HUnit hiding ( path )
-import Test.Framework( testGroup )
-import qualified Test.Framework as TF ( Test )
+import Test.Tasty( TestTree, testGroup )
 import Test.QuickCheck
 import Test.QuickCheck.Instances.ByteString ()
 
-import Test.Framework.Providers.HUnit
-import Test.Framework.Providers.QuickCheck2
+import Test.Tasty.HUnit
+import Test.Tasty.QuickCheck
 
 ------------------------
 -- Test Data
@@ -94,18 +92,20 @@ equals_testdata t = sequence_ [
 -- Test list
 --
 
-tests :: [TF.Test]
-tests = [ testGroup "Darcs.Util.Hash" hash
-        , testGroup "Darcs.Util.Tree" tree
-        , testGroup "Darcs.Util.Index" index
-        , testGroup "Darcs.Util.Tree.Monad" monad
-        , testGroup "Hashed Storage" hashed ]
+tests :: [TestTree]
+tests =
+  [ testGroup "Darcs.Util.Hash" hash
+  , testGroup "Darcs.Util.Tree" tree
+  , testGroup "Darcs.Util.Tree.Index" index
+  , testGroup "Darcs.Util.Tree.Monad" monad
+  , testGroup "Plain and Pristine Trees" hashed
+  ]
 
 --------------------------
 -- Tests
 --
 
-hashed :: [TF.Test]
+hashed :: [TestTree]
 hashed = [ testCase "plain has all files" have_files
          , testCase "pristine has all files" have_pristine_files
          , testCase "pristine has no extras" pristine_no_extra
@@ -143,7 +143,7 @@ hashed = [ testCase "plain has all files" have_files
         t <- expand =<< readPlainTree "_darcs/plain"
         equals_testdata t
 
-index :: [TF.Test]
+index :: [TestTree]
 index = [ testCase "index versioning" check_index_versions
         , testCase "index listing" check_index
         , testCase "index content" check_index_content
@@ -183,7 +183,7 @@ index = [ testCase "index versioning" check_index_versions
                     align bound x `rem` bound == 0
               where _types = (bound, x) :: (Int, Int)
 
-tree :: [TF.Test]
+tree :: [TestTree]
 tree = [ testCase "modifyTree" check_modify
        , testCase "complex modifyTree" check_modify_complex
        , testCase "modifyTree removal" check_modify_remove
@@ -342,11 +342,11 @@ tree = [ testCase "modifyTree" check_modify
                   notStub Nothing = error "Did not exist."
                   notStub _ = True
 
-hash :: [TF.Test]
+hash :: [TestTree]
 hash = [ testProperty "decodeBase16 . encodeBase16 == Just" prop_base16 ]
     where prop_base16 x = (decodeBase16 . encodeBase16) x == Just x
 
-monad :: [TF.Test]
+monad :: [TestTree]
 monad = [ testCase "path expansion" check_virtual
         , testCase "rename" check_rename ]
     where check_virtual = virtualTreeMonad run testTree >> return ()

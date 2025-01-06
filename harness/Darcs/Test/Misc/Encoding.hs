@@ -9,14 +9,14 @@ import System.IO.Unsafe
 
 import Darcs.Util.Encoding
 
-import Test.Framework ( Test, testGroup )
-import Test.Framework.Providers.QuickCheck2 ( testProperty )
+import Test.Tasty ( TestTree, testGroup )
+import Test.Tasty.QuickCheck ( testProperty )
 import Test.QuickCheck
 
 decodeThenEncode :: B.ByteString -> B.ByteString
 decodeThenEncode = unsafePerformIO . (decode >=> encode)
 
-testSuite :: Test
+testSuite :: TestTree
 testSuite = testGroup "Darcs.Util.Encoding"
  [ testProperty "decode then encode roundtrips" propDecodeThenEncodeRoundTrip
  ]

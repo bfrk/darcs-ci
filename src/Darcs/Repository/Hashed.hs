@@ -44,9 +44,8 @@ import System.Directory
     , renameFile
     )
 import System.FilePath.Posix ( (</>) )
-import System.IO.Unsafe ( unsafeInterleaveIO )
 
-import Darcs.Patch ( RepoPatch, effect, invert, invertFL, readPatch )
+import Darcs.Patch ( RepoPatch, effect, invert, invertFL )
 import Darcs.Patch.Apply ( Apply(..) )
 import Darcs.Patch.Depends
     ( cleanLatestTag
@@ -54,18 +53,15 @@ import Darcs.Patch.Depends
     , slightlyOptimizePatchset
     , fullyOptimizePatchSet
     )
-import Darcs.Patch.Format ( PatchListFormat )
-import Darcs.Patch.Info ( displayPatchInfo, makePatchname, piName )
+import Darcs.Patch.Info ( makePatchname )
 import Darcs.Patch.Invertible ( mkInvertible )
 import Darcs.Patch.PatchInfoAnd
     ( PatchInfoAnd
-    , createHashed
     , hopefully
     , info
-    , patchInfoAndPatch
     )
 import Darcs.Patch.Progress ( progressFL )
-import Darcs.Patch.Read ( ReadPatch )
+import Darcs.Patch.Read ( ReadPatches )
 import Darcs.Patch.Rebase.Suspended
     ( addFixupsToSuspended
     , removeFixupsFromSuspended
@@ -102,13 +98,13 @@ import Darcs.Repository.InternalTypes
     , repoFormat
     , repoLocation
     , unsafeCoerceR
-    , withRepoDir
     )
 import Darcs.Repository.Inventory
     ( peekPristineHash
     , pokePristineHash
     , readPatchesFromInventoryFile
-    , showInventoryEntry
+    , readSinglePatch
+    , formatInventoryEntry
     , writeInventory
     , writePatchIfNecessary
     )
@@ -135,12 +131,11 @@ import Darcs.Util.Cache ( Cache, fetchFileUsingCache )
 import Darcs.Util.File ( Cachable(Uncachable), copyFileOrUrl )
 import Darcs.Util.Hash ( SHA1, sha1Xor, sha1zero )
 import Darcs.Util.Lock
-    ( appendDocBinFile
+    ( appendFormatBinFile
     , writeAtomicFilePS
-    , writeDocBinFile
+    , writeFormatBinFile
     )
-import Darcs.Util.Printer ( renderString )
-import Darcs.Util.Progress ( beginTedious, debugMessage, endTedious )
+import Darcs.Util.Global ( debugMessage )
 import Darcs.Util.SignalHandler ( withSignalsBlocked )
 import Darcs.Util.Tree ( Tree )
 
@@ -151,8 +146,10 @@ revertTentativeChanges :: Repository 'RO p wU wR -> IO ()
 revertTentativeChanges repo = do
     copyFile hashedInventoryPath tentativeHashedInventoryPath
     inv <- gzReadFilePS tentativeHashedInventoryPath
-    pristineHash <- convertSizePrefixedPristine (repoCache repo) (peekPristineHash inv)
-    writeDocBinFile tentativePristinePath $ pokePristineHash pristineHash mempty
+    pristineHash <-
+      convertSizePrefixedPristine (repoCache repo) (peekPristineHash inv)
+    writeFormatBinFile tentativePristinePath $
+      pokePristineHash pristineHash mempty
 {-
     -- this is not needed, as we never again access the pristine hash in
     -- tentativeHashedInventoryPath, only that in tentativePristinePath
@@ -176,7 +173,7 @@ finalizeTentativeChanges r = do
     i <- gzReadFilePS tentativeHashedInventoryPath
     p <- gzReadFilePS tentativePristinePath
     -- Write out the "optimised" tentative inventory.
-    writeDocBinFile tentativeHashedInventoryPath $
+    writeFormatBinFile tentativeHashedInventoryPath $
         pokePristineHash (peekPristineHash p) i
     -- Atomically swap.
     renameFile tentativeHashedInventoryPath hashedInventoryPath
@@ -188,10 +185,11 @@ addToTentativeInventory :: RepoPatch p => Cache
                         -> PatchInfoAnd p wX wY -> IO ()
 addToTentativeInventory c p = do
     hash <- snd <$> writePatchIfNecessary c p
-    appendDocBinFile tentativeHashedInventoryPath $ showInventoryEntry (info p, hash)
+    appendFormatBinFile tentativeHashedInventoryPath $
+      formatInventoryEntry (info p, hash)
 
 -- | Read the recorded 'PatchSet' of a hashed 'Repository'.
-readPatchesHashed :: (PatchListFormat p, ReadPatch p) => Repository rt p wU wR
+readPatchesHashed :: ReadPatches p => Repository rt p wU wR
                   -> IO (PatchSet p Origin wR)
 readPatchesHashed repo =
   case repoAccessType repo of
@@ -199,7 +197,7 @@ readPatchesHashed repo =
     SRW -> readPatchesFromInventoryFile tentativeHashedInventoryPath repo
 
 -- | Read the tentative 'PatchSet' of a (hashed) 'Repository'.
-readTentativePatches :: (PatchListFormat p, ReadPatch p)
+readTentativePatches :: ReadPatches p
                      => Repository 'RW p wU wR
                      -> IO (PatchSet p Origin wR)
 readTentativePatches = readPatchesHashed
@@ -221,22 +219,8 @@ writeAndReadPatch :: RepoPatch p => Cache
                   -> PatchInfoAnd p wX wY -> IO (PatchInfoAnd p wX wY)
 writeAndReadPatch c p = do
     (i, h) <- writePatchIfNecessary c p
-    unsafeInterleaveIO $ readp h i
-  where
-    parse i h = do
-        debugMessage $ "Rereading patch file for: " ++ piName i
-        (fn, ps) <- fetchFileUsingCache c h
-        case readPatch ps of
-            Right x -> return x
-            Left e -> fail $ unlines
-                [ "Couldn't parse patch file " ++ fn
-                , "which is"
-                , renderString $ displayPatchInfo i
-                , e
-                ]
-
-    readp h i = do Sealed x <- createHashed h (parse i)
-                   return . patchInfoAndPatch i $ unsafeCoerceP x
+    Sealed x <- readSinglePatch c i h
+    return (unsafeCoerceP x)
 
 -- | Write a 'PatchSet' to the tentative inventory.
 writeTentativeInventory :: RepoPatch p
@@ -247,11 +231,7 @@ writeTentativeInventory repo patchSet = do
     debugMessage "in writeTentativeInventory..."
     createDirectoryIfMissing False inventoriesDirPath
     let cache = repoCache repo
-        tediousName = "Writing inventory"
-    beginTedious tediousName
-    hash <-
-      writeInventory tediousName cache $ slightlyOptimizePatchset patchSet
-    endTedious tediousName
+    hash <- writeInventory cache $ slightlyOptimizePatchset patchSet
     debugMessage "still in writeTentativeInventory..."
     (_filepath, content) <- fetchFileUsingCache cache hash
     writeAtomicFilePS tentativeHashedInventoryPath content
@@ -283,16 +263,15 @@ tentativelyAddPatches_ :: (RepoPatch p, ApplyState p ~ Tree)
 tentativelyAddPatches_ upr r upe ps = do
     let r' = unsafeCoerceR r
     withTentativeRebase r r' (foldlwFL (removeFixupsFromSuspended . hopefully) ps)
-    withRepoDir r $ do
-       sequenceFL_ (addToTentativeInventory (repoCache r)) ps
-       when (upr == UpdatePristine) $ do
-          applyToTentativePristine r $
-            mkInvertible $ progressFL "Applying to pristine" ps
-       when (upe == YesUpdatePending) $ do
-          debugMessage "Updating pending..."
-          Sealed pend <- readTentativePending r
-          writeTentativePending r' $ invertFL (effect ps) +>>+ pend
-       return r'
+    sequenceFL_ (addToTentativeInventory (repoCache r)) ps
+    when (upr == UpdatePristine) $ do
+      applyToTentativePristine r $
+        mkInvertible $ progressFL "Applying to pristine" ps
+    when (upe == YesUpdatePending) $ do
+      debugMessage "Updating pending..."
+      Sealed pend <- readTentativePending r
+      writeTentativePending r' $ invertFL (effect ps) +>>+ pend
+    return r'
 
 tentativelyAddPatch_ :: (RepoPatch p, ApplyState p ~ Tree)
                      => UpdatePristine
@@ -318,20 +297,19 @@ tentativelyRemovePatches_ :: (RepoPatch p, ApplyState p ~ Tree)
                           -> IO (Repository 'RW p wU wX)
 tentativelyRemovePatches_ upr r upe ps
   | formatHas HashedInventory (repoFormat r) = do
-      withRepoDir r $ do
-        ref <- readTentativePatches r
-        unless (upr == DontUpdatePristineNorRevert) $ removeFromUnrevertContext ref ps
-        debugMessage "Removing changes from tentative inventory..."
-        r' <- removeFromTentativeInventory r ps
-        withTentativeRebase r r' (foldrwFL (addFixupsToSuspended . hopefully) ps)
-        when (upr == UpdatePristine) $
-          applyToTentativePristine r $
-            invert $ mkInvertible $ progressFL "Applying inverse to pristine" ps
-        when (upe == YesUpdatePending) $ do
-          debugMessage "Adding changes to pending..."
-          Sealed pend <- readTentativePending r
-          writeTentativePending r' $ effect ps +>+ pend
-        return r'
+      ref <- readTentativePatches r
+      unless (upr == DontUpdatePristineNorRevert) $ removeFromUnrevertContext ref ps
+      debugMessage "Removing changes from tentative inventory..."
+      r' <- removeFromTentativeInventory r ps
+      withTentativeRebase r r' (foldrwFL (addFixupsToSuspended . hopefully) ps)
+      when (upr == UpdatePristine) $
+        applyToTentativePristine r $
+          invert $ mkInvertible $ progressFL "Applying inverse to pristine" ps
+      when (upe == YesUpdatePending) $ do
+        debugMessage "Adding changes to pending..."
+        Sealed pend <- readTentativePending r
+        writeTentativePending r' $ effect ps +>+ pend
+      return r'
   | otherwise = fail Old.oldRepoFailMsg
 
 -- | Attempt to remove an FL of patches from the tentative inventory.

@@ -4,8 +4,8 @@ module Darcs.Test.Patch.Selection ( testSuite ) where
 
 import Darcs.Prelude
 
-import Test.Framework (Test, testGroup)
-import Test.Framework.Providers.HUnit ( testCase )
+import Test.Tasty (TestTree, testGroup)
+import Test.Tasty.HUnit ( testCase )
 
 import Darcs.Patch.Witnesses.Ordered ( FL(..), (:>)(..)  )
 import Darcs.Patch.Witnesses.Unsafe ( unsafeCoerceP )
@@ -19,7 +19,7 @@ import Darcs.UI.SelectChanges
     , runSelection
     , WhichChanges(..)
     )
-import Darcs.Patch.PatchInfoAnd ( PatchInfoAnd, patchInfoAndPatch )
+import Darcs.Patch.PatchInfoAnd ( PatchInfoAnd, unavailable )
 import Darcs.Patch.Info ( rawPatchInfo )
 import Darcs.UI.Options.All
     ( Verbosity(..), WithSummary(..)
@@ -31,21 +31,24 @@ import Darcs.Test.TestOnly.Instance ()
 
 type Patch = RepoPatchV2 V2.Prim
 
-testSuite :: Test
-testSuite = testGroup "Darcs.Patch.Selection" $
-  [ dontReadContents whch | whch <- [Last, LastReversed, First, FirstReversed] ]
+testSuite :: TestTree
+testSuite =
+  testGroup
+    "Darcs.Patch.Selection"
+    [ testGroup "matching on patch metadata does not open patch contents" $
+      map dontReadContents [Last, LastReversed, First, FirstReversed]
+    ]
 
-dontReadContents :: WhichChanges -> Test
+dontReadContents :: WhichChanges -> TestTree
 dontReadContents whch =
-    testCase ("Matching on patch metadata does not open patch contents: " ++ show whch)
-      $ do
+  testCase (show whch) $ do
    let -- here is an FL of patches whose metadata can be read but whose contents
        -- should NEVER be read, otherwise something really bad would happen.
        launchNuclearMissilesPatches = unsafeCoerceP $ lnmPatches [ "P " ++ show i | i <- [1..5::Int] ]
        lnmPatches [] = NilFL
        lnmPatches (n:names) = buildPatch n  :>: lnmPatches names
        buildPatch :: String -> PatchInfoAnd Patch wX wY
-       buildPatch name = patchInfoAndPatch (rawPatchInfo "1999" name "harness" [] False) (error "Patch content read!")
+       buildPatch name = unavailable (rawPatchInfo "1999" name "harness" [] False) "Patch content read!"
        pso = PatchSelectionOptions
            { verbosity = Quiet
            , matchFlags = [OnePatch "."]  -- match on every patch
@@ -59,4 +62,3 @@ dontReadContents whch =
    -- and unselected are NilFL or not) should not evaluate the `undefined` inside of our
    -- patches, ie, we don't need to read too much.
    unselected `seq` selected `seq` return ()
-

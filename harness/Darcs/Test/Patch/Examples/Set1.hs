@@ -34,7 +34,7 @@ import Data.String ( IsString(..) )
 import Darcs.Patch
      ( commute, invert, merge
      , Named, infopatch
-     , readPatch
+     , readPatchFL
      , adddir, addfile, hunk, binary, rmdir, rmfile, tokreplace )
 import Darcs.Patch.Info ( patchinfo )
 import Darcs.Patch.FromPrim ( PrimOf, FromPrim(..) )
@@ -359,9 +359,9 @@ fromRight _ = error "impossible"
 primitiveTestPatches = testPatchesAddfile ++
                          testPatchesRmfile ++
                          testPatchesHunk ++
-                         [unseal unsafeCoercePEnd.fromRight.readPatch $
+                         [unseal unsafeCoercePEnd.fromRight.readPatchFL $
                           BC.pack "move ./test/test ./hello",
-                          unseal unsafeCoercePEnd.fromRight.readPatch $
+                          unseal unsafeCoercePEnd.fromRight.readPatchFL $
                           BC.pack "move ./test ./hello"] ++
                          testPatchesBinary
 

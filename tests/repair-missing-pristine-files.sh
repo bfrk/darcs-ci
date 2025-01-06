@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-
-## Test that we produce exactly correct output when sending v1 patches
+## Check for correct behaviour with missing files in pristine
 ##
 ## Copyright (C) 2010 Ganesh Sittampalam
 ##
@@ -24,29 +23,35 @@
 ## CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 ## SOFTWARE.
 
-. lib                  # Load some portability helpers.
+. lib                           # Load some portability helpers.
 
-only-format darcs-1
-
-rm -rf empty
-mkdir empty
-cd empty
+rm -rf foo
+mkdir foo
+cd foo
 darcs init
-cd ..
 
-rm -rf repo
-unpack_testdata simple-v1
-cd repo
-darcs send --no-minimize -o repo.dpatch -a ../empty
+echo 'wibble' > wibble
+darcs rec -lam 'wibble'
 
-compare_bundles $TESTDATA/simple-v1.dpatch repo.dpatch
-cd ..
+darcs check
 
-# context-v1 tests that we are including some context lines in hunk patches
-rm -rf repo
-unpack_testdata context-v1
-cd repo
-darcs send --no-minimize -o repo.dpatch -a ../empty
+roothash=`darcs show pristine | grep ' ./$' | cut -d' ' -f1`
+wibblehash=`darcs show pristine | grep ' wibble$' | cut -d' ' -f1`
 
-compare_bundles $TESTDATA/context-v1.dpatch repo.dpatch
-cd ..
+rm _darcs/pristine.hashed/$roothash
+# also remove it from the cache
+find $HOME/.cache/darcs/pristine.hashed -name $roothash -exec rm -f {} \; || true
+
+not darcs check
+not darcs check
+darcs repair | grep -v 'The repository is already consistent'
+darcs check
+
+rm _darcs/pristine.hashed/$wibblehash
+# also remove it from the cache
+find $HOME/.cache/darcs/pristine.hashed -name $wibblehash -exec rm -f {} \; || true
+
+not darcs check
+not darcs check
+darcs repair | grep -v 'The repository is already consistent'
+darcs check

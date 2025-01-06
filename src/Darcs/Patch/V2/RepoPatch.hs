@@ -42,7 +42,7 @@ import Darcs.Patch.Conflict ( Conflict(..), combineConflicts, mangleOrFail )
 import Darcs.Patch.Debug
 import Darcs.Patch.Effect ( Effect(..) )
 import Darcs.Patch.FileHunk ( IsHunk(..) )
-import Darcs.Patch.Format ( PatchListFormat(..), ListFormat(ListFormatV2) )
+import Darcs.Patch.Format ( FormatPatch(..) )
 import Darcs.Patch.Ident ( PatchId )
 import Darcs.Patch.Invert ( invertFL, invertRL, Invert(..) )
 import Darcs.Patch.Merge ( CleanMerge(..), Merge(..), swapMerge )
@@ -52,7 +52,12 @@ import Darcs.Patch.FromPrim
     , PrimPatchBase(..)
     )
 import Darcs.Patch.Prim ( PrimPatch, applyPrimFL )
-import Darcs.Patch.Read ( bracketedFL, ReadPatch(..) )
+import Darcs.Patch.Read
+    ( ReadPatch(..)
+    , ReadPatches(..)
+    , readBracketedFL
+    , legacyReadPatchFL'
+    )
 import Darcs.Util.Parser ( skipSpace, string, choice )
 import Darcs.Patch.Repair ( mapMaybeSnd, RepairToFL(..), Check(..) )
 import Darcs.Patch.Apply ( Apply(..) )
@@ -61,8 +66,8 @@ import Darcs.Patch.Permutations ( commuteWhatWeCanFL, commuteWhatWeCanRL
                                 , genCommuteWhatWeCanRL, removeRL, removeFL
                                 , removeSubsequenceFL, nubFL, (=\~/=), (=/~\=) )
 import Darcs.Patch.Show
-    ( ShowPatch(..), ShowPatchBasic(..), ShowContextPatch(..), ShowPatchFor(..)
-    , displayPatch )
+    ( ShowContextPatch(..), ShowPatch(..), ShowPatchBasic(..)
+    , showPatch )
 import Darcs.Patch.Summary
     ( Summary(..)
     , ConflictState(..)
@@ -70,11 +75,27 @@ import Darcs.Patch.Summary
     , plainSummary
     )
 import Darcs.Patch.Unwind ( Unwind(..), mkUnwound )
-import Darcs.Patch.V2.Non ( Non(..), Nonable(..), unNon, showNons, showNon
-                          , readNons, readNon, commutePrimsOrAddToCtx
-                          , commuteOrAddToCtx, commuteOrAddToCtxRL
-                          , commuteOrRemFromCtx, commuteOrRemFromCtxFL
-                          , remNons, (*>), (>*), (*>>), (>>*) )
+import Darcs.Patch.V2.Non
+    ( Non(..)
+    , Nonable(..)
+    , commuteOrAddToCtx
+    , commuteOrAddToCtxRL
+    , commuteOrRemFromCtx
+    , commuteOrRemFromCtxFL
+    , commutePrimsOrAddToCtx
+    , readNon
+    , readNons
+    , remNons
+    , showNon
+    , showNons
+    , formatNon
+    , formatNons
+    , unNon
+    , (*>)
+    , (*>>)
+    , (>*)
+    , (>>*)
+    )
 import Darcs.Patch.Witnesses.Unsafe ( unsafeCoerceP )
 import Darcs.Patch.Witnesses.Eq ( Eq2(..), EqCheck(..) )
 import Darcs.Patch.Witnesses.Ordered
@@ -86,6 +107,7 @@ import Darcs.Patch.Witnesses.Sealed
     , unseal )
 import Darcs.Patch.Witnesses.Show ( Show1, Show2, showsPrec2, appPrec )
 
+import qualified Darcs.Util.Format as F
 import Darcs.Util.Path ( AnchoredPath )
 import Darcs.Util.Printer ( Doc, renderString, blueText, redText, (<+>), ($$), vcat )
 
@@ -145,7 +167,7 @@ isForward p = case p of
     p@(Etacilpud _) -> justRedP "An inverse duplicate" p
     _ -> Nothing
   where
-    justRedP msg p = Just $ redText msg $$ displayPatch p
+    justRedP msg p = Just $ redText msg $$ showPatch p
 
 -- |'mergeUnravelled' is used when converting from Darcs V1 patches (Mergers)
 -- to Darcs V2 patches (Conflictors).
@@ -208,7 +230,7 @@ assertConsistent :: PrimPatch prim => RepoPatchV2 prim wX wY
                  -> RepoPatchV2 prim wX wY
 assertConsistent x = maybe x (error . renderString) $ do
     e <- isConsistent x
-    Just (redText "Inconsistent patch:" $$ displayPatch x $$ e)
+    Just (redText "Inconsistent patch:" $$ showPatch x $$ e)
 
 -- | @mergeAfterConflicting@ takes as input a sequence of conflicting patches
 -- @xxx@ (which therefore have no effect) and a sequence of primitive patches
@@ -271,7 +293,7 @@ geteff ix xx =
     case mergeConflictingNons ix of
         Nothing -> error $ renderString $
             redText "mergeConflictingNons failed in geteff: ix" $$
-            displayNons ix $$ redText "xx" $$ displayPatch xx
+            showNons ix $$ redText "xx" $$ showPatch xx
         Just rix ->
             case mergeAfterConflicting rix xx of
                 Just (a, x) ->
@@ -280,9 +302,9 @@ geteff ix xx =
                 Nothing ->
                     error $ renderString $
                         redText "mergeAfterConflicting failed in geteff" $$
-                        redText "where ix" $$ displayNons ix $$
-                        redText "and xx" $$ displayPatch xx $$
-                        redText "and rix" $$ displayPatch rix
+                        redText "where ix" $$ showNons ix $$
+                        redText "and xx" $$ showPatch xx $$
+                        redText "and rix" $$ showPatch rix
 
 xx2nons :: PrimPatch prim => [Non (RepoPatchV2 prim) wX] -> FL prim wX wY
         -> [Non (RepoPatchV2 prim) wX]
@@ -313,18 +335,18 @@ isConsistent (Conflictor im mm m@(Non deps _))
         Just $ redText "m doesn't conflict with mm in isConsistent"
     | any (\x -> any (x `conflictsWith`) nmm) im =
         Just $ redText "mm conflicts with im in isConsistent where nmm is" $$
-               displayNons nmm
+               showNons nmm
     | Nothing <- (nmm ++ im) `minus` toNons deps =
         Just $ redText "dependencies not in conflict:" $$
-               displayNons (toNons deps) $$
+               showNons (toNons deps) $$
                redText "compared with deps itself:" $$
-               displayPatch deps
+               showPatch deps
     | otherwise =
         case allConflictsWith m im of
             (im1, []) | im1 `eqSet` im -> Nothing
             (_, imnc) -> Just $ redText ("m doesn't conflict with im in "
                                          ++ "isConsistent. unconflicting:") $$
-                                displayNons imnc
+                                showNons imnc
     where (nmm, rmm) = geteff im mm
 
 everyoneConflicts :: PrimPatch prim => [Non (RepoPatchV2 prim) wX] -> Bool
@@ -540,7 +562,7 @@ nonHunkMatches :: PatchInspect prim => (BC.ByteString -> Bool)
                -> Non (RepoPatchV2 prim) wX -> Bool
 nonHunkMatches f (Non c x) = hunkMatches f c || hunkMatches f x
 
-toNons :: forall p wX wY . (Commute p, PatchListFormat p,
+toNons :: forall p wX wY . (Commute p,
        Nonable p, ShowPatchBasic (PrimOf p), ShowPatchBasic p)
        => FL p wX wY -> [Non p wX]
 toNons xs = map lastNon $ initsFL xs
@@ -555,9 +577,9 @@ toNons xs = map lastNon $ initsFL xs
                                   redText "Weird case in toNons" $$
                                   redText "please report this bug!" $$
                                   (case xxx of
-                                   z :> zs -> displayPatch (z :>: zs)) $$
-                                  redText "ds are" $$ displayPatch ds $$
-                                  redText "pp is" $$ displayPatch pp
+                                   z :> zs -> showPatch (z :>: zs)) $$
+                                  redText "ds are" $$ showPatch ds $$
+                                  redText "pp is" $$ showPatch pp
 
           reverseFoo :: (p :> FL p) wX wZ -> (RL p :> p) wX wZ
           reverseFoo (p :> ps) = rf NilRL p ps
@@ -826,13 +848,6 @@ instance PrimPatch prim => RepairToFL (RepoPatchV2 prim) where
         mapMaybeSnd (mapFL_FL Normal) `liftM` applyAndTryToFixFL p
     applyAndTryToFixFL x = do apply x; return Nothing
 
-instance PatchListFormat (RepoPatchV2 prim) where
-   -- In principle we could use ListFormatDefault when prim /= V1 Prim patches,
-   -- as those are the only case where we need to support a legacy on-disk
-   -- format. In practice we don't expect RepoPatchV2 to be used with any other
-   -- argument anyway, so it doesn't matter.
-    patchListFormat = ListFormatV2
-
 duplicate, etacilpud, conflictor, rotcilfnoc :: String
 duplicate = "duplicate"
 etacilpud = "etacilpud"
@@ -840,31 +855,52 @@ conflictor = "conflictor"
 rotcilfnoc = "rotcilfnoc"
 
 instance PrimPatch prim => ShowPatchBasic (RepoPatchV2 prim) where
-    showPatch f (Duplicate d) = blueText duplicate $$ showNon f d
-    showPatch f (Etacilpud d) = blueText etacilpud $$ showNon f d
-    showPatch f (Normal p) = showPatch f p
-    showPatch f (Conflictor i NilFL p) =
-        blueText conflictor <+> showNons f i <+> blueText "[]" $$ showNon f p
-    showPatch f (Conflictor i cs p) =
-        blueText conflictor <+> showNons f i <+> blueText "[" $$
-        showFL f cs $$
+    showPatch (Duplicate d) = blueText duplicate $$ showNon d
+    showPatch (Etacilpud d) = blueText etacilpud $$ showNon d
+    showPatch (Normal p) = showPatch p
+    showPatch (Conflictor i NilFL p) =
+        blueText conflictor <+> showNons i <+> blueText "[]" $$ showNon p
+    showPatch (Conflictor i cs p) =
+        blueText conflictor <+> showNons i <+> blueText "[" $$
+        showFL cs $$
         blueText "]" $$
-        showNon f p
-    showPatch f (InvConflictor i NilFL p) =
-        blueText rotcilfnoc <+> showNons f i <+> blueText "[]" $$ showNon f p
-    showPatch f (InvConflictor i cs p) =
-        blueText rotcilfnoc <+> showNons f i <+> blueText "[" $$
-        showFL f cs $$
+        showNon p
+    showPatch (InvConflictor i NilFL p) =
+        blueText rotcilfnoc <+> showNons i <+> blueText "[]" $$ showNon p
+    showPatch (InvConflictor i cs p) =
+        blueText rotcilfnoc <+> showNons i <+> blueText "[" $$
+        showFL cs $$
         blueText "]" $$
-        showNon f p
+        showNon p
+
+instance PrimPatch prim => FormatPatch (RepoPatchV2 prim) where
+    formatPatch (Duplicate d) = F.ascii duplicate F.$$ formatNon d
+    formatPatch (Etacilpud d) = F.ascii etacilpud F.$$ formatNon d
+    formatPatch (Normal p) = formatPatch p
+    formatPatch (Conflictor i NilFL p) =
+        F.ascii conflictor F.<+> formatNons i F.<+> F.ascii "[]" F.$$ formatNon p
+    formatPatch (Conflictor i cs p) =
+        F.vcat
+            [ F.ascii conflictor F.<+> formatNons i F.<+> F.ascii "["
+            , formatPatchFL cs
+            , F.ascii "]"
+            , formatNon p
+            ]
+    formatPatch (InvConflictor i NilFL p) =
+        F.ascii rotcilfnoc F.<+> formatNons i F.<+> F.ascii "[]" F.$$ formatNon p
+    formatPatch (InvConflictor i cs p) =
+        F.ascii rotcilfnoc F.<+> formatNons i F.<+> F.ascii "[" F.$$
+        formatPatchFL cs F.$$
+        F.ascii "]" F.$$
+        formatNon p
 
 instance PrimPatch prim => ShowContextPatch (RepoPatchV2 prim) where
-    showPatchWithContextAndApply f (Normal p) = showPatchWithContextAndApply f p
-    showPatchWithContextAndApply f p = apply p >> return (showPatch f p)
+    showPatchWithContextAndApply (Normal p) = showPatchWithContextAndApply p
+    showPatchWithContextAndApply p = apply p >> return (showPatch p)
 
 instance PrimPatch prim => ShowPatch (RepoPatchV2 prim) where
     summary = plainSummary
-    summaryFL = plainSummary
+    summaryFL = plainSummary -- FIXME shouldn't this be plainSummaryFL ?
     thing _ = "change"
 
 instance PrimPatch prim => ReadPatch (RepoPatchV2 prim) where
@@ -873,7 +909,7 @@ instance PrimPatch prim => ReadPatch (RepoPatchV2 prim) where
         let str = string . BC.pack
             readConflictorPs = do
                i <- readNons
-               ps <- bracketedFL readPatch' '[' ']'
+               ps <- readBracketedFL readPatch' '[' ']'
                p <- readNon
                return (i, ps, p)
         choice [ do str duplicate
@@ -891,6 +927,9 @@ instance PrimPatch prim => ReadPatch (RepoPatchV2 prim) where
                , do Sealed p <- readPatch'
                     return $ Sealed $ Normal p
                ]
+
+instance PrimPatch prim => ReadPatches (RepoPatchV2 prim) where
+    readPatchFL' = legacyReadPatchFL'
 
 instance Show2 prim => Show (RepoPatchV2 prim wX wY) where
     showsPrec d (Normal prim) =
@@ -933,12 +972,10 @@ instance PrimPatch prim => Effect (RepoPatchV2 prim) where
     effect (InvConflictor _ e _) = e
 
 instance IsHunk prim => IsHunk (RepoPatchV2 prim) where
-    isHunk rp = do Normal p <- return rp
-                   isHunk p
+    type ExtraData (RepoPatchV2 prim) = ExtraData prim
+    isHunk (Normal p) = isHunk p
+    isHunk _ = Nothing
+    fromHunk = Normal . fromHunk
 
-displayNons :: (PatchListFormat p, ShowPatchBasic p, PrimPatchBase p) =>
-               [Non p wX] -> Doc
-displayNons p = showNons ForDisplay p
-
-showFL :: ShowPatchBasic p => ShowPatchFor -> FL p wX wY -> Doc
-showFL f = vcat . mapFL (showPatch f)
+showFL :: ShowPatchBasic p => FL p wX wY -> Doc
+showFL = vcat . mapFL showPatch

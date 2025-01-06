@@ -3,10 +3,11 @@
 
 module Darcs.Util.Hash
     ( Hash(..)
-    , encodeBase16, decodeBase16, sha256, sha256strict, sha256sum, rawHash, mkHash
-    , match, encodeHash, decodeHash, showHash
+    , encodeBase16, decodeBase16, sha256, sha256strict, sha256sum
+    , rawHash, mkHash
+    , match, encodeHash, decodeHash, showHash, formatHash
     -- SHA1 related (patch metadata hash)
-    , sha1PS, SHA1(..), showAsHex, sha1Xor, sha1zero, sha1short
+    , sha1, sha1PS, SHA1(..), showAsHex, sha1Xor, sha1zero, sha1short
     , sha1Show, sha1Read
  ) where
 
@@ -19,6 +20,7 @@ import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Short as BS
 import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString.Base16 as B16
+import Darcs.Util.Format ( Format, listWord8Hex )
 
 import qualified Crypto.Hash as H
 
@@ -39,6 +41,9 @@ decodeHash = decodeBase16 . BC.pack
 
 encodeHash :: Hash -> String
 encodeHash = BC.unpack . encodeBase16
+
+formatHash :: Hash -> Format
+formatHash (SHA256 bs) = listWord8Hex (BS.unpack bs)
 
 -- | Produce a base16 (ascii-hex) encoded string from a hash. This can be
 -- turned back into a Hash (see "decodeBase16". This is a loss-less process.
@@ -98,6 +103,9 @@ sha1zero = SHA1 0 0 0 0 0
 
 sha1short :: SHA1 -> Word32
 sha1short (SHA1 a _ _ _ _) = a
+
+sha1:: BL.ByteString -> SHA1
+sha1 bits = decode (BL.fromStrict (convert (H.hashlazy bits :: H.Digest H.SHA1)))
 
 sha1PS:: B.ByteString -> SHA1
 sha1PS = fromArray . convert . H.hashWith H.SHA1 where

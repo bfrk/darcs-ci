@@ -16,16 +16,14 @@ import Data.List.Ordered ( nubSort )
 import Data.Maybe ( catMaybes )
 import qualified Text.XML.Light as XML
 
-import Darcs.Patch.Format ( FileNameFormat(FileNameFormatDisplay) )
 import Darcs.Patch.FromPrim ( PrimPatchBase(..) )
 import Darcs.Patch.Inspect ( PatchInspect(..) )
 import Darcs.Patch.Prim ( PrimDetails(..) )
-import Darcs.Patch.Show ( formatFileName )
 import Darcs.Patch.SummaryData ( SummDetail(..), SummOp(..) )
 import Darcs.Patch.Witnesses.Ordered ( FL, mapFL )
 import Darcs.Patch.Witnesses.Show
 
-import Darcs.Util.Path ( AnchoredPath, anchorPath )
+import Darcs.Util.Path ( AnchoredPath, displayPath, realPath )
 import Darcs.Util.Printer
     ( Doc
     , ($$)
@@ -134,7 +132,7 @@ summChunkToXML (SummChunk detail c) =
       XML.unode t (XML.Attr (XML.unqual "conflict") "true":as, cs)
     xconf Duplicated t as cs =
       XML.unode t (XML.Attr (XML.unqual "suplicate") "true":as, cs)
-    xfn = anchorPath ""
+    xfn = realPath
     cdata s = XML.Text (XML.blank_cdata {XML.cdData = s})
     xad 0 = []
     xad a = [XML.Elem $ XML.unode "added_lines" (XML.Attr (XML.unqual "num") (show a))]
@@ -146,18 +144,22 @@ summChunkToXML (SummChunk detail c) =
 summChunkToLine :: Bool -> SummChunk -> Doc
 summChunkToLine machineReadable (SummChunk detail c) =
   case detail of
-   SummRmDir f   -> lconf c "R" $ formatFileName FileNameFormatDisplay f <> text "/"
-   SummAddDir f  -> lconf c "A" $ formatFileName FileNameFormatDisplay f <> text "/"
-   SummFile SummRm  f _ _ _ -> lconf c "R" $ formatFileName FileNameFormatDisplay f
-   SummFile SummAdd f _ _ _ -> lconf c "A" $ formatFileName FileNameFormatDisplay f
+   SummRmDir f   -> lconf c "R" $ fn f <> text "/"
+   SummAddDir f  -> lconf c "A" $ fn f <> text "/"
+   SummFile SummRm  f r a x
+     | machineReadable -> lconf c "R" $ fn f
+     | otherwise       -> lconf c "R" $ fn f <+> rm r <+> ad a <+> rp x
+   SummFile SummAdd f r a x
+     | machineReadable -> lconf c "A" $ fn f
+     | otherwise       -> lconf c "A" $ fn f <+> rm r <+> ad a <+> rp x
    SummFile SummMod f r a x
-     | machineReadable -> lconf c "M" $ formatFileName FileNameFormatDisplay f
-     | otherwise       -> lconf c "M" $ formatFileName FileNameFormatDisplay f <+> rm r <+> ad a <+> rp x
+     | machineReadable -> lconf c "M" $ fn f
+     | otherwise       -> lconf c "M" $ fn f <+> rm r <+> ad a <+> rp x
    SummMv f1 f2
-     | machineReadable -> text "F " <> formatFileName FileNameFormatDisplay f1
-                       $$ text "T " <> formatFileName FileNameFormatDisplay f2
-     | otherwise       -> text " "    <> formatFileName FileNameFormatDisplay f1
-                       <> text " -> " <> formatFileName FileNameFormatDisplay f2
+     | machineReadable -> text "F " <> fn f1
+                       $$ text "T " <> fn f2
+     | otherwise       -> text " "    <> fn f1
+                       <> text " -> " <> fn f2
    SummNone -> case c of
                Okay -> empty
                _    -> lconf c ""  empty
@@ -174,3 +176,4 @@ summChunkToLine machineReadable (SummChunk detail c) =
    rm a = text "-" <> text (show a)
    rp 0 = empty
    rp a = text "r" <> text (show a)
+   fn = text . displayPath

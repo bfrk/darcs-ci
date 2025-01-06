@@ -63,7 +63,7 @@ import qualified Darcs.Patch.Prim.FileUUID as FileUUID
 import Darcs.Patch.Annotate.Class
 import Darcs.Patch.Effect ( Effect(..) )
 import Darcs.Patch.FromPrim ( PrimOf )
-import Darcs.Patch.Info ( displayPatchInfo, piAuthor, makePatchname )
+import Darcs.Patch.Info ( showPatchInfo, piAuthor, makePatchname )
 import Darcs.Patch.Invert ( Invert, invert )
 import Darcs.Patch.Named ( patchcontents )
 import Darcs.Patch.PatchInfoAnd( info, PatchInfoAnd, hopefully )
@@ -232,7 +232,7 @@ format d a = pi_list ++ "\n" ++ numbered
 
     numbered = unlines . map prependNum $ numberedLines
 
-    pi_list = unlines [ show n ++ ": " ++ renderString (displayPatchInfo i)
+    pi_list = unlines [ show n ++ ": " ++ renderString (showPatchInfo i)
                       | (n :: Int, i) <- zip [1..] pis ]
 
     file = concat [ annotation (fst $ NE.head chunk) ++ " | " ++ line (NE.head chunk) ++

@@ -6,10 +6,9 @@ module Darcs.Patch.Rebase.Legacy.Item
 
 import Darcs.Prelude
 
-import Darcs.Patch.Format ( PatchListFormat(..) )
 import Darcs.Patch.Named ( Named(..) )
-import Darcs.Patch.Read ( ReadPatch(..) )
-import Darcs.Patch.FromPrim ( PrimPatchBase, PrimOf )
+import Darcs.Patch.Read ( ReadPatch(..), ReadPatches(..) )
+import Darcs.Patch.FromPrim ( PrimOf )
 import Darcs.Patch.Rebase.Change ( RebaseChange(..), addNamedToRebase )
 import Darcs.Patch.Rebase.Fixup ( RebaseFixup(..) )
 import Darcs.Patch.RepoPatch ( RepoPatch )
@@ -65,7 +64,7 @@ toRebaseChanges (ToEdit te :>: ps) =
 -- This Read instance partly duplicates the instances for RebaseFixup,
 -- but are left this way given this code is now here only for backwards compatibility of the on-disk
 -- format and we might want to make future changes to RebaseFixup.
-instance (PrimPatchBase p, PatchListFormat p, ReadPatch p) => ReadPatch (RebaseItem p) where
+instance (ReadPatches p, ReadPatch (PrimOf p)) => ReadPatch (RebaseItem p) where
    readPatch' = mapSeal ToEdit              <$> readWith (BC.pack "rebase-toedit") <|>
                 mapSeal (Fixup . PrimFixup) <$> readWith (BC.pack "rebase-fixup" ) <|>
                 mapSeal (Fixup . NameFixup) <$> readWith (BC.pack "rebase-name"  )
@@ -75,3 +74,5 @@ instance (PrimPatchBase p, PatchListFormat p, ReadPatch p) => ReadPatch (RebaseI
                              res <- readPatch'
                              lexString (BC.pack ")")
                              return res
+
+instance (ReadPatches p, ReadPatch (PrimOf p)) => ReadPatches (RebaseItem p)

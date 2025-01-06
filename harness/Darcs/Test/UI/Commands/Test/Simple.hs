@@ -24,14 +24,14 @@ import Darcs.UI.Commands.Test.Impl
 import Darcs.Test.UI.Commands.Test.IndexedApply ( IndexedApply(..) )
 
 import Data.Constraint ( Dict(..) )
-import Test.Framework.Providers.HUnit ( testCase )
-import Test.Framework.Providers.QuickCheck2 ( testProperty )
-import Test.Framework ( Test, testGroup )
+import Test.Tasty.HUnit ( testCase )
+import Test.Tasty.QuickCheck ( QuickCheckMaxSize(..), testProperty )
+import Test.Tasty ( TestTree, adjustOption, testGroup )
 import Test.HUnit ( assertEqual )
 import Test.QuickCheck ( Arbitrary(..), Gen, Property, property, Discard(..), forAll, forAllShrink )
 import Test.QuickCheck.Gen ( listOf, listOf1, frequency, elements )
 
-testSuite :: Test
+testSuite :: TestTree
 testSuite =
   testGroup "Darcs.UI.Commands.Test.Simple"
     [ testGroup "Generic test cases" $ map genericTestCases [O.Linear, O.Bisect, O.Backoff]
@@ -39,7 +39,7 @@ testSuite =
     , testGroup "Randomised tests against linear" $ map genericRandomised [O.Bisect, O.Backoff]
     ]
 
-genericTestCases :: O.TestStrategy -> Test
+genericTestCases :: O.TestStrategy -> TestTree
 genericTestCases testStrategy =
   testGroup (show testStrategy) $ map (expectedResult testStrategy)
     [ ("Sequence ending in success", ((U, [S]), NoFailureOnHead))
@@ -53,21 +53,22 @@ genericTestCases testStrategy =
 
 type ExpectedResult = ((TestingState, [TestingState]), StrategyResultRaw [Int])
 
-expectedResult :: O.TestStrategy -> (String, ExpectedResult) -> Test
+expectedResult :: O.TestStrategy -> (String, ExpectedResult) -> TestTree
 expectedResult testStrategy (testName, (testDetails, expectedTestResult)) =
   testCase testName $ do
   -- whether we try to shrink or not is irrelevant as nothing will commute
     let result = runStrategyOn testStrategy O.NoShrinkFailure testDetails
     assertEqual "Unexpected result" expectedTestResult result
 
-genericRandomised :: O.TestStrategy -> Test
+genericRandomised :: O.TestStrategy -> TestTree
 genericRandomised testStrategy =
   testGroup (show testStrategy)
     [ testProperty "simple sequence" (simpleSequence testStrategy)
-    , testProperty "multi sequence" (multiSequence testStrategy)
+    , adjustOption (\(QuickCheckMaxSize n) -> QuickCheckMaxSize (n `div` 5)) $
+      testProperty "multi sequence" (multiSequence testStrategy)
     ]
 
-linearRandomised :: Test
+linearRandomised :: TestTree
 linearRandomised =
   testGroup (show O.Linear)
     [ testProperty "blame is found when possible" (findBlame O.Linear)

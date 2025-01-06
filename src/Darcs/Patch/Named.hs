@@ -53,9 +53,16 @@ import Darcs.Patch.Conflict ( Conflict(..), findConflicting, isConflicted )
 import Darcs.Patch.Debug ( PatchDebug(..) )
 import Darcs.Patch.Effect ( Effect(effect) )
 import Darcs.Patch.FileHunk ( IsHunk(..) )
-import Darcs.Patch.Format ( PatchListFormat )
-import Darcs.Patch.Info ( PatchInfo, readPatchInfo, showPatchInfo, patchinfo,
-                          piName, displayPatchInfo, makePatchname )
+import Darcs.Patch.Format ( FormatPatch(..) )
+import Darcs.Patch.Info
+    ( PatchInfo
+    , makePatchname
+    , patchinfo
+    , piName
+    , readPatchInfo
+    , showPatchInfo
+    , formatPatchInfo
+    )
 import Darcs.Patch.Merge ( CleanMerge(..), Merge(..) )
 import Darcs.Patch.Object ( ObjectId )
 import Darcs.Patch.Apply ( Apply(..), ObjectIdOfPatch )
@@ -63,7 +70,7 @@ import Darcs.Patch.Commute ( Commute(..) )
 import Darcs.Patch.Ident ( Ident(..), PatchId )
 import Darcs.Patch.Inspect ( PatchInspect(..) )
 import Darcs.Patch.Permutations ( genCommuteWhatWeCanRL )
-import Darcs.Patch.Read ( ReadPatch(..) )
+import Darcs.Patch.Read ( ReadPatch(..), ReadPatches(..) )
 import Darcs.Patch.FromPrim ( PrimPatchBase(..), FromPrim(..) )
 import Darcs.Util.Parser ( Parser, option, lexChar,
                                 choice, skipWhile, anyChar )
@@ -72,8 +79,7 @@ import Darcs.Patch.Show
     ( ShowContextPatch(..)
     , ShowPatch(..)
     , ShowPatchBasic(..)
-    , ShowPatchFor(..)
-    , displayPatch
+    , showPatch
     )
 import Darcs.Patch.Summary
     ( Summary(..)
@@ -92,6 +98,7 @@ import Darcs.Patch.Witnesses.Ordered
 import Darcs.Patch.Witnesses.Sealed ( Sealed, mapSeal )
 import Darcs.Patch.Witnesses.Show ( Show1, Show2 )
 
+import qualified Darcs.Util.Format as F
 import Darcs.Util.IsoDate ( showIsoDateTime, theBeginning )
 import Darcs.Util.Printer
     ( Doc, ($$), (<+>), text, vcat, cyanText, blueText, redText )
@@ -119,18 +126,16 @@ type instance PatchId (Named p) = PatchInfo
 instance Ident (Named p) where
     ident = patch2patchinfo
 
-instance IsHunk (Named p) where
-    isHunk _ = Nothing
+instance ReadPatches p => ReadPatch (Named p) where
+    readPatch' = readNamed
 
-instance PatchListFormat (Named p)
+-- this instance is only needed for reading patch bundles
+instance ReadPatches p => ReadPatches (Named p)
 
-instance (ReadPatch p, PatchListFormat p) => ReadPatch (Named p) where
- readPatch' = readNamed
-
-readNamed :: (ReadPatch p, PatchListFormat p) => Parser (Sealed (Named p wX))
+readNamed :: ReadPatches p => Parser (Sealed (Named p wX))
 readNamed = do n <- readPatchInfo
                d <- readDepends
-               p <- readPatch'
+               p <- readPatchFL'
                return $ (NamedP n d) `mapSeal` p
 
 readDepends :: Parser [PatchInfo]
@@ -270,7 +275,6 @@ instance ( Commute p
          , Conflict p
          , Summary p
          , PrimPatchBase p
-         , PatchListFormat p
          , ShowPatch p
          ) =>
          Conflict (Named p) where
@@ -415,37 +419,35 @@ instance Summary p => Summary (Named p) where
 instance Check p => Check (Named p) where
     isInconsistent (NamedP _ _ p) = isInconsistent p
 
--- ForStorage: note the difference between use of <> when there are
--- no explicit dependencies vs. <+> when there are
-showNamedPrefix :: ShowPatchFor -> PatchInfo -> [PatchInfo] -> Doc -> Doc
-showNamedPrefix f@ForStorage n [] p =
-    showPatchInfo f n <> p
-showNamedPrefix f@ForStorage n d p =
-    showPatchInfo f n
-    $$ blueText "<"
-    $$ vcat (map (showPatchInfo f) d)
-    $$ blueText ">"
-    <+> p
-showNamedPrefix f@ForDisplay n [] p =
-    showPatchInfo f n
-    $$ p
-showNamedPrefix f@ForDisplay n d p =
-    showPatchInfo f n
-    $$ showDependencies ShowNormalDeps ShowDepsVerbose d
-    $$ p
+showNamedPrefix :: PatchInfo -> [PatchInfo] -> Doc -> Doc
+showNamedPrefix n d p =
+  showPatchInfo n $$ showDependencies ShowNormalDeps ShowDepsVerbose d $$ p
 
-instance (PatchListFormat p, ShowPatchBasic p) => ShowPatchBasic (Named p) where
-    showPatch f (NamedP n d p) = showNamedPrefix f n d $ showPatch f p
+instance FormatPatch p => FormatPatch (Named p) where
+    -- note the difference between use of <> when there are
+    -- no explicit dependencies vs. <+> when there are
+    formatPatch (NamedP n d ps) = storeNamedPrefix d $ formatPatchFL ps
+      where
+        storeNamedPrefix [] p = formatPatchInfo n <> p
+        storeNamedPrefix ds p =
+          F.vcat
+            [ formatPatchInfo n
+            , F.ascii "<"
+            , F.vcat (map formatPatchInfo ds)
+            , F.ascii ">" F.<+> p
+            ]
+
+instance ShowPatchBasic p => ShowPatchBasic (Named p) where
+    showPatch (NamedP n d p) = showNamedPrefix n d $ showPatch p
 
 instance ( Apply p
          , IsHunk p
-         , PatchListFormat p
          , ObjectId (ObjectIdOfPatch p)
          , ShowContextPatch p
          ) =>
          ShowContextPatch (Named p) where
-    showPatchWithContextAndApply f (NamedP n d p) =
-        showNamedPrefix f n d <$> showPatchWithContextAndApply f p
+    showPatchWithContextAndApply (NamedP n d p) =
+        showNamedPrefix n d <$> showPatchWithContextAndApply p
 
 data ShowDepsFormat = ShowDepsVerbose | ShowDepsSummary deriving (Eq)
 
@@ -468,9 +470,8 @@ showDependencies which format deps = vcat (map showDependency deps)
     mark ShowNormalDeps ShowDepsSummary = text "D"
     mark ShowDroppedDeps ShowDepsSummary = text "D!"
 
-instance (Summary p, PatchListFormat p,
-          PrimPatchBase p, ShowPatch p) => ShowPatch (Named p) where
-    description (NamedP n _ _) = displayPatchInfo n
+instance (Summary p, PrimPatchBase p, ShowPatch p) => ShowPatch (Named p) where
+    description (NamedP n _ _) = showPatchInfo n
     summary (NamedP _ ds ps) =
         showDependencies ShowNormalDeps ShowDepsSummary ds $$ plainSummaryFL ps
     summaryFL nps =
@@ -479,7 +480,7 @@ instance (Summary p, PatchListFormat p,
         ds = nubSort $ concat $ mapFL getdeps nps
         ps = concatFL $ mapFL_FL patchcontents nps
     content (NamedP _ ds ps) =
-        showDependencies ShowNormalDeps ShowDepsVerbose ds $$ displayPatch ps
+        showDependencies ShowNormalDeps ShowDepsVerbose ds $$ showPatch ps
 
 instance Show2 p => Show1 (Named p wX)
 

@@ -14,7 +14,6 @@ import Darcs.Patch.Commute
 import Darcs.Patch.CommuteFn
   ( commuterIdFL, commuterFLId
   )
-import Darcs.Patch.Format ( PatchListFormat )
 import Darcs.Patch.FromPrim ( PrimOf )
 import Darcs.Patch.Invert
   ( Invert(..), invertFL, invertRL
@@ -56,16 +55,16 @@ deriving instance Show2 prim => Show (Unwound prim wX wY)
 instance Show2 prim => Show1 (Unwound prim wX)
 instance Show2 prim => Show2 (Unwound prim)
 
-instance (PatchListFormat prim, ShowPatchBasic prim)
+instance ShowPatchBasic prim
   => ShowPatchBasic (Unwound prim) where
-  showPatch f (Unwound before prims after) =
+  showPatch (Unwound before prims after) =
     vcat [
       blueText "before:",
-      showPatch f before,
+      showPatch before,
       blueText "prims:",
-      showPatch f prims,
+      showPatch prims,
       blueText "after:",
-      showPatch f after
+      showPatch after
     ]
 
 instance Invert prim => Invert (Unwound prim) where

@@ -36,7 +36,6 @@ import Darcs.Repository.InternalTypes
     , repoCache
     , repoFormat
     , repoLocation
-    , withRepoDir
     )
 import Darcs.Repository.Old ( oldRepoFailMsg )
 import Darcs.Repository.Paths
@@ -46,7 +45,8 @@ import Darcs.Repository.Paths
 
 import Darcs.Util.ByteString ( gzReadFilePS )
 import Darcs.Util.Cache ( Cache )
-import Darcs.Util.Lock ( writeDocBinFile )
+import Darcs.Util.File ( fetchFilePS, Cachable(Uncachable) )
+import Darcs.Util.Lock ( readBinFile, writeFormatBinFile )
 import Darcs.Util.Printer ( ($$), renderString, text )
 import Darcs.Util.Tree ( Tree )
 import Darcs.Util.Tree.Hashed
@@ -114,19 +114,16 @@ applyToTentativePristine r p = do
     -- that just contains said hash).
     let tentativePristineHash = peekPristineHash tentativePristine
     newPristineHash <- applyToHashedPristine (repoCache r) tentativePristineHash p
-    writeDocBinFile tentativePristinePath $
+    writeFormatBinFile tentativePristinePath $
         pokePristineHash newPristineHash tentativePristine
 
 readHashedPristineRoot :: Repository rt p wU wR -> IO PristineHash
 readHashedPristineRoot r =
-  withRepoDir r $
+  peekPristineHash <$>
     case repoAccessType r of
-      SRO -> getHash hashedInventoryPath
-      SRW -> getHash tentativePristinePath -- note the asymmetry!
-  where
-    getHash path =
-      peekPristineHash <$>
-        gzReadFilePS path `catch` (\(_ :: IOException) -> fail oldRepoFailMsg)
+      SRO -> fetchFilePS (repoLocation r </> hashedInventoryPath) Uncachable
+      SRW -> readBinFile tentativePristinePath -- note the asymmetry!
+  `catch` (\(_ :: IOException) -> fail oldRepoFailMsg)
 
 -- | Write the pristine tree into a plain directory at the given path.
 createPristineDirectoryTree ::
@@ -148,7 +145,7 @@ readPristine repo
   | formatHas HashedInventory (repoFormat repo) =
     case repoAccessType repo of
       SRO -> do
-        inv <- gzReadFilePS $ repoLocation repo </> hashedInventoryPath
+        inv <- fetchFilePS (repoLocation repo </> hashedInventoryPath) Uncachable
         let root = peekPristineHash inv
         readDarcsHashed (repoCache repo) root
       SRW -> do
@@ -173,5 +170,5 @@ writePristine repo tree =
   where
     putHash root path = do
       content <- gzReadFilePS path
-      writeDocBinFile path $ pokePristineHash root content
+      writeFormatBinFile path $ pokePristineHash root content
       return root

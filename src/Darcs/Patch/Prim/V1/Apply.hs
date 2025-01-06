@@ -15,8 +15,10 @@ import Darcs.Patch.Prim.V1.Core
       DirPatchType(..), FilePatchType(..) )
 import Darcs.Patch.Prim.V1.Show ( showHunk )
 
+import Darcs.Patch.Prim.Class ( showPrimWithContextAndApply )
+import Darcs.Patch.Show ( ShowContextPatch(..) )
+
 import Darcs.Util.Path ( AnchoredPath, anchorPath )
-import Darcs.Patch.Format ( FileNameFormat(FileNameFormatDisplay) )
 import Darcs.Patch.TokenReplace ( tryTokReplace )
 
 import Darcs.Patch.ApplyMonad ( ApplyMonadTree(..) )
@@ -143,6 +145,10 @@ instance PrimApply Prim where
               hunkmod _ _ = error "impossible case"
     applyPrimFL (p:>:ps) = apply p >> applyPrimFL ps
 
+
+instance ShowContextPatch Prim where
+  showPatchWithContextAndApply = showPrimWithContextAndApply
+
 applyHunk :: MonadThrow m
           => AnchoredPath
           -> (Int, [B.ByteString], [B.ByteString])
@@ -157,7 +163,7 @@ applyHunk f h fc =
       "\n### to file " ++ ap2fp f ++ ":\n" ++ BC.unpack fc ++
       "### Reason: " ++ msg
   where
-    renderHunk (l, o, n) = renderString (showHunk FileNameFormatDisplay f l o n)
+    renderHunk (l, o, n) = renderString (showHunk f l o n)
 
 {- The way darcs handles newlines is not easy to understand.
 

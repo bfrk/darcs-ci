@@ -40,7 +40,7 @@ import Darcs.UI.Options.All
 
 import Darcs.UI.Defaults ( applyDefaults )
 import Darcs.UI.External ( viewDoc )
-import Darcs.UI.Flags ( DarcsFlag, matchAny, withNewRepo )
+import Darcs.UI.Flags ( DarcsFlag, matchAny )
 import Darcs.UI.Commands
     ( CommandArgs( CommandOnly, SuperCommandOnly, SuperCommandSub )
     , CommandControl
@@ -60,7 +60,6 @@ import Darcs.UI.Commands
     , superName
     )
 import Darcs.UI.Commands.GZCRCs ( doCRCWarnings )
-import Darcs.UI.Commands.Clone ( makeRepoName, cloneToSSH )
 import Darcs.UI.RunHook ( runPosthook, runPrehook )
 import Darcs.UI.Usage
     ( getCommandHelp
@@ -73,7 +72,7 @@ import Darcs.Repository.Prefs ( Pref(Defaults), getGlobal, getPreflist )
 import Darcs.Util.AtExit ( atexit )
 import Darcs.Util.Exception ( die )
 import Darcs.Util.Global ( setDebugMode, setTimingsMode )
-import Darcs.Util.Path ( AbsolutePath, getCurrentDirectory, toPath, ioAbsoluteOrRemote, makeAbsolute )
+import Darcs.Util.Path ( AbsolutePath, getCurrentDirectory )
 import Darcs.Util.Printer ( (<+>), ($+$), renderString, text, vcat )
 import Darcs.Util.Printer.Color ( ePutDocLn )
 import Darcs.Util.Progress ( setProgressMode )
@@ -150,9 +149,9 @@ runWithHooks cmd (new_wd, old_wd) flags extra = do
    preHookExitCode <- runPrehook (pre hooksCfg) verb new_wd
    if preHookExitCode /= ExitSuccess
       then exitWith preHookExitCode
-      else do phDir <- getPosthookDir new_wd cmd flags extra
-              commandCommand cmd (new_wd, old_wd) flags extra
-              postHookExitCode <- runPosthook (post hooksCfg) verb phDir
+      else do commandCommand cmd (new_wd, old_wd) flags extra
+              wd <- getCurrentDirectory
+              postHookExitCode <- runPosthook (post hooksCfg) verb wd
               exitWith postHookExitCode
 
 setGlobalVariables :: Verbosity -> Bool -> Bool -> IO ()
@@ -161,24 +160,6 @@ setGlobalVariables verb debug timings = do
   when debug setDebugMode
   when (verb == Quiet) $ setProgressMode False
   unless (verb == Quiet) $ atexit $ doCRCWarnings (verb == Verbose)
-
--- | Returns the working directory for the posthook. For most commands, the
--- first parameter is returned. For the \'get\' command, the path of the newly
--- created repository is returned if it is not an ssh url.
-getPosthookDir :: AbsolutePath -> DarcsCommand -> [DarcsFlag] -> [String] -> IO AbsolutePath
-getPosthookDir new_wd cmd flags extra | commandName cmd `elem` ["get","clone"] = do
-    case extra of
-      [inrepodir, outname] -> getPosthookDir new_wd cmd (withNewRepo outname flags) [inrepodir]
-      [inrepodir] ->
-        case cloneToSSH flags of
-         Nothing -> do
-          repodir <- toPath <$> ioAbsoluteOrRemote inrepodir
-          newRepo <- makeRepoName False flags repodir
-          return $ makeAbsolute new_wd newRepo
-         _ -> return new_wd
-      _ -> die "You must provide 'clone' with either one or two arguments."
-getPosthookDir new_wd _ _ _ = return new_wd
-
 
 -- | Checks if the number of extra arguments matches the number of extra
 -- arguments supported by the command as specified in `commandExtraArgs`.

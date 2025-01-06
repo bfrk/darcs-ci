@@ -23,12 +23,13 @@ tester**20101016222822
 ] addfile ./wibble
 hunk ./wibble 1
 +wibble
+
 [A
 tester**20101016222822
  Ignore-this: 2d69de402438481946682efcad5e20cd
 ] hunk ./wibble 2
- wibble
 +A
+
 [B
 tester**20101016222822
  Ignore-this: 9c8daaedcb674c022ddbcef19752d694

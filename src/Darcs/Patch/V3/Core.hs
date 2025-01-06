@@ -41,7 +41,7 @@ import Darcs.Patch.CommuteFn ( CommuteFn )
 import Darcs.Patch.CommuteNoConflicts ( CommuteNoConflicts(..) )
 import Darcs.Patch.Debug ( PatchDebug(..) )
 import Darcs.Patch.FileHunk ( IsHunk(..) )
-import Darcs.Patch.Format ( ListFormat(ListFormatV3) )
+import Darcs.Patch.Format ( FormatPatch(..) )
 import Darcs.Patch.FromPrim ( ToPrim(..) )
 import Darcs.Patch.Ident
     ( Ident(..)
@@ -63,7 +63,7 @@ import Darcs.Patch.Merge
     )
 import Darcs.Patch.Prim ( PrimPatch, applyPrimFL, sortCoalesceFL )
 import Darcs.Patch.Prim.WithName ( PrimWithName, wnPatch )
-import Darcs.Patch.Read ( bracketedFL )
+import Darcs.Patch.Read ( readBracketedFL )
 import Darcs.Patch.Repair (RepairToFL(..), Check(..) )
 import Darcs.Patch.RepoPatch
     ( Apply(..)
@@ -71,12 +71,12 @@ import Darcs.Patch.RepoPatch
     , Effect(..)
     , Eq2(..)
     , PatchInspect(..)
-    , PatchListFormat(..)
     , PrimPatchBase(..)
     , ReadPatch(..)
+    , ReadPatches(..)
     , Summary(..)
     )
-import Darcs.Patch.Show hiding ( displayPatch )
+import Darcs.Patch.Show ( ShowContextPatch(..), ShowPatch(..), ShowPatchBasic(..) )
 import Darcs.Patch.Summary
     ( ConflictState(..)
     , IsConflictedPrim(..)
@@ -97,8 +97,8 @@ import Darcs.Patch.V3.Contexted
     , ctxToFL
     , ctxTouches
     , ctxHunkMatches
-    , showCtx
     , readCtx
+    , formatCtx
     )
 import Darcs.Patch.Witnesses.Eq ( EqCheck(..) )
 import Darcs.Patch.Witnesses.Ordered
@@ -119,11 +119,12 @@ import Darcs.Patch.Witnesses.Unsafe ( unsafeCoerceP1 )
 
 import Darcs.Test.TestOnly
 
+import qualified Darcs.Util.Format as F
 import Darcs.Util.Parser ( string, lexString, choice, skipSpace )
 import Darcs.Util.Printer
     ( Doc
+    , Print
     , ($$)
-    , (<+>)
     , blueText
     , redText
     , renderString
@@ -179,8 +180,11 @@ instance SignedId name => Ident (RepoPatchV3 name prim) where
 
 -- We only use displayPatch for error messages here, so it makes sense
 -- to use the storage format that contains the patch names.
-displayPatch :: ShowPatchBasic p => p wX wY -> Doc
-displayPatch p = showPatch ForStorage p
+displayPatch :: FormatPatch p => p wX wY -> Doc
+displayPatch = F.toDoc . formatPatch
+
+displayPatchFL :: FormatPatch p => FL p wX wY -> Doc
+displayPatchFL = F.toDoc . formatPatchFL
 
 instance (SignedId name, StorableId name, PrimPatch prim) =>
          CleanMerge (RepoPatchV3 name prim) where
@@ -263,8 +267,8 @@ instance (SignedId name, StorableId name, PrimPatch prim) =>
             error $ renderString $ redText "uncommon effects can't be merged cleanly:"
               $$ redText "lhs:" $$ displayPatch lhs
               $$ redText "rhs:" $$ displayPatch rhs
-              $$ redText "r:" $$ displayPatch r
-              $$ redText "s:" $$ displayPatch s
+              $$ redText "r:" $$ displayPatchFL r
+              $$ redText "s:" $$ displayPatchFL s
 
 -- * CommuteNoConflicts
 
@@ -338,7 +342,7 @@ commuteConflicting (Prim p :> Conflictor s y cq)
             $ redText "commuteConflicting: cannot remove (invert lhs):"
             $$ displayPatch (invert p)
             $$ redText "from effect of rhs:"
-            $$ displayPatch s
+            $$ displayPatchFL s
         Just r ->
           let cp = ctxAddInvFL r (ctx p)
           in Just (Conflictor r (cp -| y) cq :> Conflictor NilFL (S.singleton cq) cp)
@@ -367,7 +371,7 @@ commuteConflicting (lhs@(Conflictor r x cp) :> rhs@(Conflictor NilFL y cq))
           -- rhs would also have to conflict with the patch x, again in
           -- contradiction to our case assumption. QED
           error $ renderString $ redText "remaining context in commute:"
-            $$ displayPatch c'
+            $$ displayPatchFL c'
             $$ redText "lhs:" $$ displayPatch lhs
             $$ redText "rhs:" $$ displayPatch rhs
 -- conflicting conflictors where the rhs conflicts with lhs but
@@ -426,7 +430,11 @@ instance PatchInspect prim => PatchInspect (RepoPatchV3 name prim) where
 instance (SignedId name, Eq2 prim, Commute prim) => Eq2 (RepoPatchV3 name prim) where
     (Prim p) =\/= (Prim q) = p =\/= q
     (Conflictor r x cp) =\/= (Conflictor s y cq)
-        | IsEq <- r =\^/= s -- more efficient than IsEq <- r =\/= s
+        | IsEq <- r =\^/= s
+        -- =\^/= is not only more efficient than r =\/= s but also
+        -- semantically correct, since we want to treat different
+        -- orderings of the effect as equal here, same as we do for
+        -- the contexts in cp and cq.
         , x == y
         , cp == cq = IsEq
     _ =\/= _ = NotEq
@@ -461,13 +469,11 @@ instance PrimPatch prim => Apply (RepoPatchV3 name prim) where
   apply = applyPrimFL . effect
   unapply = applyPrimFL . invert . effect
 
-instance PatchListFormat (RepoPatchV3 name prim) where
-  patchListFormat = ListFormatV3
-
-instance IsHunk prim => IsHunk (RepoPatchV3 name prim) where
-  isHunk rp = do
-    Prim p <- return rp
-    isHunk p
+instance (IsHunk prim, Print name) => IsHunk (RepoPatchV3 name prim) where
+  type ExtraData (RepoPatchV3 name prim) = (name, ExtraData prim)
+  isHunk (Prim p) = isHunk p
+  isHunk _ = Nothing
+  fromHunk = Prim . fromHunk
 
 instance Summary (RepoPatchV3 name prim) where
   conflictedEffect (Conflictor _ _ (ctxView -> Sealed (_ :> p))) = [IsC Conflicted (wnPatch p)]
@@ -493,7 +499,36 @@ instance PrimPatch prim => Check (RepoPatchV3 name prim)
   -- use the default implementation for method isInconsistent
 
 instance PrimPatch prim => RepairToFL (RepoPatchV3 name prim)
-  -- use the default implementation for method applyAndTryToFixFL
+  {- TODO [V3INTEGRATION]:
+
+  For V1 and V2 we only repair (wrapped) prim patches, and not the
+  ingredients of Mergers or Conflictors (or even Duplicates). This is bad
+  enough, since patches conflicting with or duplicating repaired prims now
+  become invalid.
+
+  For Conflictors and Mergers it is unclear whether fixing non-prim patches
+  by recursively fixing their ingredients makes sense, since the earlier
+  (unconflicted) patch may no longer conflict after being repaired, thus
+  again invalidating the conflicted patches. The only way to be sure would
+  be to re-calculate the merge after (recursively!) un-merging and fixing
+  the resulting prims, something that at least for V1 and V2 seems
+  pointless, as it will likely run into /actual/ commutation bugs or
+  exponential blow-ups.
+
+  But we should at least detect this when running repair, i.e. by checking
+  all ingredients of complex (non-prim) patches and failing the whole
+  operation in that case.
+
+  V2 Duplicates are a special thing: they could be easily repaired, I can't
+  understand why this was never done. TODO implement that.
+
+  A simple way to guarantee consistent repairs (inside a single repo) would
+  be to flatten conflictors that conflict with repaired patches to their
+  effect. Since repair keeps patch identities, this can of course cause
+  problems when we interact with other repos that still have the unrepaired
+  patches. This is, however, already the case today and can easily be fixed
+  by repairing the other repos, too. (Flattened conflictors will look the
+  same in all repos.) -}
 
 instance (SignedId name, StorableId name, PrimPatch prim)
   => ShowPatch (RepoPatchV3 name prim) where
@@ -505,8 +540,8 @@ instance (SignedId name, StorableId name, PrimPatch prim)
 instance (SignedId name, StorableId name, PrimPatch prim)
   => ShowContextPatch (RepoPatchV3 name prim) where
 
-  showPatchWithContextAndApply f (Prim p) = showPatchWithContextAndApply f p
-  showPatchWithContextAndApply f p = apply p >> return (showPatch f p)
+  showPatchWithContextAndApply (Prim p) = showPatchWithContextAndApply p
+  showPatchWithContextAndApply p = apply p >> return (showPatch p)
 
 -- * Read and Write
 
@@ -523,47 +558,52 @@ instance (SignedId name, StorableId name, PrimPatch prim)
       ]
     where
       readContent = do
-        r <- bracketedFL readPatch' '[' ']'
+        r <- readBracketedFL readPatch' '[' ']'
         x <- readCtxSet
         p <- readCtx
         return (r, x, p)
-      readCtxSet = (lexString (BC.pack "{{") >> go) <|> pure S.empty
+      readCtxSet = lexString (BC.pack "{{") >> go
         where
-          go = (lexString (BC.pack "}}") >> pure S.empty) <|> S.insert <$> readCtx <*> go
+          go =
+            (lexString (BC.pack "}}") >> pure S.empty)
+            <|>
+            (S.insert <$> readCtx <*> go)
+
+instance (SignedId name, StorableId name, PrimPatch prim)
+  => ReadPatches (RepoPatchV3 name prim)
 
 instance (SignedId name, StorableId name, PrimPatch prim)
   => ShowPatchBasic (RepoPatchV3 name prim) where
 
-  showPatch fmt rp =
+  showPatch rp =
     case rp of
-      Prim p -> showPatch fmt p
+      Prim p -> showPatch p
       Conflictor r x cp ->
-        case fmt of
-          ForStorage -> blueText "conflictor" <+> showContent r x cp
-          ForDisplay ->
-            vcat
-            [ blueText "conflictor"
-            , vcat (mapFL displayPatch r)
-            , redText "v v v v v v v"
-            , vcat [ displayCtx p $$ redText "*************" | p <- S.toList x ]
-            , displayCtx cp
-            , redText "^ ^ ^ ^ ^ ^ ^"
-            ]
+        vcat
+          [ blueText "conflictor"
+          , vcat (mapFL showPatch r)
+          , redText "v v v v v v v"
+          , vcat [ displayCtx p $$ redText "*************" | p <- S.toList x ]
+          , displayCtx cp
+          , redText "^ ^ ^ ^ ^ ^ ^"
+          ]
     where
-      showContent r x cp = showEffect r <+> showCtxSet x $$ showCtx fmt cp
-      showEffect NilFL = blueText "[]"
-      showEffect ps = blueText "[" $$ vcat (mapFL (showPatch fmt) ps) $$ blueText "]"
-      showCtxSet xs =
-        case S.minView xs of
-          Nothing -> mempty
-          Just _ ->
-            blueText "{{"
-              $$ vcat (map (showCtx fmt) (S.toAscList xs))
-              $$ blueText "}}"
       displayCtx c =
-        -- need to use ForStorage to see the prim patch IDs
-        showId ForStorage (ctxId c) $$
-        unseal (showPatch ForDisplay . sortCoalesceFL . mapFL_FL wnPatch) (ctxToFL c)
+        showId (ctxId c) $$
+        unseal (showPatch . sortCoalesceFL . mapFL_FL wnPatch) (ctxToFL c)
+
+instance (StorableId name, FormatPatch prim) =>
+         FormatPatch (RepoPatchV3 name prim) where
+  formatPatch rp =
+    case rp of
+      Prim p -> formatPatch p
+      Conflictor r x cp -> F.ascii "conflictor" F.<+> formatContent r x cp
+    where
+      formatContent r x cp = F.hsep [formatEffect r, formatCtxSet x, formatCtx cp]
+      formatEffect NilFL = F.ascii "[]"
+      formatEffect ps = F.vcat [F.ascii "[", formatPatchFL ps, F.ascii "]"]
+      formatCtxSet xs =
+        F.vcat [F.ascii "{{", F.vcat (map formatCtx (S.toAscList xs)), F.ascii "}}"]
 
 -- * Local helper functions
 

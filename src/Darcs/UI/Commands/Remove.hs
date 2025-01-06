@@ -40,17 +40,17 @@ import Darcs.Repository
     , RepoJob(..)
     , addToPending
     , finalizeRepositoryChanges
+    , readPristine
     , readPristineAndPending
     , readUnrecorded
     )
 import Darcs.Repository.Diff( treeDiff )
 import Darcs.Repository.State ( restrictSubpaths, applyTreeFilter )
 
-import Darcs.Patch ( RepoPatch, PrimOf, PrimPatch, adddir, rmdir, addfile, rmfile,
-                     listTouchedFiles )
+import Darcs.Patch ( RepoPatch, PrimOf, PrimPatch, listTouchedFiles )
 import Darcs.Patch.Apply( ApplyState )
 import Darcs.Patch.Witnesses.Ordered ( FL(..), concatGapsFL, nullFL )
-import Darcs.Patch.Witnesses.Sealed ( Sealed(..), Gap(..), FreeLeft, unFreeLeft )
+import Darcs.Patch.Witnesses.Sealed ( Sealed(..), FreeLeft, unFreeLeft )
 import Darcs.Repository.Prefs ( filetypeFunction, FileType )
 import Darcs.Util.Tree( Tree, TreeItem(..), explodePaths )
 import qualified Darcs.Util.Tree as T ( find, modifyTree, expand, list )
@@ -99,15 +99,7 @@ removeCmd fps opts relargs = do
         fail "Cannot remove a repository's root directory!"
     withRepoLock (useCache ? opts) (umask ? opts) $
       RepoJob $ \repository -> do
-        pathFilter <- restrictSubpaths repository paths
-        pristine <-
-            T.expand =<<
-            applyTreeFilter pathFilter <$> readPristineAndPending repository
-        let exploded_paths =
-              (if parseFlags O.recursive opts
-                then reverse . explodePaths pristine
-                else id) paths
-        Sealed p <- makeRemovePatch opts repository exploded_paths pristine
+        Sealed p <- makeRemovePatch opts repository paths
         when (nullFL p && not (null paths)) $
             fail "No files were removed."
         addToPending repository (diffingOpts opts) p
@@ -116,57 +108,79 @@ removeCmd fps opts relargs = do
         putInfo opts $ vcat $ map text $ ["Will stop tracking:"] ++
             map displayPath (listTouchedFiles p)
 
--- | makeRemovePatch builds a list of patches to remove the given filepaths.
---   This function does not recursively process directories. The 'Recursive'
---   flag should be handled by the caller by adding all offspring of a directory
---   to the files list.
-makeRemovePatch :: (RepoPatch p, ApplyState p ~ Tree)
-                => [DarcsFlag] -> Repository rt p wU wR
-                -> [AnchoredPath] -> Tree IO -> IO (Sealed (FL (PrimOf p) wU))
-makeRemovePatch opts repository files pristine = do
-  unrecorded <- readUnrecorded repository (O.useIndex ? opts) $ Just files
+-- | Build a list of patches to remove the given filepaths, possibly
+-- recursively.
+makeRemovePatch
+  :: (RepoPatch p, ApplyState p ~ Tree)
+  => [DarcsFlag]
+  -> Repository rt p wU wR
+  -> [AnchoredPath]
+  -> IO (Sealed (FL (PrimOf p) wU))
+makeRemovePatch opts repository paths = do
+  pathFilter <- restrictSubpaths repository paths
+  recorded <- T.expand =<< applyTreeFilter pathFilter <$> readPristine repository
+  pending <-
+    T.expand =<< applyTreeFilter pathFilter <$> readPristineAndPending repository
+  let exploded_paths =
+        (if parseFlags O.recursive opts
+          then reverse . explodePaths pending
+          else id) paths
+  unrecorded <- readUnrecorded repository (O.useIndex ? opts) $ Just exploded_paths
   ftf <- filetypeFunction
-  result <- foldM removeOnePath (ftf, pristine, unrecorded, []) files
+  result <-
+    foldM removeOnePath (ftf, recorded, pending, unrecorded, []) exploded_paths
   case result of
-    (_, _, _, patches) ->
+    (_, _, _, _, patches) ->
       return $
       unFreeLeft $ concatGapsFL $ reverse patches
   where
-    removeOnePath (ftf, recorded, unrecorded, patches) f = do
-      let recorded' = T.modifyTree recorded f Nothing
+    removeOnePath (ftf, recorded, pending, unrecorded, patches) f = do
+      let pending' = T.modifyTree pending f Nothing
           unrecorded' = T.modifyTree unrecorded f Nothing
-      local <- makeRemoveGap opts ftf recorded unrecorded unrecorded' f
+      local <-
+        makeRemoveGap opts ftf recorded pending pending' unrecorded unrecorded' f
       -- we can tell if the remove succeeded by looking if local is
       -- empty. If the remove succeeded, we should pass on updated
-      -- recorded and unrecorded that reflect the removal
+      -- pending and unrecorded that reflect the removal
       return $
         case local of
-          Just gap -> (ftf, recorded', unrecorded', gap : patches)
-          _ -> (ftf, recorded, unrecorded, patches)
+          Just gap -> (ftf, recorded, pending', unrecorded', gap : patches)
+          _ -> (ftf, recorded, pending, unrecorded, patches)
 
--- | Takes a file path and returns the FL of patches to remove that, wrapped in
---   a 'Gap'.
---   Returns 'Nothing' in case the path cannot be removed (if it is not tracked,
---   or if it's a directory and it's not tracked).
---   The three 'Tree' arguments are the recorded state, the unrecorded state
---   excluding the removal of this file, and the unrecorded state including the
---   removal of this file.
-makeRemoveGap :: PrimPatch prim => [DarcsFlag] -> (FilePath -> FileType)
-                -> Tree IO -> Tree IO -> Tree IO -> AnchoredPath
-                -> IO (Maybe (FreeLeft (FL prim)))
-makeRemoveGap opts ftf recorded unrecorded unrecorded' path =
-    case (T.find recorded path, T.find unrecorded path) of
-        (Just (SubTree _), Just (SubTree unrecordedChildren)) ->
-            if not $ null (T.list unrecordedChildren)
-              then skipAndWarn "it is not empty"
-              else return $ Just $ freeGap (rmdir path :>: NilFL)
-        (Just (File _), Just (File _)) -> do
-            Just `fmap` treeDiff (diffAlgorithm ? opts) ftf unrecorded unrecorded'
-        (Just (File _), _) ->
-            return $ Just $ freeGap (addfile path :>: rmfile path :>: NilFL)
-        (Just (SubTree _), _) ->
-            return  $ Just $ freeGap (adddir path :>: rmdir path :>: NilFL)
-        (_, _) -> skipAndWarn "it is not tracked by darcs"
+-- | Return the FL of patches to remove the item at the given path, wrapped in
+-- a 'Gap'. Returns 'Nothing' in case the path cannot be removed (if it is not
+-- tracked (i.e. in the pending state), or if it's a directory and is not empty).
+makeRemoveGap
+  :: PrimPatch prim
+  => [DarcsFlag]
+  -> (FilePath -> FileType)
+  -> Tree IO      -- ^ recorded state
+  -> Tree IO      -- ^ pending state
+  -> Tree IO      -- ^ pending state with item removed
+  -> Tree IO      -- ^ unrecorded state
+  -> Tree IO      -- ^ unrecorded state with item removed
+  -> AnchoredPath -- ^ path of item
+  -> IO (Maybe (FreeLeft (FL prim)))
+makeRemoveGap opts ftf recorded pending pending' unrecorded unrecorded' path =
+    case (T.find recorded path, T.find pending path, T.find unrecorded path) of
+        (_, Just (SubTree _), Just (SubTree unrecordedChildren))
+            | not $ null (T.list unrecordedChildren) ->
+              skipAndWarn "it is not empty"
+        (Just _, _, Nothing) ->
+            -- Item was already removed in the working tree
+            -- (may or may not be removed in pending).
+            -- Note that a non-empty result means that the item existed after
+            -- pending, but was removed in the working tree. If the file had
+            -- any content, the diff between pending and working has the prims
+            -- that remove the content, but not the actual removal, so our
+            -- removal prim does apply cleanly after working and addToPending
+            -- will take care of commuting the content remove prims into
+            -- pending as well.
+            Just <$> treeDiff (diffAlgorithm ? opts) ftf pending pending'
+        (_, Just _, Just _) ->
+            -- item is present in both pending and working
+            Just <$> treeDiff (diffAlgorithm ? opts) ftf unrecorded unrecorded'
+        _ -> skipAndWarn "it is not tracked by darcs"
   where skipAndWarn reason =
             do putWarning opts . text $ "Can't remove " ++ displayPath path
                                         ++ " (" ++ reason ++ ")"

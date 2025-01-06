@@ -1,0 +1,22 @@
+1 patch for repository /home/ben/scratch/empty:
+
+patch c51abcc1d7270f96e2dc99663c97f556c0290cd4
+Author: Ben Franksen <ben.franksen@online.de>
+Date:   Sun Jul 17 21:30:37 CEST 2022
+  * wibble
+
+New patches:
+
+[wibble
+Ben Franksen <ben.franksen@online.de>**20220717193037
+ Ignore-this: e3a441a89d6cbcefb34ee7ee8dfe00d7bee0abcca8328168884552add2616772452ddc81780b27fa
+] hash 1 c51abcc1d7270f96e2dc99663c97f556c0290cd4
+addfile ./wibble
+hash 2 c51abcc1d7270f96e2dc99663c97f556c0290cd4
+hunk ./wibble 1
++wibble
+
+Context:
+
+Patch bundle hash:
+33e1905ec3be090b96aafd48da91e1e6021301a0

@@ -20,12 +20,10 @@ import Darcs.Patch.RepoPatch
     , Eq2(..)
     , PrimPatchBase(..)
     , PatchInspect(..)
-    , PatchListFormat(..)
     , ShowContextPatch(..)
     , ShowPatch(..)
     , ShowPatchBasic(..)
     )
-import Darcs.Patch.Show ( ShowPatchFor(..) )
 import Darcs.Patch.Witnesses.Ordered ((:>)(..))
 
 -- | Wrapper type to allow formal inversion of patches which aren't really
@@ -99,8 +97,7 @@ instance PrimPatchBase p => PrimPatchBase (Invertible p) where
   type PrimOf (Invertible p) = PrimOf p
 
 instance ShowPatchBasic p => ShowPatchBasic (Invertible p) where
-  showPatch ForStorage = error "Invertible patches must not be stored"
-  showPatch ForDisplay = withInvertible (showPatch ForDisplay)
+  showPatch = withInvertible showPatch
 
 instance ShowPatch p => ShowPatch (Invertible p) where
   -- note these are only used for display
@@ -109,7 +106,4 @@ instance ShowPatch p => ShowPatch (Invertible p) where
   content = withInvertible content
 
 instance ShowContextPatch p => ShowContextPatch (Invertible p) where
-  showPatchWithContextAndApply ForStorage = error "Invertible patches must not be stored"
-  showPatchWithContextAndApply ForDisplay = withInvertible (showPatchWithContextAndApply ForDisplay)
-
-instance PatchListFormat p => PatchListFormat (Invertible p)
+  showPatchWithContextAndApply = withInvertible showPatchWithContextAndApply

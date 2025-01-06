@@ -28,7 +28,7 @@ import Darcs.Patch.Witnesses.Ordered
 import Darcs.Patch.Witnesses.Sealed ( Sealed(..), unFreeLeft, unseal )
 import Darcs.Patch.Apply( ApplyState )
 import Darcs.Patch.Repair ( Repair(applyAndTryToFix) )
-import Darcs.Patch.Info ( displayPatchInfo, makePatchname )
+import Darcs.Patch.Info ( showPatchInfo, makePatchname )
 import Darcs.Patch.Set ( Origin, PatchSet(..), Tagged(..), patchSet2FL )
 import Darcs.Patch ( RepoPatch, PrimOf, isInconsistent )
 
@@ -60,7 +60,7 @@ import Darcs.Util.Tree( Tree, emptyTree, list, restrict, expand, itemHash, zipTr
 import Darcs.Util.Tree.Monad( TreeIO )
 import Darcs.Util.Tree.Hashed( darcsUpdateHashes, hashedTreeIO )
 import Darcs.Util.Tree.Plain( readPlainTree )
-import Darcs.Util.Index( treeFromIndex )
+import Darcs.Util.Tree.Index( treeFromIndex )
 
 applyAndFixPatchSet
   :: forall rt p wU wR. (RepoPatch p, ApplyState p ~ Tree)
@@ -99,7 +99,7 @@ applyAndFixPatchSet r s = do
         Nothing -> return (p :>: ps', ps_ok)
         Just (e, p') ->
           liftIO $ do
-            putStrLn $ renderString $ (displayPatchInfo $ info p) $$ text e
+            putStrLn $ renderString $ (showPatchInfo $ info p) $$ text e
             -- FIXME While this is okay semantically, it means we can't
             -- run darcs check in a read-only repo
             p'' <-
@@ -137,7 +137,7 @@ replayRepository' dflag cache repo verbosity = do
     Nothing -> return ()
     Just pinf -> do
       putInfo $ text "Error! Duplicate patch name:"
-      putInfo $ displayPatchInfo pinf
+      putInfo $ showPatchInfo pinf
       -- FIXME repair duplicates by re-generating their salt
       fail "Duplicate patches found."
 

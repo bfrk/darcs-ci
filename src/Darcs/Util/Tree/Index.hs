@@ -96,7 +96,7 @@
 -- full path. We need to keep track of the current path anyway when traversing
 -- the index.
 
-module Darcs.Util.Index
+module Darcs.Util.Tree.Index
     ( openIndex
     , updateIndexFrom
     , indexFormatValid

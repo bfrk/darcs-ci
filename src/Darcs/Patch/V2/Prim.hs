@@ -5,24 +5,21 @@ module Darcs.Patch.V2.Prim ( Prim(..) ) where
 
 import Darcs.Prelude
 
+import Control.Monad ( (<=<) )
 import Data.Coerce (coerce )
 
 import Darcs.Patch.Annotate ( Annotate )
 import Darcs.Patch.Apply ( Apply(..) )
 import Darcs.Patch.Commute ( Commute(..) )
 import Darcs.Patch.FileHunk ( IsHunk )
-import Darcs.Patch.Format
-    ( PatchListFormat(..)
-    , ListFormat(ListFormatV2)
-    , FileNameFormat(FileNameFormatV2,FileNameFormatDisplay) )
+import Darcs.Patch.Format ( FormatPatch(..) )
 import Darcs.Patch.Inspect ( PatchInspect )
 import Darcs.Patch.Invert ( Invert )
 import Darcs.Patch.Merge ( CleanMerge )
-import Darcs.Patch.Read ( ReadPatch(..) )
+import Darcs.Patch.Read ( ReadPatch(..), ReadPatches(..), legacyReadPatchFL' )
 import Darcs.Patch.Repair ( RepairToFL(..) )
 import Darcs.Patch.Show
     ( ShowPatchBasic(..)
-    , ShowPatchFor(..)
     , ShowPatch(..)
     , ShowContextPatch(..)
     )
@@ -35,12 +32,15 @@ import Darcs.Patch.Witnesses.Sealed ( mapSeal )
 import Darcs.Patch.Prim.Class
     ( PrimConstruct(..), PrimCoalesce(..)
     , PrimDetails(..)
-    , PrimShow(..), PrimRead(..)
     , PrimApply(..)
     , PrimSift(..)
     , PrimMangleUnravelled(..)
     )
-import qualified Darcs.Patch.Prim.V1 as Base ( Prim )
+import qualified Darcs.Patch.Prim.V1 as Base ( Prim, formatPrim, readPrim )
+
+import Darcs.Util.ByteString ( decodeLocale )
+import Darcs.Util.Format ( userchunk )
+import Darcs.Util.Path ( anchorPath, decodeWhite, encodeWhite, floatPath )
 
 newtype Prim x y = Prim { unPrim :: Base.Prim x y } deriving
     ( Annotate
@@ -58,6 +58,8 @@ newtype Prim x y = Prim { unPrim :: Base.Prim x y } deriving
     , PrimMangleUnravelled
     , PrimSift
     , Show
+    , ShowContextPatch
+    , ShowPatchBasic
     )
 
 instance Show1 (Prim wX)
@@ -65,31 +67,22 @@ instance Show1 (Prim wX)
 instance Show2 Prim
 
 instance ReadPatch Prim where
-  readPatch' = fmap (mapSeal Prim) (readPrim FileNameFormatV2)
+  readPatch' = fmap (mapSeal Prim) (Base.readPrim decodePath)
+    where
+      decodePath = floatPath <=< decodeWhite . decodeLocale
 
-fileNameFormat :: ShowPatchFor -> FileNameFormat
-fileNameFormat ForDisplay = FileNameFormatDisplay
-fileNameFormat ForStorage = FileNameFormatV2
-
-instance ShowPatchBasic Prim where
-  showPatch fmt = showPrim (fileNameFormat fmt) . unPrim
-
-instance ShowContextPatch Prim where
-  showPatchWithContextAndApply fmt = showPrimWithContextAndApply (fileNameFormat fmt) . unPrim
+instance ReadPatches Prim where
+  readPatchFL' = legacyReadPatchFL'
 
 instance ShowPatch Prim where
   summary = plainSummaryPrim . unPrim
   summaryFL = plainSummaryPrims False
   thing _ = "change"
 
--- This instance is here so that FL Prim and RL Prim also get
--- ShowPatch instances, see Darcs.Patch.Viewing
-instance PatchListFormat Prim where
-  -- In principle we could use ListFormatDefault when prim /= V1 Prim patches,
-  -- as those are the only case where we need to support a legacy on-disk
-  -- format. In practice we don't expect RepoPatchV2 to be used with any other
-  -- argument anyway, so it doesn't matter.
-  patchListFormat = ListFormatV2
+instance FormatPatch Prim where
+  formatPatch = Base.formatPrim encodePath . unPrim
+    where
+      encodePath = userchunk . encodeWhite . anchorPath "."
 
 instance RepairToFL Prim where
   applyAndTryToFixFL = fmap coerce . applyAndTryToFixFL . unPrim

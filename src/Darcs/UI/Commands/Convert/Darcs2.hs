@@ -28,7 +28,7 @@ import System.Directory ( doesDirectoryExist, doesFileExist )
 
 import Darcs.Prelude
 
-import Darcs.Patch ( RepoPatch, effect, displayPatch )
+import Darcs.Patch ( RepoPatch, effect, showPatch )
 import Darcs.Patch.Apply ( ApplyState )
 import Darcs.Patch.Info ( isTag, piRename, piTag )
 import Darcs.Patch.Named ( Named(..), getdeps, patch2patchinfo, patchcontents )
@@ -63,6 +63,7 @@ import Darcs.Repository
     , finalizeRepositoryChanges
     , readPatches
     , revertRepositoryChanges
+    , tentativelyAddPatch
     , withRepositoryLocation
     , withUMaskFlag
     )
@@ -72,10 +73,15 @@ import Darcs.Repository.Format
     , formatHas
     , identifyRepoFormat
     )
-import Darcs.Repository.Hashed ( UpdatePristine(..), tentativelyAddPatch_ )
 import Darcs.Repository.Prefs ( showMotd, prefsFilePath )
 
-import Darcs.UI.Commands ( DarcsCommand(..), nodefaults, putFinished, withStdOpts )
+import Darcs.UI.Commands
+    ( DarcsCommand(..)
+    , noPrereq
+    , nodefaults
+    , putFinished
+    , withStdOpts
+    )
 import Darcs.UI.Commands.Convert.Util ( updatePending )
 import Darcs.UI.Commands.Util ( commonHelpWithPrefsTemplates )
 import Darcs.UI.Completion ( noArgs )
@@ -134,7 +140,7 @@ convertDarcs2 = DarcsCommand
     , commandExtraArgs = -1
     , commandExtraArgHelp = ["<SOURCE>", "[<DESTINATION>]"]
     , commandCommand = toDarcs2
-    , commandPrereq = \_ -> return $ Right ()
+    , commandPrereq = noPrereq
     , commandCompleteArgs = noArgs
     , commandArgdefaults = nodefaults
     , commandOptions = opts
@@ -190,11 +196,11 @@ toDarcs2 _ opts' args = do
                  IsEq -> y :>: NilFL
                  NotEq ->
                      traceDoc (text "lossy conversion:" $$
-                               displayPatch x) $
+                               showPatch x) $
                      mapFL_FL V2.Normal ex
              Nothing -> traceDoc (text
                                   "lossy conversion of complicated conflict:" $$
-                                  displayPatch x) $
+                                  showPatch x) $
                         mapFL_FL V2.Normal ex
           convertOne (V1.PP x) = V2.Normal (primV1toV2 x) :>: NilFL
           convertOne _ = error "impossible case"
@@ -228,7 +234,7 @@ toDarcs2 _ opts' args = do
              -> IO (W2 (Repository 'RW p) wY)
     applyOne opts (W2 _repo) x = do
       _repo <-
-        tentativelyAddPatch_ (updatePristine opts) _repo (updatePending opts) x
+        tentativelyAddPatch _repo (updatePending opts) x
       _repo <- applyToWorking _repo (verbosity ? opts) (effect x)
       return (W2 _repo)
 
@@ -238,15 +244,6 @@ toDarcs2 _ opts' args = do
              -> FL (PatchInfoAnd p) wX wY
              -> IO (Repository 'RW p wY wY)
     applyAll opts r xss = unW2 <$> foldFL_M (applyOne opts) (W2 r) xss
-
-    updatePristine :: [DarcsFlag] -> UpdatePristine
-    updatePristine opts =
-      case withWorkingDir ? opts of
-        O.WithWorkingDir -> UpdatePristine
-        -- this should not be necessary but currently is, because
-        -- some commands (e.g. send) cannot cope with a missing pristine
-        -- even if the repo is marked as having no working tree
-        O.NoWorkingDir -> {- DontUpdatePristineNorRevert -}UpdatePristine
 
 -- | Need this to make 'foldFL_M' work with a function that changes
 -- the last two (identical) witnesses at the same time.

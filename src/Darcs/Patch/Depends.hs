@@ -80,6 +80,7 @@ import Darcs.Patch.Set
     , patchSet2FL
     , patchSet2RL
     , patchSetSplit
+    , unwrapOneTagged
     )
 import Darcs.Patch.Progress ( progressRL )
 import Darcs.Patch.Witnesses.Unsafe ( unsafeCoercePStart )
@@ -233,13 +234,6 @@ makeClean (PatchSet ts ps) t =
         then Just $ PatchSet (ts :<: Tagged ds t' Nothing) nonDeps
         else Nothing
     _ -> error "imposible"
-
--- |'unwrapOneTagged' unfolds a single Tagged object in a PatchSet, adding the
--- tag and patches to the PatchSet's patch list.
-unwrapOneTagged :: PatchSet p wX wY -> Maybe (PatchSet p wX wY)
-unwrapOneTagged (PatchSet (ts :<: Tagged tps t _) ps) =
-    Just $ PatchSet ts (tps :<: t +<+ ps)
-unwrapOneTagged _ = Nothing
 
 -- | Return the 'PatchInfo' for all the patches in a 'PatchSet' that are not
 -- *explicitly* depended on by any tag (in the given 'PatchSet').

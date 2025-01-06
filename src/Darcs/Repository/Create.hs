@@ -52,7 +52,6 @@ import Darcs.Repository.Paths
 import Darcs.Repository.Identify ( seekRepo )
 import Darcs.Repository.InternalTypes
     ( AccessType(..)
-    , PristineType(..)
     , Repository
     , mkRepo
     )
@@ -115,21 +114,21 @@ mkRepoV1
   -> RepoFormat
   -> Cache
   -> Repository 'RO (RepoPatchV1 V1.Prim) Origin Origin
-mkRepoV1 rdir repofmt cache = mkRepo rdir repofmt HashedPristine cache
+mkRepoV1 rdir repofmt cache = mkRepo rdir repofmt cache
 
 mkRepoV2
   :: AbsoluteOrRemotePath
   -> RepoFormat
   -> Cache
   -> Repository 'RO (RepoPatchV2 V2.Prim) Origin Origin
-mkRepoV2 rdir repofmt cache = mkRepo rdir repofmt HashedPristine cache
+mkRepoV2 rdir repofmt cache = mkRepo rdir repofmt cache
 
 mkRepoV3
   :: AbsoluteOrRemotePath
   -> RepoFormat
   -> Cache
   -> Repository 'RO (RepoPatchV3 V2.Prim) Origin Origin
-mkRepoV3 rdir repofmt cache = mkRepo rdir repofmt HashedPristine cache
+mkRepoV3 rdir repofmt cache = mkRepo rdir repofmt cache
 
 createRepositoryV1
   :: WithWorkingDir -> WithPatchIndex -> UseCache -> WithPrefsTemplates

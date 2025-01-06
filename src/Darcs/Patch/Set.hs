@@ -32,6 +32,7 @@ module Darcs.Patch.Set
     , patchSetSplit
     , patchSetDrop
     , tagsCovering
+    , unwrapOneTagged
     ) where
 
 import Darcs.Prelude
@@ -200,3 +201,10 @@ patchSetDrop n (PatchSet (ts :<: Tagged ps t _) NilRL) =
   patchSetDrop n $ PatchSet ts (ps :<: t)
 patchSetDrop _ (PatchSet NilRL NilRL) = Sealed $ PatchSet NilRL NilRL
 patchSetDrop n (PatchSet ts (ps :<: _)) = patchSetDrop (n - 1) $ PatchSet ts ps
+
+-- |'unwrapOneTagged' unfolds a single Tagged object in a PatchSet, adding the
+-- tag and patches to the PatchSet's patch list.
+unwrapOneTagged :: PatchSet p wX wY -> Maybe (PatchSet p wX wY)
+unwrapOneTagged (PatchSet (ts :<: Tagged tps t _) ps) =
+    Just $ PatchSet ts (tps :<: t +<+ ps)
+unwrapOneTagged _ = Nothing

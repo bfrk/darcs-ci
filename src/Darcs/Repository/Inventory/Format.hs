@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wno-redundant-constraints #-}
 module Darcs.Repository.Inventory.Format
     ( Inventory(..)
     , HeadInventory
@@ -10,17 +11,17 @@ module Darcs.Repository.Inventory.Format
     , PristineHash
     , inventoryPatchNames
     , parseInventory
+    , parseInventoryParent
     , parseHeadInventory -- not used
-    , showInventory
-    , showInventoryPatches
-    , showInventoryEntry
+    , formatInventory
+    , formatInventoryPatches
+    , formatInventoryEntry
     , emptyInventory
     , pokePristineHash
     , peekPristineHash
     , skipPristineHash
-    , pristineName
     -- properties
-    , prop_inventoryParseShow
+    , prop_inventoryParseFormat
     , prop_peekPokePristineHash
     , prop_skipPokePristineHash
     ) where
@@ -31,13 +32,20 @@ import Control.Applicative ( optional, many )
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC
+import qualified Data.ByteString.Lazy as BL
 
-import Darcs.Patch.Info ( PatchInfo, showPatchInfo, readPatchInfo )
+import Darcs.Patch.Info ( PatchInfo, readPatchInfo, formatPatchInfo )
+import Darcs.Test.TestOnly
 import Darcs.Util.Parser
     ( Parser, char, parse, string, skipSpace )
-import Darcs.Patch.Show ( ShowPatchFor(..) )
-import Darcs.Util.Printer
-    ( Doc, (<+>), ($$), hcat, text, invisiblePS, packedString, renderPS )
+import Darcs.Util.Format
+    ( Format
+    , byteString
+    , newline
+    , toStrictByteString
+    , ($$)
+    , (<+>)
+    )
 import Darcs.Util.ValidHash
     ( InventoryHash
     , PatchHash
@@ -46,6 +54,7 @@ import Darcs.Util.ValidHash
     , calcValidHash
     , decodeValidHash
     , encodeValidHash
+    , formatValidHash
     , parseValidHash
     )
 
@@ -80,12 +89,16 @@ parseHeadInventory = fmap fst . parse pHeadInv
 parseInventory :: B.ByteString -> Either String Inventory
 parseInventory = fmap fst . parse pInv
 
+-- | Parse only the (optional) parent inventory hash, ignore the patches.
+parseInventoryParent :: B.ByteString -> Either String (Maybe InventoryHash)
+parseInventoryParent = fmap fst . parse pInvParent
+
 pHeadInv :: Parser HeadInventory
 pHeadInv = (,) <$> pPristineHash <*> pInv
 
 pPristineHash :: Parser PristineHash
 pPristineHash = do
-  string pristineName
+  string kwPristine
   skipSpace
   pHash
 
@@ -94,7 +107,7 @@ pInv = Inventory <$> pInvParent <*> pInvPatches
 
 pInvParent :: Parser (Maybe InventoryHash)
 pInvParent = optional $ do
-  string parentName
+  string kwParent
   skipSpace
   pHash
 
@@ -108,42 +121,43 @@ pInvEntry :: Parser InventoryEntry
 pInvEntry = do
   info <- readPatchInfo
   skipSpace
-  string hashName
+  string kwHash
   skipSpace
   hash <- pHash
   return (info, hash)
 
--- * Showing
+-- * Formatting
 
-showInventory :: Inventory -> Doc
-showInventory inv =
-  showParent (inventoryParent inv) <>
-  showInventoryPatches (inventoryPatches inv)
+formatInventory :: Inventory -> Format
+formatInventory inv =
+  formatParent (inventoryParent inv) <>
+  formatInventoryPatches (inventoryPatches inv)
 
-showInventoryPatches :: [InventoryEntry] -> Doc
-showInventoryPatches = hcat . map showInventoryEntry
+formatInventoryPatches :: [InventoryEntry] -> Format
+formatInventoryPatches = mconcat . map formatInventoryEntry
 
-showInventoryEntry :: InventoryEntry -> Doc
-showInventoryEntry (pinf, hash) =
-  showPatchInfo ForStorage pinf $$
-  packedString hashName <+> text (encodeValidHash hash) <> packedString newline
+formatInventoryEntry :: InventoryEntry -> Format
+formatInventoryEntry (pinf, hash) =
+  formatPatchInfo pinf $$
+  byteString kwHash <+> formatValidHash hash <> newline
 
-showParent :: Maybe InventoryHash -> Doc
-showParent (Just hash) =
-  packedString parentName $$ text (encodeValidHash hash) <> packedString newline
-showParent Nothing = mempty
+formatParent :: Maybe InventoryHash -> Format
+formatParent (Just hash) =
+  byteString kwParent $$ formatValidHash hash <> newline
+formatParent Nothing = mempty
 
 -- * Accessing the pristine hash
 
 -- | Replace the pristine hash at the start of a raw, unparsed 'HeadInventory'
 -- or add it if none is present.
-pokePristineHash :: PristineHash -> B.ByteString -> Doc
+pokePristineHash :: PristineHash -> B.ByteString -> Format
 pokePristineHash hash inv =
-  invisiblePS pristineName <> text (encodeValidHash hash) $$ invisiblePS (skipPristineHash inv)
+  byteString kwPristine <> formatValidHash hash <> newline
+    <> byteString (skipPristineHash inv)
 
 takeHash :: B.ByteString -> Maybe (PristineHash, B.ByteString)
 takeHash input = do
-  let (hline,rest) = BC.breakSubstring newline input
+  let (hline,rest) = BC.breakSubstring (BC.pack "\n") input
   ph <- decodeValidHash (BC.unpack hline)
   return (ph, rest)
 
@@ -154,7 +168,7 @@ peekPristineHash inv =
       case takeHash rest of
         Just (h, _) -> h
         Nothing -> error $ "Bad hash in inventory!"
-    Nothing -> calcValidHash B.empty
+    Nothing -> calcValidHash BL.empty
 
 -- |skipPristineHash drops the 'pristine: HASH' prefix line, if present.
 skipPristineHash :: B.ByteString -> B.ByteString
@@ -165,34 +179,31 @@ skipPristineHash ps =
 
 tryDropPristineName :: B.ByteString -> Maybe B.ByteString
 tryDropPristineName input =
-    if prefix == pristineName then Just rest else Nothing
+    if prefix == kwPristine then Just rest else Nothing
   where
-    (prefix, rest) = B.splitAt (B.length pristineName) input
+    (prefix, rest) = B.splitAt (B.length kwPristine) input
 
 -- * Key phrases
 
-pristineName :: B.ByteString
-pristineName = BC.pack "pristine:"
+kwPristine :: B.ByteString
+kwPristine = BC.pack "pristine:"
 
-parentName :: B.ByteString
-parentName = BC.pack "Starting with inventory:"
+kwParent :: B.ByteString
+kwParent = BC.pack "Starting with inventory:"
 
-hashName :: B.ByteString
-hashName = BC.pack "hash:"
-
-newline :: B.ByteString
-newline = BC.pack "\n"
+kwHash :: B.ByteString
+kwHash = BC.pack "hash:"
 
 -- * Properties
 
-prop_inventoryParseShow :: Inventory -> Bool
-prop_inventoryParseShow inv =
-  Right inv == parseInventory (renderPS (showInventory inv))
+prop_inventoryParseFormat :: TestOnly => Inventory -> Bool
+prop_inventoryParseFormat inv =
+  Right inv == parseInventory (toStrictByteString (formatInventory inv))
 
-prop_peekPokePristineHash :: (PristineHash, B.ByteString) -> Bool
+prop_peekPokePristineHash :: TestOnly => (PristineHash, B.ByteString) -> Bool
 prop_peekPokePristineHash (hash, raw) =
-  hash == peekPristineHash (renderPS (pokePristineHash hash raw))
+  hash == peekPristineHash (toStrictByteString (pokePristineHash hash raw))
 
-prop_skipPokePristineHash :: (PristineHash, B.ByteString) -> Bool
+prop_skipPokePristineHash :: TestOnly => (PristineHash, B.ByteString) -> Bool
 prop_skipPokePristineHash (hash, raw) =
-  raw == skipPristineHash (renderPS (pokePristineHash hash raw))
+  raw == skipPristineHash (toStrictByteString (pokePristineHash hash raw))

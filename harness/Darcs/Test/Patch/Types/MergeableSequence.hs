@@ -75,64 +75,73 @@ instance
   -- Note that the result of propagateShrink is always either
   -- Just (Just2 _ :> _) or Nothing, so we don't need to worry about
   -- the Just (Nothing2 :> _) case in recursive calls.
-  propagateShrink (prim :> NilMS) = Just (Just2 NilMS :> Just2 prim)
+  propagateShrink (prim :> NilMS) = return (Just2 NilMS :> prim :>: NilFL)
   propagateShrink (prim :> SeqMS ps p) = do
-    Just2 ps' :> mprim' <- propagateShrink (prim :> ps)
-    mp' :> mprim'' <- propagateShrinkMaybe (mprim' :> p)
+    Just2 ps' :> prims' <- propagateShrink (prim :> ps)
+    mp' :> prims'' <- propagateShrinks (prims' :> p)
     let result = case mp' of
           Just2 p' -> SeqMS ps' p'
           Nothing2 -> ps'
-    return (Just2 result :> mprim'')
+    return (Just2 result :> prims'')
+{-
+  As usual, a picture makes it crystal clear what's going on.
+
+  Inputs: prim, ParMS ms1 ms2
+  Intermediate results from recursive calls: ms1', prims1', ms2', prims2'
+  Outputs: parMS ms1' ms2' :> prims'
+
+     Merged C1 C2 ---prims'---> Merged D1 D2
+            / \                  / \
+   mergedps2' mergedps1' mergedps2  mergedps1
+          /     \              /     \
+         /      C2 --prims2'--/-----> D2
+        /       /            /       /
+      C1 --------prims1'--> D1      /
+        \     /              \     /
+       ms1'  ms2'           ms1   ms2
+          \ /                  \ /
+           A -------prim------> B
+
+-}
   propagateShrink
     ((prim :: prim wA wB) :>
        ParMS (ms1 :: MergeableSequence p wB wD1) (ms2 :: MergeableSequence p wB wD2)) = do
-    Just2 (ms1' :: MergeableSequence p wA wC1) :> (mprim1' :: Maybe2 prim wC1 wD1)
+    Just2 (ms1' :: MergeableSequence p wA wC1) :> (prims1' :: FL prim wC1 wD1)
       <- propagateShrink (prim :> ms1)
-    Just2 (ms2' :: MergeableSequence p wA wC2) :> (mprim2' :: Maybe2 prim wC2 wD2)
+    Just2 (ms2' :: MergeableSequence p wA wC2) :> (_prims2' :: FL prim wC2 wD2)
       <- propagateShrink (prim :> ms2)
     let
       ms' :: MergeableSequence p wA (Merged wC1 wC2)
       ms' = parMS ms1' ms2'
       ps1  :: FL p wB wD1
       ps2  :: FL p wB wD2
-      mergedps1 :: FL p wD2 (Merged wD1 wD2)
+      _mergedps1 :: FL p wD2 (Merged wD1 wD2)
       mergedps2 :: FL p wD1 (Merged wD1 wD2)
       ps1' :: FL p wA wC1
       ps2' :: FL p wA wC2
-      mergedps1' :: FL p wC2 (Merged wC1 wC2)
+      _mergedps1' :: FL p wC2 (Merged wC1 wC2)
       mergedps2' :: FL p wC1 (Merged wC1 wC2)
       ps1  = reverseRL (mergeableSequenceToRL ms1)
       ps2  = reverseRL (mergeableSequenceToRL ms2)
       ps1' = reverseRL (mergeableSequenceToRL ms1')
       ps2' = reverseRL (mergeableSequenceToRL ms2')
-      (mergedps2 , mergedps1 ) = typedMerge (ps1  :\/: ps2 )
-      (mergedps2', mergedps1') = typedMerge (ps1' :\/: ps2')
-      -- Unless the shrinking prim disappears on both branches of the merge,
-      -- we'll need to try to recalculate it for the result of the merge - trying
-      -- to use propagateShrink a second time wouldn't guarantee the right
-      -- contexts. (This is a bit complicated to see, hence all the type signatures
-      -- in this function.)
+      (mergedps2 , _mergedps1 ) = typedMerge (ps1  :\/: ps2 )
+      (mergedps2', _mergedps1') = typedMerge (ps1' :\/: ps2')
+      prims' :: FL prim (Merged wC1 wC2) (Merged wD1 wD2)
+      -- Arbitrarily choose one of two ways of constructing the result;
+      -- we could as well use
+      -- > prims' = recalcShrink prims2' mergedps1 mergedps1'
+      -- In fact, coalescing of effects should make them equal.
+      -- Also note that if both prims1' and prims2' are NilFL, then
+      -- the result should be NilFL as well, since in that case
+      -- mergedps2 and mergedps2' are parallel.
+      prims' = recalcShrink prims1' mergedps2 mergedps2'
+    return (Just2 ms' :> prims')
+    where
       recalcShrink
-        :: prim wX wY
-        -> FL p wY (Merged wD1 wD2)
-        -> FL p wX (Merged wC1 wC2)
-        -> Maybe (Maybe2 prim (Merged wC1 wC2) (Merged wD1 wD2))
-      recalcShrink primIn m1 m2 =
-        case sortCoalesceFL (invert (effect m2) +>+ primIn :>: effect m1) of
-          NilFL -> Just Nothing2
-          prim' :>: NilFL -> Just (Just2 prim')
-          -- If we don't get 0 or 1 prims, we can't use this result given the type
-          -- of propagateShrink as a whole. If that was changed to return an FL we
-          -- could use it, but at the cost of more complexity elsewhere.
-          _ -> Nothing
-    mprim' :: Maybe2 prim (Merged wC1 wC2) (Merged wD1 wD2)
-      <-
-      case (mprim1', mprim2') of
-        (Nothing2, Nothing2) -> Just Nothing2
-        (Just2 prim1', _) | Just prim'' <- recalcShrink prim1' mergedps2 mergedps2' -> Just prim''
-        (_, Just2 prim2') | Just prim'' <- recalcShrink prim2' mergedps1 mergedps1' -> Just prim''
-        _ -> Nothing
-    return (Just2 ms' :> mprim')
+        :: FL prim wX wY -> FL p wY wD -> FL p wX wC -> FL prim wC wD
+      recalcShrink prims ps qs =
+        sortCoalesceFL $ invert (effect qs) +>+ prims +>+ effect ps
 
 instance (Show2 p, PrimBased p) => Show (MergeableSequence p wX wY) where
   showsPrec _d NilMS = showString "NilMS"

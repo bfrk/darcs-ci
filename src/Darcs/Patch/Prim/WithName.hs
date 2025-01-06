@@ -8,7 +8,7 @@ import Darcs.Prelude
 import Darcs.Patch.Annotate ( Annotate(..) )
 import Darcs.Patch.Apply ( Apply(..) )
 import Darcs.Patch.Commute ( Commute(..) )
-import Darcs.Patch.Format ( PatchListFormat(..) )
+import Darcs.Patch.Format ( FormatPatch(..) )
 import Darcs.Patch.Ident
     ( Ident(..)
     , PatchId
@@ -16,11 +16,11 @@ import Darcs.Patch.Ident
     , StorableId(..)
     )
 import Darcs.Patch.Inspect ( PatchInspect(..) )
-import Darcs.Patch.FileHunk ( IsHunk(..) )
+import Darcs.Patch.FileHunk ( IsHunk(..), FileHunk(..) )
 import Darcs.Patch.Prim.Class ( PrimApply(..), PrimDetails(..) )
 import Darcs.Patch.Invert ( Invert(..) )
 import Darcs.Patch.Merge ( CleanMerge(..) )
-import Darcs.Patch.Read ( ReadPatch(..) )
+import Darcs.Patch.Read ( ReadPatch(..), ReadPatches(..) )
 import Darcs.Patch.Repair ( RepairToFL(..) )
 import Darcs.Patch.Show
     ( ShowPatchBasic(..)
@@ -34,6 +34,7 @@ import Darcs.Patch.Witnesses.Sealed ( Sealed(..) )
 import Darcs.Patch.Witnesses.Show ( Show1, Show2, appPrec, showsPrec2 )
 
 import Darcs.Util.Printer
+import qualified Darcs.Util.Format as F
 
 -- |A 'PrimWithName' is a general way of associating an identity
 -- with an underlying (presumably unnamed) primitive type. This is
@@ -78,16 +79,19 @@ instance Apply p => Apply (PrimWithName name p) where
   apply = apply . wnPatch
   unapply = unapply . wnPatch
 
-instance PatchListFormat (PrimWithName name p)
-
 instance Apply p => RepairToFL (PrimWithName name p) where
   applyAndTryToFixFL p = apply p >> return Nothing
 
 instance Annotate p => Annotate (PrimWithName name p) where
   annotate = annotate . wnPatch
 
-instance IsHunk p => IsHunk (PrimWithName name p) where
-  isHunk = isHunk . wnPatch
+instance (IsHunk p, Print name) => IsHunk (PrimWithName name p) where
+  type ExtraData (PrimWithName name p) = (name, ExtraData p)
+  isHunk (PrimWithName name p) = do
+    FileHunk xd oid l n o <- isHunk p
+    return $ FileHunk (name, xd) oid l n o
+  fromHunk (FileHunk (name, xd) oid l n o) =
+    PrimWithName name (fromHunk (FileHunk xd oid l n o))
 
 instance PrimApply p => PrimApply (PrimWithName name p) where
   applyPrimFL = applyPrimFL . mapFL_FL wnPatch
@@ -122,15 +126,23 @@ instance (StorableId name, ReadPatch p) => ReadPatch (PrimWithName name p) where
       Sealed p <- readPatch'
       return (Sealed (PrimWithName name p))
 
-instance (StorableId name, ShowPatchBasic p) => ShowPatchBasic (PrimWithName name p) where
-  showPatch use (PrimWithName name p) = showId use name $$ showPatch use p
+instance (StorableId name, ReadPatch p) => ReadPatches (PrimWithName name p)
 
-instance (StorableId name, PrimDetails p, ShowPatchBasic p) => ShowPatch (PrimWithName name p) where
+instance (StorableId name, ShowPatchBasic p) => ShowPatchBasic (PrimWithName name p) where
+  showPatch (PrimWithName name p) = showId name $$ showPatch p
+
+instance (StorableId name, FormatPatch p) => FormatPatch (PrimWithName name p) where
+  formatPatch (PrimWithName name p) = formatId name F.$$ formatPatch p
+
+instance (StorableId name, PrimDetails p, ShowPatch p) => ShowPatch (PrimWithName name p) where
+  content = content . wnPatch
+  description = description . wnPatch
   summary = plainSummaryPrim . wnPatch
   summaryFL = plainSummaryPrims False
-  thing _ = "change"
+  thing = thing . wnPatch
+  things = things . wnPatch
 
 instance (StorableId name, ShowContextPatch p) => ShowContextPatch (PrimWithName name p) where
-  showPatchWithContextAndApply use (PrimWithName name p) = do
-    r <- showPatchWithContextAndApply use p
-    return $ showId use name $$ r
+  showPatchWithContextAndApply (PrimWithName name p) = do
+    r <- showPatchWithContextAndApply p
+    return $ showId name $$ r

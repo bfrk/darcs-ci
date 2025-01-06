@@ -39,7 +39,7 @@ import Darcs.Repository.Paths ( indexPath )
 
 import Darcs.Util.Hash ( showHash )
 import Darcs.Util.Tree( list, expand, itemHash, Tree, TreeItem( SubTree ) )
-import Darcs.Util.Index( IndexEntry(..), dumpIndex )
+import Darcs.Util.Tree.Index( IndexEntry(..), dumpIndex )
 import Darcs.Util.Path( anchorPath, AbsolutePath, anchoredRoot, realPath )
 import Darcs.Util.Printer ( Doc, putDocLn, text, vcat )
 

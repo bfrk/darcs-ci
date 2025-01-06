@@ -25,6 +25,7 @@ module Darcs.Patch.Prim.FileUUID.ObjectMap
     , ObjectMap(..), DirContent, FileContent
     , isBlob, isDirectory
     , Name -- re-export
+    , unFileID
     ) where
 
 import Darcs.Prelude
@@ -34,15 +35,24 @@ import Darcs.Util.Hash ( Hash )
 import Darcs.Util.Path ( Name )
 import qualified Data.ByteString as B (ByteString)
 import qualified Data.Map as M
+import Data.Word ( Word64 )
+import System.Posix.Types ( FileID, CIno(..) )
 
 type FileContent = B.ByteString
 
-newtype UUID = UUID B.ByteString deriving (Eq, Ord, Show)
+unFileID :: FileID -> Word64
+unFileID (CIno x) = fromIntegral x
+
+data UUID
+  = Root
+  | Recorded B.ByteString
+  | Unrecorded FileID
+  deriving (Eq, Ord, Show)
 
 -- | An object is located by giving the 'UUID' of the parent
 -- 'Directory' and a 'Name'.
 data Location = L !UUID !Name
-  deriving (Eq, Show)
+  deriving (Eq, Ord, Show)
 
 -- TODO use HashMap instead?
 type DirContent = M.Map Name UUID
