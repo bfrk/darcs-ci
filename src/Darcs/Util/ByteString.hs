@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Darcs.Util.ByteString
@@ -84,10 +83,7 @@ import qualified Codec.Compression.Zlib.Internal as ZI
 import Darcs.Util.Encoding ( decode, encode, decodeUtf8, encodeUtf8 )
 import Darcs.Util.Global ( addCRCWarning )
 
-#if mingw32_HOST_OS
-#else
 import System.IO.MMap( mmapFileByteString )
-#endif
 import System.Mem( performGC )
 
 ------------------------------------------------------------------------
@@ -310,9 +306,6 @@ readSegment (f,range) = do
 -- is modified.
 
 mmapFilePS :: FilePath -> IO B.ByteString
-#if mingw32_HOST_OS
-mmapFilePS = B.readFile
-#else
 mmapFilePS f =
   mmapFileByteString f Nothing
    `catchIOError` (\_ -> do
@@ -320,7 +313,6 @@ mmapFilePS f =
                      if size == 0
                         then return B.empty
                         else performGC >> mmapFileByteString f Nothing)
-#endif
 
 -- -------------------------------------------------------------------------
 -- fromPS2Hex
