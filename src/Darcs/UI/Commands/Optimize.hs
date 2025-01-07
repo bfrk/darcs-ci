@@ -32,7 +32,7 @@ import System.Directory
     , removeDirectoryRecursive
     , withCurrentDirectory
     )
-import Darcs.UI.Commands ( DarcsCommand(..), nodefaults, noPrereq
+import Darcs.UI.Commands ( DarcsCommand(..), nodefaults
                          , amInHashedRepository, amInRepository, putInfo
                          , normalCommand, withStdOpts )
 import Darcs.UI.Completion ( noArgs )
@@ -46,7 +46,6 @@ import Darcs.Repository
     , readPatches
     , reorderInventory
     , cleanRepository
-    , writePristine
     )
 import Darcs.Repository.Job ( withOldRepoLock )
 import Darcs.Repository.Traverse ( specialPatches )
@@ -63,6 +62,7 @@ import Darcs.Repository.Paths
     , patchesDirPath
     , pristineDir
     , pristineDirPath
+    , tentativePristinePath
     )
 import Darcs.Repository.Packs ( createPacks )
 import Darcs.Patch.Witnesses.Ordered ( lengthRL )
@@ -81,6 +81,7 @@ import Darcs.Util.Lock
     , gzWriteAtomicFilePS
     , writeAtomicFilePS
     , removeFileMayNotExist
+    , writeBinFile
     )
 import Darcs.Util.File ( doesDirectoryReallyExist )
 import Darcs.Util.Exception ( catchall )
@@ -120,7 +121,7 @@ import Darcs.Repository.Hashed
     ( writeTentativeInventory
     , finalizeTentativeChanges
     )
-import Darcs.Repository.InternalTypes ( unsafeCoerceR )
+import Darcs.Repository.InternalTypes ( repoCache, unsafeCoerceR )
 import Darcs.Repository.Pristine
     ( applyToTentativePristine
     )
@@ -134,6 +135,7 @@ import Darcs.Util.Tree
     )
 import Darcs.Util.Path ( AbsolutePath, realPath, toFilePath )
 import Darcs.Util.Tree.Plain( readPlainTree )
+import Darcs.Util.Tree.Hashed ( writeDarcsHashed )
 
 optimizeDescription :: String
 optimizeDescription = "Optimize the repository."
@@ -469,7 +471,8 @@ actuallyUpgradeFormat _opts _repository = do
   let patchesToApply = progressFL "Applying patch" $ patchSet2FL patches'
   createDirectoryIfMissing False pristineDirPath
   -- We ignore the returned root hash, we don't use it.
-  _ <- writePristine _repository emptyTree
+  _ <- writeDarcsHashed emptyTree (repoCache _repository)
+  writeBinFile tentativePristinePath ""
   -- we must coerce here because we just emptied out pristine
   applyToTentativePristine (unsafeCoerceR _repository) (mkInvertible patchesToApply)
   -- now make it official
@@ -544,7 +547,7 @@ optimizeGlobalCache = common
     , commandHelp = optimizeHelpGlobalCache
     , commandDescription = "Garbage collect global cache"
     , commandCommand = optimizeGlobalCacheCmd
-    , commandPrereq = noPrereq
+    , commandPrereq = \_ -> return $ Right ()
     }
 
 optimizeHelpGlobalCache :: Doc

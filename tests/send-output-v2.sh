@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-## Test for issue2594 - (originally issue2208) darcs show index
-## crashes replace with unrecorded force hunk
+
+## Test that we produce exactly correct output when sending v2 patches
 ##
-## Copyright (C) 2012 Owen Stephens
+## Copyright (C) 2010 Ganesh Sittampalam
 ##
 ## Permission is hereby granted, free of charge, to any person
 ## obtaining a copy of this software and associated documentation
@@ -24,20 +24,28 @@
 ## CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 ## SOFTWARE.
 
-. lib
+. lib                  # Load some portability helpers.
 
-rm -rf R
+only-format darcs-2
 
-darcs init --repo R
+rm -rf empty
+mkdir empty
+cd empty
+darcs init
+cd ..
 
-cd R
+rm -rf repo
+unpack_testdata simple-v2
+cd repo
+darcs send --no-minimize -o repo.dpatch -a ../empty
 
-echo -e 'foo\nbar' > testing
+compare_bundles $TESTDATA/simple-v2.dpatch repo.dpatch
+cd ..
 
-darcs rec -alm 'Add testing file'
-
-darcs show index
-
-echo -e 'baz\nbar' > testing
-
-darcs replace bar foo testing
+# context-v2 tests that we are including some context lines in hunk patches
+rm -rf repo
+unpack_testdata context-v2
+cd repo
+darcs send --no-minimize -o repo.dpatch -a ../empty
+compare_bundles $TESTDATA/context-v2.dpatch repo.dpatch
+cd ..

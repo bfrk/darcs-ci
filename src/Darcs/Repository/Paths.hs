@@ -14,22 +14,23 @@ makeDarcsdirPath name = darcsdir </> name
 lockPath = makeDarcsdirPath "lock"
 
 -- | Location of the prefs directory.
-prefsDirPath = makeDarcsdirPath "prefs"
+prefsDir = "prefs"
+prefsDirPath = makeDarcsdirPath prefsDir
 
 -- | Location of the (one and only) head inventory.
-hashedInventoryPath = makeDarcsdirPath "hashed_inventory"
+hashedInventory = "hashed_inventory"
+hashedInventoryPath = makeDarcsdirPath hashedInventory
 
 -- | Location of the (one and only) tentative head inventory.
-tentativeHashedInventoryPath = makeDarcsdirPath "tentative_hashed_inventory"
+tentativeHashedInventory = "tentative_hashed_inventory"
+tentativeHashedInventoryPath = makeDarcsdirPath tentativeHashedInventory
 
 -- | Location of parent inventories.
 inventoriesDir = hashedDir HashedInventoriesDir
 inventoriesDirPath = makeDarcsdirPath inventoriesDir
 
--- | Location of the (one and only) tentative pristine root
-tentativePristinePath = makeDarcsdirPath "tentative_pristine"
-
 -- | Location of pristine trees.
+tentativePristinePath = makeDarcsdirPath "tentative_pristine"
 pristineDir = hashedDir HashedPristineDir
 pristineDirPath = makeDarcsdirPath pristineDir
 
@@ -51,6 +52,7 @@ formatPath = makeDarcsdirPath "format"
 -- | Location of pending files
 pendingPath = patchesDirPath </> "pending"
 tentativePendingPath = patchesDirPath </> "pending.tentative"
+newPendingPath = patchesDirPath </> "pending.new"
 
 -- | Location of unrevert bundle.
 unrevertPath = patchesDirPath </> "unrevert"

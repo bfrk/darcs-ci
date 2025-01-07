@@ -1,8 +1,9 @@
-module Darcs.Patch.Prim.V1.Read (readPrim) where
+{-# OPTIONS_GHC -Wno-orphans #-}
+module Darcs.Patch.Prim.V1.Read () where
 
 import Darcs.Prelude
 
-import Darcs.Patch.Prim.Class ( hunk, binary )
+import Darcs.Patch.Prim.Class ( PrimRead(..), hunk, binary )
 import Darcs.Patch.Prim.V1.Core
     ( Prim(..)
     , DirPatchType(..)
@@ -10,46 +11,39 @@ import Darcs.Patch.Prim.V1.Core
     )
 import Darcs.Patch.Prim.V1.Apply ()
 
+import Darcs.Util.Path (  )
+import Darcs.Patch.Format ( FileNameFormat )
+import Darcs.Patch.Read ( readFileName )
 import Darcs.Util.Parser
     ( Parser, takeTillChar, string, int
     , option, choice, anyChar, char, lexWord
     , skipSpace, skipWhile, linesStartingWith
     )
 
-import Darcs.Patch.Witnesses.Sealed ( Sealed(..) )
+import Darcs.Patch.Witnesses.Sealed ( seal )
 
-import Darcs.Util.ByteString ( decodeLocale, fromHex2PS )
-import Darcs.Util.Path ( AnchoredPath )
+import Darcs.Util.ByteString ( fromHex2PS )
 
+import Control.Monad ( liftM )
 import qualified Data.ByteString       as B  ( ByteString, init, tail, concat )
-import qualified Data.ByteString.Char8 as BC ( unpack, pack, stripPrefix )
+import qualified Data.ByteString.Char8 as BC ( unpack, pack )
 
 
-type DecodePath = B.ByteString -> Either String AnchoredPath
-
-readFilePath :: DecodePath -> Parser AnchoredPath
-readFilePath decodePath = do
-  raw <- lexWord
-  case BC.stripPrefix (BC.pack "./") raw of
-    Nothing -> fail $ "invalid file path"
-    Just raw' ->
-      case decodePath raw' of
-        Left e -> fail e
-        Right r -> return r
-
-readPrim :: DecodePath -> Parser (Sealed (Prim wX))
-readPrim fmt =
-  skipSpace >> choice
-    [ Sealed <$> readHunk fmt
-    , Sealed <$> readAddFile fmt
-    , Sealed <$> readAddDir fmt
-    , Sealed <$> readMove fmt
-    , Sealed <$> readRmFile fmt
-    , Sealed <$> readRmDir fmt
-    , Sealed <$> readTok fmt
-    , Sealed <$> readBinary fmt
-    , Sealed <$> readChangePref
-    ]
+instance PrimRead Prim where
+  readPrim fmt
+     = skipSpace >> choice
+       [ return' $ readHunk fmt
+       , return' $ readAddFile fmt
+       , return' $ readAddDir fmt
+       , return' $ readMove fmt
+       , return' $ readRmFile fmt
+       , return' $ readRmDir fmt
+       , return' $ readTok fmt
+       , return' $ readBinary fmt
+       , return' readChangePref
+       ]
+    where
+    return'  = liftM seal
 
 hunk' :: B.ByteString
 hunk' = BC.pack "hunk"
@@ -78,10 +72,10 @@ move = BC.pack "move"
 changepref :: B.ByteString
 changepref = BC.pack "changepref"
 
-readHunk :: DecodePath -> Parser (Prim wX wY)
+readHunk :: FileNameFormat -> Parser (Prim wX wY)
 readHunk fmt = do
   string hunk'
-  fi <- readFilePath fmt
+  fi <- readFileName fmt
   l <- int
   have_nl <- skipNewline
   if have_nl
@@ -96,10 +90,10 @@ readHunk fmt = do
 skipNewline :: Parser Bool
 skipNewline = option False (char '\n' >> return True)
 
-readTok :: DecodePath -> Parser (Prim wX wY)
+readTok :: FileNameFormat -> Parser (Prim wX wY)
 readTok fmt = do
   string replace
-  f <- readFilePath fmt
+  f <- readFileName fmt
   regstr <- lexWord
   o <- lexWord
   n <- lexWord
@@ -119,10 +113,10 @@ readTok fmt = do
 -- > newhex
 -- > *HEXHEXHEX
 -- > ...
-readBinary :: DecodePath -> Parser (Prim wX wY)
+readBinary :: FileNameFormat -> Parser (Prim wX wY)
 readBinary fmt = do
   string binary'
-  fi <- readFilePath fmt
+  fi <- readFileName fmt
   _ <- lexWord
   skipSpace
   old <- linesStartingWith '*'
@@ -133,23 +127,23 @@ readBinary fmt = do
   r_new <- either fail return $ fromHex2PS $ B.concat new
   return $ binary fi r_old r_new
 
-readAddFile :: DecodePath -> Parser (Prim wX wY)
+readAddFile :: FileNameFormat -> Parser (Prim wX wY)
 readAddFile fmt = do
   string addfile
-  f <- readFilePath fmt
+  f <- readFileName fmt
   return $ FP f AddFile
 
-readRmFile :: DecodePath -> Parser (Prim wX wY)
+readRmFile :: FileNameFormat -> Parser (Prim wX wY)
 readRmFile fmt = do
   string rmfile
-  f <- readFilePath fmt
+  f <- readFileName fmt
   return $ FP f RmFile
 
-readMove :: DecodePath -> Parser (Prim wX wY)
+readMove :: FileNameFormat -> Parser (Prim wX wY)
 readMove fmt = do
   string move
-  d <- readFilePath fmt
-  d' <- readFilePath fmt
+  d <- readFileName fmt
+  d' <- readFileName fmt
   return $ Move d d'
 
 readChangePref :: Parser (Prim wX wY)
@@ -161,16 +155,16 @@ readChangePref = do
   f <- takeTillChar '\n'
   _ <- anyChar -- skip newline
   t <- takeTillChar '\n'
-  return $ ChangePref (BC.unpack p) (decodeLocale f) (decodeLocale t)
+  return $ ChangePref (BC.unpack p) (BC.unpack f) (BC.unpack t)
 
-readAddDir :: DecodePath -> Parser (Prim wX wY)
+readAddDir :: FileNameFormat -> Parser (Prim wX wY)
 readAddDir fmt = do
   string adddir
-  f <- readFilePath fmt
+  f <- readFileName fmt
   return $ DP f AddDir
 
-readRmDir :: DecodePath -> Parser (Prim wX wY)
+readRmDir :: FileNameFormat -> Parser (Prim wX wY)
 readRmDir fmt = do
   string rmdir
-  f <- readFilePath fmt
+  f <- readFileName fmt
   return $ DP f RmDir

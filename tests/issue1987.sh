@@ -93,7 +93,7 @@ PATCHES_DIR_AFTER_OPTIMIZE=$(ls -1 $PATCHES_DIR)
 # i.e., must be equal to $PATCH.
 # Otherwise $REMOVED_PATCH == '', and then $REMOVED_PATCH != $PATCH.
 REMOVED_PATCH=`comm -13 <(echo "$PATCHES_DIR_AFTER_OPTIMIZE") \
-                        <(echo "$PATCHES_DIR_AFTER_AMEND")`
+						<(echo "$PATCHES_DIR_AFTER_AMEND")`
 
 [ "$PATCH" == "$REMOVED_PATCH" ]
 
@@ -130,7 +130,7 @@ INV_DIR_AFTER_SND_RECORD=$(ls -1 $INV_DIR)
 # $SND_PATCH should looks like:
 # 0000000384-e5683733407c4aae642604adf29d582a8fbbb6c50a96d6e8bba20058f7892b68
 SND_PATCH=`comm -13 <(echo "$INV_DIR_AFTER_RECORD") \
-                    <(echo "$INV_DIR_AFTER_SND_RECORD")`
+					<(echo "$INV_DIR_AFTER_SND_RECORD")`
 
 # We don't need any of the files in $INV_DIR (since we have not done
 # 'darcs tag', all the information is in _darcs/hashed_inventory),
@@ -174,7 +174,7 @@ INV_DIR_AFTER_TAG=$(ls -1 $INV_DIR)
 # $SND_PATCH should looks like:
 # 0000000297-eed3c68ee2d145f499f00d8367ec09a2cebdf79de7341e873e7bc68088236fc6
 SND_PATCH=`comm -13 <(echo "$INV_DIR_AFTER_RECORD") \
-                    <(echo "$INV_DIR_AFTER_TAG")`
+					<(echo "$INV_DIR_AFTER_TAG")`
 
 touch g
 darcs add g
@@ -202,7 +202,7 @@ INV_DIR_AFTER_OPTIMIZE=$(ls -1 $INV_DIR)
 # comm -3 is the symmetric difference i.e. union \\ intersection,
 # the extra echo gets rid of the whitespace
 NULL_INV=$(echo $(comm -3 <(echo "$INV_DIR_AFTER_OPTIMIZE") \
-                          <(echo "$INV_DIR_AFTER_RECORD")))
+					<(echo "$INV_DIR_AFTER_RECORD")))
 
 [ "$NULL_INV" = "0000000000-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" ]
 
@@ -234,7 +234,7 @@ darcs record -am 'Hello darcs.'
 PRISTINE_DIR_AFTER_RECORD=$(ls -1 $PRISTINE_DIR)
 
 EXPECTED_PRISTINE_AFTER_OPTIMIZE=`comm -13 <(echo "$PRISTINE_DIR_AFTER_INIT") \
-                                           <(echo "$PRISTINE_DIR_AFTER_RECORD")`
+										   <(echo "$PRISTINE_DIR_AFTER_RECORD")`
 darcs optimize clean
 
 PRISTINE_DIR_AFTER_OPTIMIZE=$(ls -1 $PRISTINE_DIR)

@@ -19,8 +19,7 @@ module Darcs.Test.Patch ( testSuite ) where
 
 import Darcs.Prelude
 
-import Test.Tasty ( TestTree, adjustOption, testGroup )
-import Test.Tasty.QuickCheck ( QuickCheckMaxSize(..) )
+import Test.Framework ( Test, testGroup )
 
 import Darcs.Patch.Witnesses.Show
 import Darcs.Patch.FromPrim ( PrimOf )
@@ -41,8 +40,6 @@ import Darcs.Test.Patch.Arbitrary.RepoPatchV1 ()
 import Darcs.Test.Patch.Arbitrary.RepoPatchV2 ()
 import Darcs.Test.Patch.Arbitrary.RepoPatchV3 ()
 import Darcs.Test.Patch.Arbitrary.PrimV1 ()
-import qualified Darcs.Test.Patch.Binary as Binary ( testSuite )
-import qualified Darcs.Test.Patch.ChangePref as ChangePref ( testSuite )
 import Darcs.Test.Patch.Merge.Checked ( CheckedMerge )
 import Darcs.Test.Patch.RepoModel
 import Darcs.Test.Patch.WithState ( ShrinkModel )
@@ -66,24 +63,22 @@ general_patchTests
      , RP.RepoPatch p
      , PrimBased p, Commute (OnlyPrim p), ArbitraryPrim (OnlyPrim p)
      , ShrinkModel (ModelOf p) (PrimOf p)
-     , Show2 p
+     , Show1 (ModelOf p), Show2 p
      , RepoApply (PrimOf p)
      )
-  => [TestTree]
+  => [Test]
 general_patchTests =
      [ testGroup "Rebase patches" $ Rebase.testSuite @p
      , testGroup "Unwind" $ Unwind.testSuite @p
      ]
 
 -- | This is the big list of tests that will be run using testrunner.
-testSuite :: [TestTree]
+testSuite :: [Test]
 testSuite =
     [ primTests
     , repoPatchV1Tests
     , repoPatchV2Tests
     , repoPatchV3Tests
-    , namedPatchV1Tests
-    , namedPatchV2Tests
     , namedPatchV3Tests
     , Darcs.Test.Patch.Depends.testSuite
     , Darcs.Test.Patch.Info.testSuite
@@ -91,12 +86,8 @@ testSuite =
     ]
   where
     primTests = testGroup "Prim patches"
-      [ testGroup "V1.Prim wrapper for Prim.V1" $
-          qc_prim_v1 @Prim1 ++
-          [ Binary.testSuite @Prim1, ChangePref.testSuite @Prim1 ]
-      , testGroup "V2.Prim wrapper for Prim.V1" $
-          qc_prim_v1 @Prim2 ++
-          [ Binary.testSuite @Prim2, ChangePref.testSuite @Prim2 ]
+      [ testGroup "V1.Prim wrapper for Prim.V1" $ qc_prim @Prim1
+      , testGroup "V2.Prim wrapper for Prim.V1" $ qc_prim @Prim2
       , testGroup "Prim.FileUUID" $ qc_prim @FileUUID.Prim
       , testGroup "NamedPrim over V2.Prim" $ qc_named_prim @Prim2
       , testGroup "NamedPrim over Prim.FileUUID" $ qc_named_prim @FileUUID.Prim
@@ -108,29 +99,21 @@ testSuite =
       ]
     repoPatchV2Tests = testGroup "RepoPatchV2"
       [ testGroup "using V2.Prim wrapper for Prim.V1" $
-          unit_V2P1 ++ qc_V2 @Prim2 ++
+          unit_V2P1 ++ qc_V2 (undefined :: Prim2 wX wY) ++
           general_patchTests @(RepoPatchV2 Prim2)
       , testGroup "using Prim.FileUUID" $
-          qc_V2 @FileUUID.Prim ++
+          qc_V2 (undefined :: FileUUID.Prim wX wY) ++
           general_patchTests @(RepoPatchV2 FileUUID.Prim)
       ]
     repoPatchV3Tests = testGroup "RepoPatchV3"
       [ testGroup "using V2.Prim wrapper for Prim.V1" $
-          qc_V3 @Prim2 ++
+          qc_V3 (undefined :: Prim2 wX wY) ++
           general_patchTests @(RepoPatchV3 Prim2)
       , testGroup "using Prim.FileUUID" $
-          qc_V3 @FileUUID.Prim ++
+          qc_V3 (undefined :: FileUUID.Prim wX wY) ++
           general_patchTests @(RepoPatchV3 FileUUID.Prim)
       ]
-    namedPatchV1Tests = testGroup "Named RepoPatchV1"
-      [ adjustOption (\(QuickCheckMaxSize n) -> QuickCheckMaxSize (n `div` 2)) $
-          testGroup "using V1.Prim wrapper for Prim.V1" $ qc_Named_V1 @Prim1
-      ]
-    namedPatchV2Tests = testGroup "Named RepoPatchV2"
-      [ adjustOption (\(QuickCheckMaxSize n) -> QuickCheckMaxSize (n `div` 2)) $
-          testGroup "using V2.Prim wrapper for Prim.V1" $ qc_Named_V2 @Prim2
-      ]
     namedPatchV3Tests = testGroup "Named RepoPatchV3"
-      [ adjustOption (\(QuickCheckMaxSize n) -> QuickCheckMaxSize (n `div` 2)) $
-          testGroup "using V2.Prim wrapper for Prim.V1" $ qc_Named_V3 @Prim2
+      [ testGroup "using V2.Prim wrapper for Prim.V1" $
+          qc_Named_V3 (undefined :: Prim2 wX wY)
       ]

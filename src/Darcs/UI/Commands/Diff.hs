@@ -29,7 +29,7 @@ import System.IO ( hFlush, stdout )
 import Darcs.Patch ( listTouchedFiles )
 import Darcs.Patch.Apply ( Apply(..) )
 import Darcs.Patch.Depends ( findCommonWithThem )
-import Darcs.Patch.Info ( showPatchInfo )
+import Darcs.Patch.Info ( displayPatchInfo )
 import Darcs.Patch.Match ( matchFirstPatchset, matchSecondPatchset, secondMatch )
 import Darcs.Patch.Named ( anonymous )
 import Darcs.Patch.PatchInfoAnd ( info, n2pia )
@@ -227,7 +227,7 @@ doDiff opts mpaths = withRepository (useCache ? opts) $ RepoJob $ \repository ->
         writePlainTree (applyTreeFilter relevant oldtree) (toFilePath odir)
         writePlainTree (applyTreeFilter relevant newtree) (toFilePath ndir)
         -- Display patch info for (only) the recorded patches that we diff
-        putDocLn $ vcat $ map showPatchInfo $ reverse $ mapFL info tolog
+        putDocLn $ vcat $ map displayPatchInfo $ reverse $ mapFL info tolog
         hFlush stdout
 
       -- Call the external diff program. Note we are now back in our

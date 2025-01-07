@@ -6,50 +6,36 @@ module Darcs.Test.Patch.Properties.Mergeable
     , FromPrimT
     ) where
 
+import Prelude ()
 import Darcs.Prelude
 
 import Data.Maybe ( catMaybes )
 import Safe ( tailErr )
 
+import Darcs.Test.Patch.Arbitrary.Generic ( PrimBased )
+import Darcs.Test.Patch.Arbitrary.PatchTree
+  ( Tree, flattenTree, G2(..), mapTree )
+import Darcs.Test.Patch.Merge.Checked ( CheckedMerge )
+import Darcs.Test.Patch.Types.MergeableSequence ( MergeableSequence, mergeableSequenceToRL )
+import Darcs.Test.Patch.WithState
+import Darcs.Test.Patch.RepoModel
+  ( Fail, ModelOf, RepoApply, RepoModel, RepoState
+  , eqModel, maybeFail, repoApply, showModel
+  )
+import Darcs.Test.Util.TestResult ( TestResult, failed, rejected, succeeded )
+
+import Darcs.Util.Printer ( text, redText, ($$), vsep )
+
 import Darcs.Patch.Conflict ( ConflictDetails(..), Unravelled )
 import Darcs.Patch.Merge ( CleanMerge, mergeList )
 import Darcs.Patch.Permutations ( permutationsRL, (=\~/=) )
 import Darcs.Patch.RepoPatch
-    ( ApplyState
-    , Commute
-    , Conflict(..)
-    , Eq2
-    , Merge
-    , PrimOf
-    , ShowPatchBasic
-    )
-import Darcs.Patch.Show ( showPatch )
+import Darcs.Patch.Show ( displayPatch )
+
 import Darcs.Patch.Witnesses.Eq ( isIsEq )
 import Darcs.Patch.Witnesses.Ordered ( RL(..), (:>)(..) )
-import Darcs.Patch.Witnesses.Sealed ( Sealed(..), Sealed2(..), unseal )
+import Darcs.Patch.Witnesses.Sealed ( Sealed(..), unseal, Sealed2(..) )
 import Darcs.Patch.Witnesses.Show ( Show2 )
-import Darcs.Util.Printer ( redText, text, vsep, ($$) )
-
-import Darcs.Test.Patch.Arbitrary.Generic ( PrimBased )
-import Darcs.Test.Patch.Arbitrary.PatchTree ( G2(..), Tree, flattenTree, mapTree )
-import Darcs.Test.Patch.Merge.Checked ( CheckedMerge )
-import Darcs.Test.Patch.RepoModel
-    ( Fail
-    , ModelOf
-    , RepoApply
-    , RepoModel
-    , RepoState
-    , eqModel
-    , maybeFail
-    , repoApply
-    , showModel
-    )
-import Darcs.Test.Patch.Types.MergeableSequence
-    ( MergeableSequence
-    , mergeableSequenceToRL
-    )
-import Darcs.Test.Patch.WithState
-import Darcs.Test.Util.TestResult ( TestResult, failed, rejected, succeeded )
 
 assertEqualFst :: (RepoModel a, Show b, Show c) => (Fail (a x), b) -> (Fail (a x), c) -> Bool
 assertEqualFst (x,bx) (y,by)
@@ -125,6 +111,9 @@ propResolutionsOrderIndependent
   :: ( Commute p
      , Conflict p
      , ShowPatchBasic p
+     , PatchListFormat p
+     , PatchListFormat (PrimOf p)
+     , ShowPatchBasic (PrimOf p)
      , Eq2 (PrimOf p)
      , Show2 (PrimOf p)
      , Commute (PrimOf p)
@@ -158,9 +147,9 @@ propResolutionsOrderIndependent (ctx :> ps) =
     displayPair (as :> bs) =
       vsep
         [ text "for context"
-        , showPatch as
+        , displayPatch as
         , text "and patches"
-        , showPatch bs
+        , displayPatch bs
         ]
 
 -- | Equality for 'Unravelled' is modulo order of patches.
@@ -178,8 +167,10 @@ listEqBy _ _ _ = False
 -- sequence of patches do not themselves conflict with each other.
 propResolutionsDontConflict
   :: ( Conflict p
+     , PatchListFormat p
      , ShowPatchBasic p
      , CleanMerge (PrimOf p)
+     , PatchListFormat (PrimOf p)
      , ShowPatchBasic (PrimOf p)
      )
   => RL p wX wY
@@ -190,8 +181,8 @@ propResolutionsDontConflict patches =
     Left (Sealed ps, Sealed qs) ->
       failed
         $ redText "resolutions conflict:"
-        $$ showPatch ps
+        $$ displayPatch ps
         $$ redText "conflicts with"
-        $$ showPatch qs
+        $$ displayPatch qs
         $$ redText "for sequence"
-        $$ showPatch patches
+        $$ displayPatch patches

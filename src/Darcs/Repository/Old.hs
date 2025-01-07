@@ -26,17 +26,18 @@ import Darcs.Util.Path ( ioAbsoluteOrRemote, toPath )
 import System.IO ( hPutStrLn, stderr )
 import System.IO.Unsafe ( unsafeInterleaveIO )
 import System.FilePath.Posix ( (</>) )
-import Darcs.Patch.PatchInfoAnd ( PatchInfoAnd, piap, unavailable )
+import Darcs.Patch.PatchInfoAnd ( Hopefully, PatchInfoAnd,
+                         patchInfoAndPatch,
+                         actually, unavailable )
 
 import qualified Data.ByteString as B ( ByteString )
 import qualified Data.ByteString.Char8 as BC ( break, pack, unpack )
-import qualified Data.ByteString.Short as BS
 
 import Darcs.Patch ( RepoPatch, Named, readPatch )
 import qualified Darcs.Util.Parser as P ( parse )
 import Darcs.Patch.Witnesses.Ordered ( RL(..) )
-import Darcs.Patch.Witnesses.Sealed ( Sealed(Sealed), seal, unseal )
-import Darcs.Patch.Info ( PatchInfo(..), makePatchname, readPatchInfo, showPatchInfo )
+import Darcs.Patch.Witnesses.Sealed ( Sealed(Sealed), seal, unseal, mapSeal )
+import Darcs.Patch.Info ( PatchInfo(..), makePatchname, readPatchInfo, displayPatchInfo )
 import Darcs.Patch.Set ( PatchSet(..), Tagged(..), SealedPatchSet, Origin )
 import Darcs.Util.File
     ( gzFetchFilePS
@@ -74,10 +75,10 @@ readRepoPrivate task repo_dir inventory_name = do
           read_ts _ Nothing = do endTedious task
                                  return $ seal NilRL
           read_ts parse (Just tag0) =
-              do debugMessage $ "Looking for inventory for:\n"++ renderString (showPatchInfo tag0)
+              do debugMessage $ "Looking for inventory for:\n"++ renderString (displayPatchInfo tag0)
                  i <- unsafeInterleaveIO $
                       do x <- gzFetchFilePS (repo_dir </> darcsdir </> "inventories" </> makeFilename tag0) Uncachable
-                         finishedOneIO task (renderString (showPatchInfo tag0))
+                         finishedOneIO task (renderString (displayPatchInfo tag0))
                          return x
                  (mt, is) <- readInventory i
                  Sealed ts <- fmap (unseal seal) $ unsafeInterleaveIO $ read_ts parse mt
@@ -85,18 +86,19 @@ readRepoPrivate task repo_dir inventory_name = do
                  Sealed tag00 <-  parse tag0 `catch`
                                   \(e :: IOException) ->
                                         return $ seal $
-                                        unavailable tag0 $ show e
+                                        patchInfoAndPatch tag0 $ unavailable $ show e
                  return $ seal $ ts :<: Tagged ps tag00 Nothing
           parse2 :: RepoPatch p
                  => PatchInfo -> FilePath
                  -> IO (Sealed (PatchInfoAnd p wX))
           parse2 i fn = do ps <- unsafeInterleaveIO $ gzFetchFilePS fn Cachable
-                           return $ hopefullyNoParseError (toPath fn) i (readPatch ps)
-          hopefullyNoParseError :: FilePath -> PatchInfo -> Either String (Sealed (Named p wX))
-                                -> Sealed (PatchInfoAnd p wX)
-          hopefullyNoParseError _ i (Right (Sealed x)) = seal $ piap i x
-          hopefullyNoParseError f i (Left e) =
-              seal $ unavailable i $ unlines ["Couldn't parse file " ++ f, e]
+                           return $ patchInfoAndPatch i
+                             `mapSeal` hopefullyNoParseError (toPath fn) (readPatch ps)
+          hopefullyNoParseError :: String -> Either String (Sealed (Named a1dr wX))
+                                -> Sealed (Hopefully (Named a1dr) wX)
+          hopefullyNoParseError _ (Right (Sealed x)) = seal $ actually x
+          hopefullyNoParseError s (Left e) =
+              seal $ unavailable $ unlines ["Couldn't parse file " ++ s, e]
           read_patches :: RepoPatch p =>
                           (forall wB . PatchInfo -> IO (Sealed (PatchInfoAnd p wB)))
                        -> [PatchInfo] -> IO (Sealed (RL (PatchInfoAnd p) wX))
@@ -105,7 +107,7 @@ readRepoPrivate task repo_dir inventory_name = do
               lift2Sealed (flip (:<:))
                           (read_patches parse is)
                           (parse i `catch` \(e :: IOException) ->
-                           return $ seal $ unavailable i $ show e)
+                           return $ seal $ patchInfoAndPatch i $ unavailable $ show e)
           lift2Sealed :: (forall wY wZ . q wY wZ -> pp wY -> r wZ)
                       -> IO (Sealed pp) -> (forall wB . IO (Sealed (q wB))) -> IO (Sealed r)
           lift2Sealed f iox ioy = do Sealed x <- unseal seal `fmap` unsafeInterleaveIO iox
@@ -131,8 +133,8 @@ oldRepoFailMsg = "ERROR: repository upgrade required, try `darcs optimize upgrad
 --    flag.
 makeFilename :: PatchInfo -> String
 makeFilename pi = showIsoDateTime d++"-"++sha1_a++"-"++ (show $ makePatchname pi) ++ ".gz"
-    where d = readUTCDateOldFashioned $ BC.unpack $ BS.fromShort $ _piDate pi
-          sha1_a = take 5 $ show $ sha1PS $ BS.fromShort $ _piAuthor pi
+    where d = readUTCDateOldFashioned $ BC.unpack $ _piDate pi
+          sha1_a = take 5 $ show $ sha1PS $ _piAuthor pi
 
 readPatchInfos :: B.ByteString -> IO [PatchInfo]
 readPatchInfos inv =

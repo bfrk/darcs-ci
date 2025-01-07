@@ -86,7 +86,7 @@ import Darcs.Util.Tree.Plain ( writePlainTree, readPlainTree )
 import Darcs.Util.Global ( darcsdir )
 import Darcs.Util.Printer ( Doc, renderString, ($$), text, redText, vcat )
 import Darcs.Util.Printer.Color ( ePutDocLn )
-import Darcs.Patch ( showPatch )
+import Darcs.Patch ( displayPatch )
 
 data StandardResolution prim wX =
   StandardResolution {
@@ -126,9 +126,9 @@ mangleConflicts conflicts =
     Left (Sealed ps, Sealed qs) ->
       error $ renderString
         $ redText "resolutions conflict:"
-        $$ showPatch ps
+        $$ displayPatch ps
         $$ redText "conflicts with"
-        $$ showPatch qs
+        $$ displayPatch qs
   where
     unmangled = map conflictParts $ filter (isNothing . conflictMangled) conflicts
     conflictedPaths =
@@ -154,7 +154,7 @@ showUnmangled mpaths = vcat . map showUnmangledConflict . filter (affected mpath
 
 showUnravelled :: PrimPatch prim => Doc -> Unravelled prim wX -> Doc
 showUnravelled sep =
-  vcat . intersperse sep . map (unseal showPatch)
+  vcat . intersperse sep . map (unseal displayPatch)
 
 announceConflicts :: PrimPatch prim
                   => String

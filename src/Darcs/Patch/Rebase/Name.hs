@@ -14,8 +14,7 @@ import Darcs.Prelude
 
 import Darcs.Patch.Commute ( Commute(..) )
 import Darcs.Patch.CommuteFn ( CommuteFn, commuterIdFL, commuterFLId )
-import Darcs.Patch.Format ( FormatPatch(..) )
-import Darcs.Patch.Info ( PatchInfo, formatPatchInfo, showPatchInfo, readPatchInfo )
+import Darcs.Patch.Info ( PatchInfo, showPatchInfo, readPatchInfo )
 import Darcs.Patch.Inspect ( PatchInspect(..) )
 import Darcs.Patch.Invert ( Invert(..) )
 import Darcs.Patch.Named ( Named(..) )
@@ -30,7 +29,6 @@ import Darcs.Patch.Witnesses.Unsafe ( unsafeCoerceP, unsafeCoercePEnd )
 
 import Darcs.Patch.Rebase.PushFixup ( PushFixupFn )
 
-import qualified Darcs.Util.Format as F ( ascii, ($$) )
 import Darcs.Util.Parser ( lexString )
 import Darcs.Util.Printer ( empty, blueText, ($$) )
 
@@ -56,16 +54,10 @@ instance Show1 (RebaseName wX)
 
 instance Show2 RebaseName
 
-instance FormatPatch RebaseName where
-  formatPatch (AddName n) = F.ascii "addname" F.$$ formatPatchInfo n
-  formatPatch (DelName n) = F.ascii "delname" F.$$ formatPatchInfo n
-  formatPatch (Rename old new) =
-    F.ascii "rename" F.$$ formatPatchInfo old F.$$ formatPatchInfo new
-
 instance ShowPatchBasic RebaseName where
-   showPatch (AddName n) = blueText "addname" $$ showPatchInfo n
-   showPatch (DelName n) = blueText "delname" $$ showPatchInfo n
-   showPatch (Rename old new) = blueText "rename" $$ showPatchInfo old $$ showPatchInfo new
+   showPatch f (AddName n) = blueText "addname" $$ showPatchInfo f n
+   showPatch f (DelName n) = blueText "delname" $$ showPatchInfo f n
+   showPatch f (Rename old new) = blueText "rename" $$ showPatchInfo f old $$ showPatchInfo f new
 
 instance ShowPatch RebaseName where
    summary _ = empty -- TODO improve this?

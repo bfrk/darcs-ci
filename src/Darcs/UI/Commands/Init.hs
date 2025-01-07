@@ -30,7 +30,6 @@ import Darcs.UI.Commands
     , putFinished
     , withStdOpts
     , putWarning
-    , noPrereq
     )
 import Darcs.UI.Commands.Util ( commonHelpWithPrefsTemplates )
 import Darcs.UI.Completion ( noArgs )
@@ -92,7 +91,7 @@ initialize = DarcsCommand
     , commandDescription = initializeDescription
     , commandExtraArgs = -1
     , commandExtraArgHelp = ["[<DIRECTORY>]"]
-    , commandPrereq = noPrereq
+    , commandPrereq = \_ -> return $ Right ()
     , commandCommand = initializeCmd
     , commandCompleteArgs = noArgs
     , commandArgdefaults = nodefaults

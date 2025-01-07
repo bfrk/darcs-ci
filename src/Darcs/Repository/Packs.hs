@@ -60,71 +60,50 @@ import Darcs.Util.Cache
     , bucketFolder
     , closestWritableDirectory
     , fetchFileUsingCache
-    , relinkUsingCache
     )
 import Darcs.Util.File ( Cachable(..), fetchFileLazyPS, withTemp )
 import Darcs.Util.Global ( darcsdir )
-import Darcs.Util.Progress
-    ( debugMessage
-    , finishedOneIO
-    , progressList
-    , withProgress
-    )
-import Darcs.Util.ValidHash ( encodeValidHash )
+import Darcs.Util.Progress ( debugMessage, progressList )
+import Darcs.Util.ValidHash ( InventoryHash, PatchHash, encodeValidHash )
 
 import Darcs.Patch ( RepoPatch )
 import Darcs.Patch.PatchInfoAnd ( extractHash )
 import Darcs.Patch.Progress ( progressFL )
-import Darcs.Patch.Set
-    ( Origin
-    , PatchSet
-    , patchSet2FL
-    , patchSet2RL
-    , patchSetInventoryHashes
-    )
-import Darcs.Patch.Witnesses.Ordered ( mapFL, mapRL )
+import Darcs.Patch.Witnesses.Ordered ( mapFL )
+import Darcs.Patch.Set ( patchSet2FL )
 
+import Darcs.Repository.Traverse ( listInventories )
+import Darcs.Repository.InternalTypes ( Repository, AccessType(RW), withRepoDir )
 import Darcs.Repository.Hashed ( readPatches )
-import Darcs.Repository.InternalTypes
-    ( AccessType(RW)
-    , Repository
-    , repoCache
-    )
 import Darcs.Repository.Paths
     ( hashedInventoryPath
+    , inventoriesDirPath
     , patchesDirPath
     , pristineDirPath
     )
 import Darcs.Repository.Pristine ( readHashedPristineRoot )
-import Darcs.Repository.Traverse ( listInventories )
 
 packsDir, basicPack, patchesPack :: String
 packsDir     = "packs"
 basicPack    = "basic.tar.gz"
 patchesPack  = "patches.tar.gz"
 
-fetchAndUnpack :: FilePath -> Cache -> FilePath -> IO ()
+fetchAndUnpack :: FilePath
+               -> Cache
+               -> FilePath
+               -> IO ()
 fetchAndUnpack filename cache remote = do
   unpackTar cache . Tar.read . GZ.decompress =<<
     fetchFileLazyPS (remote </> darcsdir </> packsDir </> filename) Uncachable
 
-fetchAndUnpackPatches :: PatchSet p Origin wR -> Cache -> FilePath -> IO ()
-fetchAndUnpackPatches ps cache remote =
-  -- Patches pack can be outdated and thus miss some new patches of the
-  -- repository. So we download pack asynchonously and always do a complete
-  -- pass of individual patch and inventory files. This is efficient, since for
-  -- files that already exist (because they were unpacked from the pack),
-  -- fetchFileUsingCache completes very quickly.
+fetchAndUnpackPatches :: [InventoryHash] -> [PatchHash] -> Cache -> FilePath -> IO ()
+fetchAndUnpackPatches ihs phs cache remote =
+  -- Patches pack can miss some new patches of the repository.
+  -- So we download pack asynchonously and always do a complete pass
+  -- of individual patch and inventory files.
   withAsync (fetchAndUnpack patchesPack cache remote) $ \_ -> do
-    withProgress "Getting inventories" $
-      forM_ (patchSetInventoryHashes ps) .
-        maybe (fail "unexpected unhashed inventory") . fetch
-    withProgress "Getting patches" $
-      forM_ (mapRL hashedPatchHash $ patchSet2RL ps) .
-        maybe (fail "unexpected unhashed patch") . fetch
-  where
-    fetch k h = fetchFileUsingCache cache h >> finishedOneIO k (encodeValidHash h)
-    hashedPatchHash = either (const Nothing) Just . extractHash
+    forM_ ihs (fetchFileUsingCache cache)
+    forM_ phs (fetchFileUsingCache cache)
 
 fetchAndUnpackBasic :: Cache -> FilePath -> IO ()
 fetchAndUnpackBasic = fetchAndUnpack basicPack
@@ -167,6 +146,7 @@ unpackTar c (Tar.Next e es) = case Tar.entryContent e of
 -- | Create packs from the current recorded version of the repository.
 createPacks :: RepoPatch p => Repository 'RW p wU wR -> IO ()
 createPacks repo =
+ withRepoDir repo $
   flip finally (mapM_ removeFileIfExists
   [ darcsdir </> "meta-filelist-inventories"
   , darcsdir </> "meta-filelist-pristine"
@@ -178,18 +158,16 @@ createPacks repo =
   createDirectoryIfMissing False (darcsdir </> packsDir)
   writeFile ( darcsdir </> packsDir </> "pristine" ) $ encodeValidHash hash
   -- pack patchesTar
-  ps <- progressFL "Reading patches" . patchSet2FL <$> readPatches repo
-  phs <- sequence $ mapFL patchHash ps
-  forM_ phs $ relinkUsingCache (repoCache repo)
-  let pfs = map (patchesDirPath </>) $ map encodeValidHash phs
-  is <- listInventories repo
+  ps <- mapFL hashedPatchFileName . progressFL "Packing patches" . patchSet2FL <$>
+    readPatches repo
+  is <- map (inventoriesDirPath </>) <$> listInventories
   writeFile (darcsdir </> "meta-filelist-inventories") . unlines $
     map takeFileName is
   -- Note: tinkering with zlib's compression parameters does not make
   -- any noticeable difference in generated archive size;
   -- switching to bzip2 would provide ~25% gain OTOH.
   BLC.writeFile (patchesTar <.> "part") . GZ.compress . Tar.write =<<
-    mapM fileEntry' ((darcsdir </> "meta-filelist-inventories") : pfs ++ reverse is)
+    mapM fileEntry' ((darcsdir </> "meta-filelist-inventories") : ps ++ reverse is)
   renameFile (patchesTar <.> "part") patchesTar
   -- pack basicTar
   pr <- sortByMTime =<< dirContents pristineDirPath
@@ -210,9 +188,9 @@ createPacks repo =
     tp <- either fail return $ toTarPath False x
     return $ fileEntry tp content
   dirContents dir = map (dir </>) <$> listDirectory dir
-  patchHash x = case extractHash x of
-    Left _ -> fail "Unexpected unhashed patch"
-    Right h -> return h
+  hashedPatchFileName x = case extractHash x of
+    Left _ -> fail "unexpected unhashed patch"
+    Right h -> patchesDirPath </> encodeValidHash h
   sortByMTime xs = map snd . sort <$> mapM (\x -> (\t -> (t, x)) <$>
     getModificationTime x) xs
   removeFileIfExists x = do

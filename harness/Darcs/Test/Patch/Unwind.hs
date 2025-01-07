@@ -19,9 +19,9 @@ import Darcs.Test.Patch.RepoModel
 import Darcs.Test.Patch.WithState
 import Darcs.Test.Util.TestResult ( TestResult, succeeded, assertNotFailed )
 
-import Test.Tasty ( TestTree, adjustOption )
-import Test.Tasty.HUnit ( testCase )
-import Test.Tasty.QuickCheck ( QuickCheckMaxSize(..), testProperty )
+import Test.Framework ( Test )
+import Test.Framework.Providers.HUnit ( testCase )
+import Test.Framework.Providers.QuickCheck2 ( testProperty )
 
 -- This property could be generalised over all instances of Unwind (not
 -- just Named), but in practice it is only interesting for Named, for which
@@ -35,10 +35,10 @@ propUnwindNamedSucceeds p =
     Unwound before ps after ->
       lengthFL before `seq` ps `seq` lengthRL after `seq` succeeded
 
-numberedTestCases :: forall a . String -> (a -> TestResult) -> [a] -> [TestTree]
+numberedTestCases :: forall a . String -> (a -> TestResult) -> [a] -> [Test]
 numberedTestCases text runTest = zipWith numbered [1..]
   where
-    numbered :: Int -> a -> TestTree
+    numbered :: Int -> a -> Test
     numbered n testItem = testCase (text ++ " " ++ show n) (assertNotFailed $ runTest testItem)
 
 testSuite
@@ -51,17 +51,17 @@ testSuite
      , PrimBased p
      , ArbitraryPrim (OnlyPrim p)
      , ShrinkModel (ModelOf p) (PrimOf p)
+     , Show1 (ModelOf p)
      , Show2 p
      , CheckedMerge p
      , Commute (OnlyPrim p)
      , RepoApply (PrimOf p)
      )
-  => [TestTree]
+  => [Test]
 testSuite =
     -- TODO these need to take the patch type, currently hard-coded to V1
     numberedTestCases "full unwind example" (withAllSequenceItems propUnwindNamedSucceeds) (examples @p)
       ++
-  [ adjustOption (\(QuickCheckMaxSize n) -> QuickCheckMaxSize (n `div` 5)) $
-    testProperty "unwind named succeeds"
+  [ testProperty "unwind named succeeds"
      (withAllSequenceItems (propUnwindNamedSucceeds :: PatchProperty (Named p)))
   ]

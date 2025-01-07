@@ -1,6 +1,5 @@
 -- -fno-cse is here because of anonymousNamedPrim - see the comments on that
 {-# OPTIONS_GHC -fno-cse #-}
-{-# OPTIONS_GHC -Wno-redundant-constraints #-}
 -- | Wrapper for prim patches to give them an identity derived from the identity
 -- of the containined Named patch.
 module Darcs.Patch.Prim.Named
@@ -29,10 +28,10 @@ import Darcs.Prelude hiding ( take )
 import Darcs.Patch.Ident ( PatchId, SignedId(..), StorableId(..) )
 import Darcs.Patch.Info ( PatchInfo, makePatchname )
 import Darcs.Patch.Prim.WithName ( PrimWithName(..) )
+import Darcs.Patch.Show ( ShowPatchFor(..) )
 
 import Darcs.Test.TestOnly
 import Darcs.Util.Hash ( SHA1, sha1Show, sha1Read )
-import qualified Darcs.Util.Format as F
 import Darcs.Util.Parser
 import Darcs.Util.Printer
 
@@ -87,16 +86,10 @@ instance StorableId PrimPatchId where
     liftMaybe $ PrimPatchId i <$> sha1Read x
    where
      liftMaybe = maybe mzero return
-  showId = showPrimPatchId
-  formatId (PrimPatchId i h) =
-    F.ascii "hash" F.<+> F.intDec i F.<+> F.byteString (sha1Show h)
 
-instance Print PrimPatchId where
-  print = showPrimPatchId
-
-showPrimPatchId :: PrimPatchId -> Doc
-showPrimPatchId(PrimPatchId i h) =
-  text "hash" <+> text (show i) <+> packedString (sha1Show h)
+  showId ForStorage (PrimPatchId i h) =
+    text "hash" <+> text (show i) <+> packedString (sha1Show h)
+  showId ForDisplay _ = mempty
 
 -- Because we are using unsafePerformIO, we need -fno-cse for
 -- this module. We don't need -fno-full-laziness because the

@@ -62,21 +62,16 @@ import Darcs.Repository ( PatchInfoAnd,
                           withRepoLockCanFail )
 import Darcs.Util.Lock ( withTempDir )
 import Darcs.Patch.Set ( PatchSet, patchSet2RL, Origin )
-import Darcs.Patch.Format ( FormatPatch(..) )
-import Darcs.Patch.Info
-    ( PatchInfo
-    , showPatchInfo
-    , formatPatchInfo
-    , toXml
-    , toXmlShort
-    )
+import Darcs.Patch.Format ( PatchListFormat )
+import Darcs.Patch.Info ( toXml, toXmlShort, showPatchInfo, displayPatchInfo, PatchInfo )
+import Darcs.Patch.Ident ( PatchId )
 import Darcs.Patch.Invertible ( mkInvertible )
 import Darcs.Patch.Depends ( contextPatches )
-import Darcs.Patch.Show ( ShowPatch )
+import Darcs.Patch.Show ( ShowPatch, ShowPatchFor(..) )
 import Darcs.Patch.TouchesFiles ( lookTouch )
 import Darcs.Patch.Apply ( ApplyState )
 import Darcs.Patch ( PrimPatchBase(..), invert, xmlSummary, description,
-                     effectOnPaths, listTouchedFiles )
+                     effectOnPaths, listTouchedFiles, showPatch )
 import Darcs.Patch.Named ( HasDeps, getdeps )
 import Darcs.Patch.Prim.Class ( PrimDetails )
 import Darcs.Patch.Summary ( Summary )
@@ -93,8 +88,6 @@ import Darcs.Patch.Match
     , matchAPatch
     , haveNonrangeMatch
     )
-
-import qualified Darcs.Util.Format as F
 import Darcs.Util.Printer
     ( Doc
     , ($$)
@@ -269,7 +262,8 @@ mkLogInfo ps = LogInfo (map (,[]) ps) [] Nothing
 logInfoFL :: FL p wX wY -> LogInfo p
 logInfoFL = mkLogInfo . mapFL Sealed2
 
-matchNonrange :: Matchable p => [MatchFlag] -> RL p wA wB -> [Sealed2 p]
+matchNonrange :: (Matchable p, PatchId p ~ PatchInfo)
+              => [MatchFlag] -> RL p wA wB -> [Sealed2 p]
 matchNonrange matchFlags
   | haveNonrangeMatch matchFlags = filterRL (matchAPatch matchFlags)
   | otherwise = mapRL Sealed2
@@ -352,7 +346,7 @@ filterPatchesByNames maxcount paths patches = removeNonRenames $
                   case hopefullyM hp of
                     Nothing -> do
                         let err = text "Can't find patches prior to:"
-                                  $$ showPatchInfo (info hp)
+                                  $$ displayPatchInfo (info hp)
                         return (LogInfo [] renames (Just err))
                     Just p ->
                         case lookTouch (Just renames) fs (invert (mkInvertible p)) of
@@ -370,7 +364,7 @@ filterPatchesByNames maxcount paths patches = removeNonRenames $
                                 filterPatchesByNamesM fs' ps
 
 changelog :: forall p wStart wX
-           . ( ShowPatch p, FormatPatch p
+           . ( ShowPatch p, PatchListFormat p
              , Summary p, HasDeps p, PrimDetails (PrimOf p)
              )
           => [DarcsFlag] -> RL (PatchInfoAndG p) wStart wX
@@ -389,7 +383,7 @@ changelog opts patches li
           change_with_summary (Sealed2 hp)
             | Just p <- hopefullyM hp =
               if O.changesFormat ? opts == Just O.MachineReadable
-                then F.toDoc $ formatPatch p
+                then showPatch ForStorage p
                 else showFriendly (verbosity ? opts) (O.withSummary ? opts) p
             | otherwise = description hp $$ indent (text "[this patch is unavailable]")
 
@@ -450,8 +444,9 @@ logContext opts = do
   let repodir = fromMaybe "." $ getRepourl opts
   withRepositoryLocation (useCache ? opts) repodir $ RepoJob $ \repository -> do
       (_ :> ps) <- contextPatches `fmap` readPatches repository
-      let header = F.ascii "\nContext:\n"
-      F.putFormat $ F.vsep (header : mapRL (formatPatchInfo . info) ps)
+      let header = text "\nContext:\n"
+      viewDocWith simplePrinters $ vsep
+          (header : mapRL (showPatchInfo ForStorage . info) ps)
 
 -- | changes is an alias for log
 changes :: DarcsCommand

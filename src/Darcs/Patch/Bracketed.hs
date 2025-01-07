@@ -5,9 +5,10 @@ module Darcs.Patch.Bracketed
 
 import Darcs.Prelude
 
-import Darcs.Patch.Format ( FormatPatch(..) )
+import Darcs.Patch.Format ( PatchListFormat )
+import Darcs.Patch.Show ( ShowPatchBasic(..) )
 import Darcs.Patch.Witnesses.Ordered ( FL(..), mapFL, mapFL_FL, concatFL )
-import Darcs.Util.Format ( vcat, ascii, ($$) )
+import Darcs.Util.Printer ( vcat, blueText, ($$) )
 
 
 -- |This type exists for legacy support of on-disk format patch formats.
@@ -39,11 +40,14 @@ mapBracketed f (Parens ps) = Parens (mapBracketedFLFL f ps)
 mapBracketedFLFL :: (forall wA wB . p wA wB -> q wA wB) -> BracketedFL p wX wY -> BracketedFL q wX wY
 mapBracketedFLFL f = mapFL_FL (mapBracketed f)
 
-instance FormatPatch p => FormatPatch (Bracketed p) where
-  formatPatch (Singleton p) = formatPatch p
-  formatPatch (Braced NilFL) = ascii "{" $$ ascii "}"
-  formatPatch (Braced ps) = ascii "{" $$ vcat (mapFL formatPatch ps) $$ ascii "}"
-  formatPatch (Parens ps) = ascii "(" $$ vcat (mapFL formatPatch ps) $$ ascii ")"
+instance PatchListFormat (Bracketed p)
 
--- The ReadPatch instance is defined in Darcs.Patch.Read as it is used as an
--- intermediate form during reading of lists of patches in legacy formats.
+instance ShowPatchBasic p => ShowPatchBasic (Bracketed p) where
+    showPatch f (Singleton p) = showPatch f p
+    showPatch _ (Braced NilFL) = blueText "{" $$ blueText "}"
+    showPatch f (Braced ps) = blueText "{" $$ vcat (mapFL (showPatch f) ps) $$ blueText "}"
+    showPatch f (Parens ps) = blueText "(" $$ vcat (mapFL (showPatch f) ps) $$ blueText ")"
+
+-- the ReadPatch instance is defined in Darcs.Patch.Read as it is
+-- used as an intermediate form during reading of lists of patches
+-- that are specified as ListFormatV1 or ListFormatV2.

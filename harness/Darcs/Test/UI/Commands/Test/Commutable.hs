@@ -22,18 +22,18 @@ import qualified Darcs.UI.Options.All as O
 
 import Darcs.Test.UI.Commands.Test.IndexedApply ( IndexedApply(..) )
 
-import Test.Tasty ( TestTree, testGroup )
-import Test.Tasty.HUnit ( testCase )
+import Test.Framework ( Test, testGroup )
+import Test.Framework.Providers.HUnit ( testCase )
 import Test.HUnit ( assertEqual )
 
-testSuite :: TestTree
+testSuite :: Test
 testSuite =
   testGroup "Darcs.UI.Commands.Test.Commutable"
     [ testGroup "Generic test cases" $ map genericTestCases [O.Linear, O.Bisect, O.Backoff]
     ]
 
 
-genericTestCases :: O.TestStrategy -> TestTree
+genericTestCases :: O.TestStrategy -> Test
 genericTestCases testStrategy =
   testGroup (show testStrategy) $ map (expectedResult testStrategy)
     [ ("Unminimisable sequence",
@@ -107,7 +107,7 @@ type ExpectedResult =
   , StrategyResultRaw [Int]
   )
 
-expectedResult :: O.TestStrategy -> (String, ExpectedResult) -> TestTree
+expectedResult :: O.TestStrategy -> (String, ExpectedResult) -> Test
 expectedResult testStrategy (testName, (testDetails, expectedNoShrinkingResult, expectedShrinkingResult)) =
   testCase testName $ do
     let

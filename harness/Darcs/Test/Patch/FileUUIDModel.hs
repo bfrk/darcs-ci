@@ -8,6 +8,7 @@ module Darcs.Test.Patch.FileUUIDModel
   , repoApply
   , emptyFile
   , emptyDir
+  , root, rootId
   , repoObjects, repoIds
   , aFilename, aDirname
   , aLine, aContent
@@ -79,6 +80,13 @@ emptyDir = Directory M.empty
 
 ----------------------------------------------------------------------
 -- * Queries
+
+rootId :: UUID
+rootId = UUID "ROOT"
+
+-- | The root directory of a repository.
+root :: FileUUIDModel wX -> (UUID, Object Fail)
+root (FileUUIDModel repo) = (rootId, fromJust $ unFail $ getObject repo rootId)
 
 repoObjects :: FileUUIDModel wX -> [(UUID, Object Fail)]
 repoObjects (FileUUIDModel repo) =
@@ -163,7 +171,7 @@ aDir (dirid:dirids) fileids =
 
 
 anUUID :: Gen UUID
-anUUID = Recorded . BC.pack <$> vectorOf 4 (oneof $ map return "0123456789")
+anUUID = UUID . BC.pack <$> vectorOf 4 (oneof $ map return "0123456789")
 
 -- | @aRepo filesNo dirsNo@ produces repositories with *at most* 
 -- @filesNo@ files and @dirsNo@ directories. 
@@ -179,15 +187,15 @@ aRepo maxFiles maxDirs = do
   dirsNo <- choose (minDirs,maxDirs)
   let (dirids, ids') = splitAt dirsNo ids
       fileids = take filesNo ids'
-  objectmap <- aDir (Root : dirids) fileids
+  objectmap <- aDir (rootId : dirids) fileids
   return $ FileUUIDModel $ objectMap $ M.fromList objectmap
 
 -- | Generate small repositories.
 -- Small repositories help generating (potentially) conflicting patches.
 instance RepoModel FileUUIDModel where
   type RepoState FileUUIDModel = ObjectMap
-  aSmallRepo = do filesNo <- frequency [(3, return 1), (1, return 2), (1, return 5)]
-                  dirsNo <- frequency [(3, return 1), (1, return 0), (1, return 5)]
+  aSmallRepo = do filesNo <- frequency [(3, return 1), (1, return 2)]
+                  dirsNo <- frequency [(3, return 1), (1, return 0)]
                   aRepo filesNo dirsNo
   repoApply (FileUUIDModel state) patch = FileUUIDModel <$> applyToState patch state
   showModel = show

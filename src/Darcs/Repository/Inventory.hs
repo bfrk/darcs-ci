@@ -2,10 +2,11 @@ module Darcs.Repository.Inventory
     ( module Darcs.Repository.Inventory.Format
     , readPatchesFromInventoryFile
     , readPatchesFromInventory
-    , readOneInventory
     , readSinglePatch
+    , readOneInventory
     , writeInventory
     , writePatchIfNecessary
+    , writeHashFile
     ) where
 
 import Darcs.Prelude
@@ -16,18 +17,20 @@ import System.FilePath.Posix ( (</>) )
 import System.IO ( hPutStrLn, stderr )
 import System.IO.Unsafe ( unsafeInterleaveIO )
 
-import Darcs.Patch ( RepoPatch, readPatch )
-import Darcs.Patch.Format ( FormatPatch(..) )
-import Darcs.Patch.Info ( PatchInfo, showPatchInfo, piName )
+import Darcs.Patch ( RepoPatch, readPatch, showPatch )
+import Darcs.Patch.Format ( PatchListFormat )
+import Darcs.Patch.Info ( PatchInfo, displayPatchInfo, piName )
 import Darcs.Patch.PatchInfoAnd
     ( PatchInfoAnd
     , PatchInfoAndG
     , createHashed
     , extractHash
     , info
+    , patchInfoAndPatch
     )
-import Darcs.Patch.Read ( ReadPatch, ReadPatches )
+import Darcs.Patch.Read ( ReadPatch )
 import Darcs.Patch.Set ( Origin, PatchSet(..), SealedPatchSet, Tagged(..) )
+import Darcs.Patch.Show ( ShowPatchFor(..) )
 import Darcs.Patch.Witnesses.Ordered ( RL(..), mapRL )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(..), mapSeal, seal, unseal )
 import Darcs.Patch.Witnesses.Unsafe ( unsafeCoerceP )
@@ -41,13 +44,12 @@ import Darcs.Util.Cache
     , writeFileUsingCache
     )
 import Darcs.Util.File ( Cachable(Uncachable), gzFetchFilePS )
-import Darcs.Util.Format ( Format, ascii, toLazyByteString, ($$) )
-import Darcs.Util.Printer ( renderString )
-import Darcs.Util.Progress ( debugMessage, finishedOneIO, withProgress )
+import Darcs.Util.Printer ( Doc, renderPS, renderString, text, ($$) )
+import Darcs.Util.Progress ( debugMessage, finishedOneIO )
 
 -- | Read a 'PatchSet' starting with a specific inventory inside a 'Repository'.
 readPatchesFromInventoryFile
-  :: ReadPatches p
+  :: (PatchListFormat p, ReadPatch p)
   => FilePath
   -> Repository rt p wU wR
   -> IO (PatchSet p Origin wS)
@@ -62,17 +64,15 @@ readPatchesFromInventoryFile invPath repo = do
 
 -- | Read a complete 'PatchSet' from a 'Cache', by following the chain of
 -- 'Inventory's, starting with the given one.
--- Note that we read inventories and patches lazily, explicitly using
--- 'unsafeInterleaveIO' to delay IO actions until the value is demanded. This
--- is justified by the fact that inventories and patches are stored in hashed
--- format, which implies that the files we read are never mutated.
-readPatchesFromInventory :: forall p. ReadPatches p
+readPatchesFromInventory :: (PatchListFormat p, ReadPatch p)
                          => Cache
                          -> Inventory
                          -> IO (SealedPatchSet p Origin)
 readPatchesFromInventory cache = parseInv
   where
-    parseInv :: Inventory -> IO (SealedPatchSet p Origin)
+    parseInv :: (PatchListFormat p, ReadPatch p)
+             => Inventory
+             -> IO (SealedPatchSet p Origin)
     parseInv (Inventory Nothing ris) =
         mapSeal (PatchSet NilRL) <$> readPatchesFromInventoryEntries cache ris
     parseInv (Inventory (Just h) []) =
@@ -83,7 +83,7 @@ readPatchesFromInventory cache = parseInv
         Sealed ps <- delaySealed (readPatchesFromInventoryEntries cache ris)
         return $ seal $ PatchSet ts ps
 
-    read_ts :: InventoryEntry
+    read_ts :: (PatchListFormat p, ReadPatch p) => InventoryEntry
             -> InventoryHash -> IO (Sealed (RL (Tagged p) Origin))
     read_ts tag0 h0 = do
         contents <- unsafeInterleaveIO $ readTaggedInventory h0
@@ -101,8 +101,10 @@ readPatchesFromInventory cache = parseInv
         Sealed tag00 <- read_tag tag0
         return $ seal $ ts :<: Tagged ps tag00 (Just h0)
 
-    read_tag :: InventoryEntry -> IO (Sealed (PatchInfoAnd p wX))
-    read_tag (i, h) = readSinglePatch cache i h
+    read_tag :: (PatchListFormat p, ReadPatch p) => InventoryEntry
+             -> IO (Sealed (PatchInfoAnd p wX))
+    read_tag (i, h) =
+        mapSeal (patchInfoAndPatch i) <$> createHashed h (readSinglePatch cache i)
 
     readTaggedInventory :: InventoryHash -> IO Inventory
     readTaggedInventory invHash = do
@@ -119,28 +121,34 @@ readPatchesFromInventoryEntries :: ReadPatch np
 readPatchesFromInventoryEntries cache ris = read_patches (reverse ris)
   where
     read_patches [] = return $ seal NilRL
-    read_patches allis@((i1, h1):is1) =
-      liftReadRL (rp is1) (speculateAndRead h1 allis i1)
+    read_patches allis@((i1, h1) : is1) =
+        lift2Sealed (\p rest -> rest :<: i1 `patchInfoAndPatch` p) (rp is1)
+                    (createHashed h1 (const $ speculateAndParse h1 allis i1))
       where
         rp [] = return $ seal NilRL
         rp [(i, h), (il, hl)] =
-          liftReadRL (rp [(il, hl)]) (speculateAndRead h (reverse allis) i)
-        rp ((i, h):is) = liftReadRL (rp is) (readSinglePatch cache i h)
+            lift2Sealed (\p rest -> rest :<: i `patchInfoAndPatch` p)
+                        (rp [(il, hl)])
+                        (createHashed h
+                            (const $ speculateAndParse h (reverse allis) i))
+        rp ((i, h) : is) =
+            lift2Sealed (\p rest -> rest :<: i `patchInfoAndPatch` p)
+                        (rp is)
+                        (createHashed h (readSinglePatch cache i))
 
-    liftReadRL
-      :: IO (Sealed (RL p wX))
-      -> (forall wB . IO (Sealed (p wB)))
-      -> IO (Sealed (RL p wX))
-    liftReadRL iops iop = do
-      Sealed ps <- delaySealed iops
-      Sealed p <- delaySealed iop
-      return $ seal $ ps :<: p
+    lift2Sealed :: (forall wY wZ . q wY wZ -> p wX wY -> r wX wZ)
+                -> IO (Sealed (p wX))
+                -> (forall wB . IO (Sealed (q wB)))
+                -> IO (Sealed (r wX))
+    lift2Sealed f iox ioy = do
+        Sealed x <- delaySealed iox
+        Sealed y <- delaySealed ioy
+        return $ seal $ f y x
 
-    speculateAndRead h is i = speculate h is >> readSinglePatch cache i h
+    speculateAndParse h is i = speculate h is >> readSinglePatch cache i h
 
     speculate :: PatchHash -> [InventoryEntry] -> IO ()
-    speculate pHash is =
-      unsafeInterleaveIO $ do
+    speculate pHash is = do
         already_got_one <- peekInCache cache pHash
         unless already_got_one $
             speculateFilesUsingCache cache (map snd is)
@@ -154,9 +162,8 @@ delaySealed = fmap (unseal seal) . unsafeInterleaveIO
 -- Fails with an error message if the patch file cannot be parsed.
 readSinglePatch :: ReadPatch p
                 => Cache
-                -> PatchInfo -> PatchHash -> IO (Sealed (PatchInfoAndG p wX))
-readSinglePatch cache i h =
-  createHashed i h $ do
+                -> PatchInfo -> PatchHash -> IO (Sealed (p wX))
+readSinglePatch cache i h = do
     debugMessage $ "Reading patch file for: " ++ piName i
     (fn, ps) <- fetchFileUsingCache cache h
     case readPatch ps of
@@ -164,7 +171,7 @@ readSinglePatch cache i h =
         Left e -> fail $ unlines
             [ "Couldn't parse file " ++ fn
             , "which is patch"
-            , renderString $ showPatchInfo i
+            , renderString $ displayPatchInfo i
             , e
             ]
 
@@ -183,25 +190,26 @@ readInventoryPrivate path = do
       Right r -> return r
       Left e -> fail $ unlines [unwords ["parse error in file", path],e]
 
-writeInventory :: RepoPatch p => Cache -> PatchSet p Origin wX -> IO InventoryHash
-writeInventory cache = withProgress "Writing inventory" . go
+writeInventory :: RepoPatch p => String -> Cache
+               -> PatchSet p Origin wX -> IO InventoryHash
+writeInventory tediousName cache = go
   where
-    go :: RepoPatch p => PatchSet p Origin wX -> String -> IO InventoryHash
-    go (PatchSet ts ps) k = do
+    go :: RepoPatch p => PatchSet p Origin wX -> IO InventoryHash
+    go (PatchSet ts ps) = do
       entries <- sequence $ mapRL (writePatchIfNecessary cache) ps
-      content <- write_ts k ts entries
+      content <- write_ts ts entries
       writeHashFile cache content
-    write_ts _ NilRL entries = return $ formatInventoryPatches (reverse entries)
-    write_ts k (tts :<: Tagged tps t maybeHash) entries = do
+    write_ts NilRL entries = return $ showInventoryPatches (reverse entries)
+    write_ts (tts :<: Tagged tps t maybeHash) entries = do
       -- if the Tagged has a hash, then we know that it has already been
       -- written; otherwise recurse without the tag
-      parenthash <- maybe (go (PatchSet tts tps) k) return maybeHash
+      parenthash <- maybe (go (PatchSet tts tps)) return maybeHash
       let parenthash_str = encodeValidHash parenthash
-      finishedOneIO k parenthash_str
+      finishedOneIO tediousName parenthash_str
       tag_entry <- writePatchIfNecessary cache t
       return $
-        ascii ("Starting with inventory:\n" ++ parenthash_str) $$
-        formatInventoryPatches (tag_entry : reverse entries)
+        text ("Starting with inventory:\n" ++ parenthash_str) $$
+        showInventoryPatches (tag_entry : reverse entries)
 
 -- | Write a 'PatchInfoAnd' to disk and return an 'InventoryEntry' i.e. the
 -- patch info and hash. However, if we patch already contains a hash, assume it
@@ -212,12 +220,14 @@ writePatchIfNecessary :: RepoPatch p => Cache
 writePatchIfNecessary c hp = infohp `seq`
     case extractHash hp of
         Right h -> return (infohp, h)
-        Left p -> (infohp,) <$> writeHashFile c (formatPatch p)
+        Left p ->
+          (infohp,) <$>
+            writeHashFile c (showPatch ForStorage p)
   where
     infohp = info hp
 
 -- | Wrapper around 'writeFileUsingCache' that takes a 'Doc' instead of a
 -- 'ByteString'.
-writeHashFile :: ValidHash h => Cache -> Format -> IO h
-writeHashFile c = writeFileUsingCache c . toLazyByteString
+writeHashFile :: ValidHash h => Cache -> Doc -> IO h
+writeHashFile c d = writeFileUsingCache c (renderPS d)
 

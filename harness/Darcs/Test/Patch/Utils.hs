@@ -14,9 +14,9 @@ import Darcs.Prelude
 
 import Data.Maybe ( fromMaybe )
 
-import Test.Tasty ( TestTree, TestName )
-import Test.Tasty.HUnit ( testCase )
-import Test.Tasty.QuickCheck ( testProperty )
+import Test.Framework ( Test, TestName )
+import Test.Framework.Providers.HUnit ( testCase )
+import Test.Framework.Providers.QuickCheck2 ( testProperty )
 import Test.HUnit ( assertFailure )
 import Test.QuickCheck ( Arbitrary, Testable, (==>) )
 
@@ -28,7 +28,7 @@ testConditional
   :: (Arbitrary a, Show a, Testable prop) => TestName     -- ^ Test name
                                           -> (a -> Bool)  -- ^ Condition
                                           -> (a -> prop)  -- ^ Test function
-                                          -> TestTree
+                                          -> Test
 testConditional name cond t = testProperty name t'
     where t' x = cond x ==> t x
 
@@ -37,7 +37,7 @@ testConditionalMaybe
   => TestName -- ^ Test name
   -> (a -> Maybe Bool) -- ^ Condition
   -> (a -> prop) -- ^ Test function
-  -> TestTree
+  -> Test
 testConditionalMaybe name cond t = testProperty name t'
   where
     cond' x =
@@ -48,7 +48,7 @@ testConditionalMaybe name cond t = testProperty name t'
 
 -- | Utility function to run old tests that return a list of error messages,
 --   with the empty list meaning success.
-testStringList :: String -> [String] -> TestTree
+testStringList :: String -> [String] -> Test
 testStringList name test = testCase name $ mapM_ assertFailure test
 
 -- | Run a test function on a set of data, using HUnit. The test function should
@@ -56,7 +56,7 @@ testStringList name test = testCase name $ mapM_ assertFailure test
 testCases :: String             -- ^ The test name
           -> (a -> TestResult)  -- ^ The test function
           -> [a]                -- ^ The test data
-          -> TestTree
+          -> Test
 testCases name test datas = testCase name (mapM_ (assertNotFailed . test) datas)
 
 newtype TestGenerator thing gen =
@@ -68,13 +68,13 @@ newtype TestCondition thing =
 newtype TestCheck thing t =
   TestCheck (forall wX wY. thing wX wY -> t)
 
-type PropList what gen = String -> TestGenerator what gen -> [TestTree]
+type PropList what gen = String -> TestGenerator what gen -> [Test]
 
 properties :: forall thing gen. (Show gen, Arbitrary gen)
            => TestGenerator thing gen
            -> String -> String
            -> forall t. (Testable t) => [(String, TestCondition thing, TestCheck thing t)]
-           -> [TestTree]
+           -> [Test]
 properties (TestGenerator gen) prefix genname tests =
   [cond name condition check | (name, condition, check) <- tests]
   where
@@ -83,7 +83,7 @@ properties (TestGenerator gen) prefix genname tests =
       => String
       -> TestCondition thing
       -> TestCheck thing testable
-      -> TestTree
+      -> Test
     cond t (TestCondition c) (TestCheck p) =
       testConditional
         (prefix ++ " (" ++ genname ++ "): " ++ t)

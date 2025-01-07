@@ -32,16 +32,13 @@ import System.Exit ( ExitCode(..) )
 import System.FilePath.Posix ( joinPath, splitDirectories )
 import Control.Monad ( when, unless )
 
-import Darcs.UI.Commands
-    ( DarcsCommand(..)
-    , commandAlias
-    , commandStub
-    , noPrereq
-    , nodefaults
-    , putFinished
-    , putInfo
-    , withStdOpts
-    )
+import Darcs.UI.Commands ( DarcsCommand(..), withStdOpts
+                      , nodefaults
+                      , commandStub
+                      , commandAlias
+                      , putInfo
+                      , putFinished
+                      )
 import Darcs.UI.Completion ( noArgs )
 import Darcs.UI.Flags
     ( DarcsFlag
@@ -51,6 +48,7 @@ import Darcs.UI.Flags
     , quiet
     , setDefault
     , setScriptsExecutable
+    , umask
     , useCache
     , usePacks
     , verbosity
@@ -64,14 +62,14 @@ import Darcs.UI.Commands.Util
     , getUniqueRepositoryName
     )
 import Darcs.Patch.Match ( MatchFlag(..) )
-import Darcs.Repository ( cloneRepository, withUMaskFlag )
+import Darcs.Repository ( cloneRepository )
 import Darcs.Repository.Format ( identifyRepoFormat
                                , RepoProperty ( HashedInventory
                                               , RebaseInProgress
                                               )
                                , formatHas
                                )
-import Darcs.Util.Lock ( withNewDirectory, withTempDir )
+import Darcs.Util.Lock ( withTempDir )
 import Darcs.Util.Ssh ( getSSH, SSHCmd(SCP,SSH) )
 import Darcs.Repository.Flags
     ( CloneKind(CompleteClone), SetDefault(NoSetDefault), ForgetParent(..) )
@@ -135,7 +133,7 @@ clone = DarcsCommand
     , commandExtraArgs = -1
     , commandExtraArgHelp = ["<REPOSITORY>", "[<DIRECTORY>]"]
     , commandCommand = cloneCmd
-    , commandPrereq = noPrereq
+    , commandPrereq = \_ -> return $ Right ()
     , commandCompleteArgs = noArgs
     , commandArgdefaults = nodefaults
     , commandOptions = cloneOpts
@@ -174,8 +172,7 @@ put :: DarcsCommand
 put = commandStub "put" putHelp putDescription clone
 
 cloneCmd :: (AbsolutePath, AbsolutePath) -> [DarcsFlag] -> [String] -> IO ()
-cloneCmd fps opts [inrepodir, outname] =
-  cloneCmd fps (withNewRepo outname opts) [inrepodir]
+cloneCmd fps opts [inrepodir, outname] = cloneCmd fps (withNewRepo outname opts) [inrepodir]
 cloneCmd (_,o) opts [inrepodir] = do
   debugMessage "Starting work on clone..."
   repodir <- fixUrl o inrepodir
@@ -200,22 +197,25 @@ cloneCmd (_,o) opts [inrepodir] = do
     $$ text ""
     $$ text "***********************************************************************"
 
-  withUMaskFlag (O.umask ? opts) $
-   case cloneToSSH opts of
+  case cloneToSSH opts of
     Just repo -> do
       withTempDir "clone" $ \_ -> do
          prepareRemoteDir repo
          putInfo opts $ text "Creating local clone..."
          currentDir <- getCurrentDirectory
          mysimplename <- makeRepoName True [] repodir -- give correct name to local clone
-         withNewDirectory mysimplename $
-           doit
-             repodir
-             CompleteClone
-             (NoSetDefault True)
-             O.NoInheritDefault -- never inherit defaultrepo when cloning to ssh
-             rfsource
-             YesForgetParent
+         cloneRepository repodir mysimplename (verbosity ? opts) (useCache ? opts)
+                         CompleteClone (umask ? opts) (O.remoteDarcs ? opts)
+                         (setScriptsExecutable ? opts)
+                         (NoSetDefault True)
+                         O.NoInheritDefault -- never inherit defaultrepo when cloning to ssh
+                         (map convertUpToToOne (O.matchOneContext ? opts))
+                         rfsource
+                         (withWorkingDir ? opts)
+                         (patchIndexNo ? opts)
+                         (usePacks ? opts)
+                         YesForgetParent
+                         (O.withPrefsTemplates ? opts)
          setCurrentDirectory currentDir
          (scp, args) <- getSSH SCP
          putInfo opts $ text $ "Transferring clone using " ++ scp ++ "..."
@@ -229,33 +229,19 @@ cloneCmd (_,o) opts [inrepodir] = do
          putInfo opts $ text "Cloning and transferring successful."
     Nothing -> do
       mysimplename <- makeRepoName True opts repodir
-      withNewDirectory mysimplename $
-        doit
-          repodir
-          (cloneKind ? opts)
-          (setDefault True opts)
-          (O.inheritDefault ? opts)
-          rfsource
-          NoForgetParent
+      cloneRepository repodir mysimplename (verbosity ? opts) (useCache ? opts)
+                  (cloneKind ? opts) (umask ? opts) (O.remoteDarcs ? opts)
+                  (setScriptsExecutable ? opts)
+                  (setDefault True opts)
+                  (O.inheritDefault ? opts)
+                  (map convertUpToToOne (O.matchOneContext ? opts))
+                  rfsource
+                  (withWorkingDir ? opts)
+                  (patchIndexNo ? opts)
+                  (usePacks ? opts)
+                  NoForgetParent
+                  (O.withPrefsTemplates ? opts)
       putFinished opts "cloning"
-  where
-    doit repodir clone_kind set_default inherit_default rfsource forget_parent =
-      cloneRepository
-        repodir
-        (verbosity ? opts)
-        (useCache ? opts)
-        clone_kind
-        (O.remoteDarcs ? opts)
-        (setScriptsExecutable ? opts)
-        set_default
-        inherit_default
-        (map convertUpToToOne (O.matchOneContext ? opts))
-        rfsource
-        (withWorkingDir ? opts)
-        (patchIndexNo ? opts)
-        (usePacks ? opts)
-        forget_parent
-        (O.withPrefsTemplates ? opts)
 
 cloneCmd _ _ _ = fail "You must provide 'clone' with either one or two arguments."
 

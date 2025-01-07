@@ -88,7 +88,7 @@ import Darcs.Repository
     , readPendingAndWorking
     , readPristine
     , readPatches
-    , tentativelyRemoveFromPending
+    , tentativelyRemoveFromPW
     )
 import Darcs.Repository.Pending ( readTentativePending, writeTentativePending )
 import Darcs.Repository.Prefs ( getDefaultRepo )
@@ -106,7 +106,7 @@ import Darcs.Patch.Witnesses.Ordered
     ( FL(..), RL, (:>)(..), (+>+)
     , nullFL, reverseRL, reverseFL, mapFL_FL
     )
-import Darcs.Patch.Witnesses.Sealed ( Sealed(..), Sealed2(..) )
+import Darcs.Patch.Witnesses.Sealed ( Sealed(..) )
 
 import Darcs.Util.English ( anyOfClause, itemizeVertical )
 import Darcs.Util.Printer ( Doc, formatWords, putDocLn, text, (<+>), ($$), ($+$) )
@@ -215,7 +215,7 @@ doAmend cfg files =
                        (Just (primSplitter da))
                        files
             (chosenPatches :> _) <- runInvertibleSelection ch selection_config
-            addChangesToPatch cfg repository kept oldp chosenPatches pending
+            addChangesToPatch cfg repository kept oldp chosenPatches pending working
       if not (isTag (info oldp))
         -- amending a normal patch
         then
@@ -228,7 +228,7 @@ doAmend cfg files =
               (_ :> chosenPrims) <-
                 runInvertibleSelection (effect oldp) selection_config
               let invPrims = reverseRL (invertFL chosenPrims)
-              addChangesToPatch cfg repository kept oldp invPrims pending
+              addChangesToPatch cfg repository kept oldp invPrims pending working
             else do
               let maybeCanonize = if O.canonize ? cfg then canonizeFL da else id
               go (maybeCanonize (pending +>+ working))
@@ -259,8 +259,9 @@ addChangesToPatch
   -> PatchInfoAnd p wX wR       -- ^ original patch
   -> FL (PrimOf p) wR wY        -- ^ changes to add
   -> FL (PrimOf p) wR wP        -- ^ pending
+  -> FL (PrimOf p) wP wU        -- ^ working
   -> IO ()
-addChangesToPatch cfg _repository context oldp chs pending =
+addChangesToPatch cfg _repository context oldp chs pending working =
   if nullFL chs && not (hasEditMetadata cfg)
     then putInfo cfg "You don't want to record anything!"
     else do
@@ -314,7 +315,7 @@ addChangesToPatch cfg _repository context oldp chs pending =
       if O.amendUnrecord ? cfg then
         writeTentativePending _repository $ invert chs +>+ old_pending
       else
-        tentativelyRemoveFromPending _repository chs pending
+        tentativelyRemoveFromPW _repository chs pending working
       _repository <-
         finalizeRepositoryChanges _repository (O.dryRun ? cfg)
           `clarifyErrors` failmsg
@@ -347,8 +348,7 @@ filterNotInRemote cfg repository patchSet = do
         return (in_remote :> reverseFL only_ours)
   where
     readNir loc = do
-      Sealed2 repo <-
-        identifyRepositoryFor Reading repository (O.useCache ? cfg) loc
+      repo <- identifyRepositoryFor Reading repository (O.useCache ? cfg) loc
       rps <- readPatches repo
       return (Sealed rps)
     getNotInRemotePath (O.NotInRemotePath p) = return p

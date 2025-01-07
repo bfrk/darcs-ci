@@ -15,7 +15,7 @@
 --  the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 --  Boston, MA 02110-1301, USA.
 
-{-# LANGUAGE OverloadedStrings, NamedFieldPuns #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Darcs.UI.Commands.Convert.Import ( convertImport ) where
 
@@ -38,6 +38,7 @@ import Data.Word (Word8)
 
 import Safe (headErr, tailErr)
 
+import System.Directory (doesFileExist)
 import System.FilePath.Posix ((</>))
 import System.IO (stdin)
 
@@ -69,17 +70,16 @@ import Darcs.Repository
     , repoCache
     , revertRepositoryChanges
     , withUMaskFlag
-    , writePristine
     )
 import Darcs.Repository.Diff (treeDiff)
 import Darcs.Repository.Hashed (addToTentativeInventory)
+import Darcs.Repository.Paths (tentativePristinePath)
 import Darcs.Repository.Prefs (FileType(..))
 import Darcs.Repository.State (readPristine)
 
 import Darcs.UI.Commands
     ( DarcsCommand(..)
     , nodefaults
-    , noPrereq
     , withStdOpts
     )
 import Darcs.UI.Commands.Convert.Util
@@ -109,7 +109,7 @@ import Darcs.Util.DateTime
     , startOfTime
     )
 import Darcs.Util.Global (darcsdir)
-import Darcs.Util.Hash ( sha256 )
+import Darcs.Util.Hash (encodeBase16, sha256)
 import Darcs.Util.Lock (withNewDirectory)
 import Darcs.Util.Path
     ( AbsolutePath
@@ -130,6 +130,7 @@ import Darcs.Util.Tree
     , readBlob
     , treeHasDir
     , treeHasFile
+    , treeHash
     )
 import Darcs.Util.Tree.Hashed (darcsAddMissingHashes, hashedTreeIO)
 import qualified Darcs.Util.Tree.Monad as TM
@@ -161,7 +162,7 @@ convertImport = DarcsCommand
     , commandExtraArgs = -1
     , commandExtraArgHelp = ["[<DIRECTORY>]"]
     , commandCommand = fastImport
-    , commandPrereq = noPrereq
+    , commandPrereq = \_ -> return $ Right ()
     , commandCompleteArgs = noArgs
     , commandArgdefaults = nodefaults
     , commandOptions = opts
@@ -213,20 +214,8 @@ data Object = Blob (Maybe Int) Content
 
 type Ancestors = (Marked, [Int])
 data State p where
-  Toplevel
-    :: { mark :: Marked
-       , branch :: Branch
-       }
-    -> State p
-  InCommit
-    :: { mark :: Marked
-       , ancestors :: Ancestors
-       , branch :: Branch
-       , tree_ :: Tree IO
-       , ps :: RL (PrimOf p) cX cY
-       , info :: PatchInfo
-       }
-    -> State p
+  Toplevel :: Marked -> Branch -> State p
+  InCommit :: Marked -> Ancestors -> Branch -> Tree IO -> RL (PrimOf p) cX cY -> PatchInfo -> State p
   Done :: State p
 
 instance Show (State p) where
@@ -261,10 +250,7 @@ fastImport' :: forall p wU wR . (RepoPatch p, ApplyState p ~ Tree)
 fastImport' repo diffalg marks = do
     pristine <- readPristine repo
     marksref <- newIORef marks
-    let initial = Toplevel
-          { mark = Nothing
-          , branch = BC.pack "refs/branches/master"
-          }
+    let initial = Toplevel Nothing $ BC.pack "refs/branches/master"
 
         go :: State p -> B.ByteString -> TreeIO ()
         go state rest = do (rest', item) <- parseObject rest
@@ -291,7 +277,9 @@ fastImport' repo diffalg marks = do
 
         addtag author msg =
           do info_ <- makeinfo author msg True
-             deps <- liftIO $ getUncovered `fmap` readPatches repo
+             gotany <- liftIO $ doesFileExist tentativePristinePath
+             deps <- if gotany then liftIO $ getUncovered `fmap` readPatches repo
+                               else return []
              let patch :: Named p wA wA
                  patch = NamedP info_ deps NilFL
              liftIO $
@@ -330,12 +318,12 @@ fastImport' repo diffalg marks = do
 
         -- generate Hunk primitive patches from diffing
         diffCurrent :: State p -> TreeIO (State p)
-        diffCurrent InCommit{tree_=start,..} = do
+        diffCurrent (InCommit mark ancestors branch start ps info_) = do
           current <- updateHashes
           Sealed diff <- unFreeLeft `fmap`
              liftIO (treeDiff diffalg (const TextFile) start current)
           let newps = ps +<<+ diff
-          return InCommit{ps=newps,tree_=current,..}
+          return $ InCommit mark ancestors branch current newps info_
         diffCurrent _ = error "This is never valid outside of a commit."
 
         process :: State p -> Object -> TreeIO (State p)
@@ -343,73 +331,77 @@ fastImport' repo diffalg marks = do
           liftIO $ putStrLn ("progress " ++ decodeLocale p)
           return s
 
-        process Toplevel{} End = do
-          -- lets dump the right tree, without _darcs
+        process (Toplevel _ _) End = do
           tree' <- (liftIO . darcsAddMissingHashes) =<< updateHashes
+          modify $ \s -> s { tree = tree' } -- lets dump the right tree, without _darcs
+          let root =
+                case treeHash tree' of
+                  Nothing -> error "tree has no hash!"
+                  Just hash -> encodeBase16 hash
           liftIO $ do
-            _ <- writePristine repo tree'
             putStrLn "\\o/ It seems we survived. Enjoy your new repo."
+            B.writeFile tentativePristinePath $ BC.concat [BC.pack "pristine:", root]
           return Done
 
-        process s@Toplevel{mark} (Tag tag what author msg) = do
-          if Just what == mark
+        process (Toplevel n b) (Tag tag what author msg) = do
+          if Just what == n
              then addtag author msg
              else liftIO $ putStrLn $
                     "WARNING: Ignoring out-of-order tag " ++ decodeLocale tag
-          return s
+          return (Toplevel n b)
 
-        process s@Toplevel{mark} (Reset branch from) =
+        process (Toplevel n _) (Reset branch from) =
           do case from of
-               (Just (MarkId k)) | Just k == mark ->
+               (Just (MarkId k)) | Just k == n ->
                  addtag (BC.pack "Anonymous Tagger <> 0 +0000") branch
                _ -> liftIO $ putStrLn $ "WARNING: Ignoring out-of-order tag " ++
                                         decodeLocale branch
-             return s{branch}
+             return $ Toplevel n branch
 
-        process s@Toplevel{} (Blob (Just m) bits) = do
+        process (Toplevel n b) (Blob (Just m) bits) = do
           TM.writeFile (markpath m) (BLC.fromChunks [bits])
-          return s
+          return $ Toplevel n b
 
         process x (Gitlink link) = do
           liftIO $ putStrLn $ "WARNING: Ignoring gitlink " ++ decodeLocale link
           return x
 
-        process Toplevel{mark=previous,branch=pbranch} (Commit branch mark author message) = do
+        process (Toplevel previous pbranch) (Commit branch mark author message) = do
           when (pbranch /= branch) $ do
             liftIO $ putStrLn ("Tagging branch: " ++ decodeLocale pbranch)
             addtag author pbranch
-          info <- makeinfo author message False
-          tree_ <- updateHashes
-          return InCommit{ancestors=(previous,[]),ps=NilRL,..}
+          info_ <- makeinfo author message False
+          startstate <- updateHashes
+          return $ InCommit mark (previous, []) branch startstate NilRL info_
 
-        process s@InCommit{} (Modify (Left m) path) = do
+        process s@InCommit {} (Modify (Left m) path) = do
           TM.copy (markpath m) (decodePath path)
           diffCurrent s
 
-        process s@InCommit{} (Modify (Right bits) path) = do
+        process s@InCommit {} (Modify (Right bits) path) = do
           TM.writeFile (decodePath path) (BLC.fromChunks [bits])
           diffCurrent s
 
-        process s@InCommit{} (Delete path) = do
+        process s@InCommit {} (Delete path) = do
           let floatedPath = decodePath path
           TM.unlink floatedPath
           deleteEmptyParents floatedPath
           diffCurrent s
 
-        process s@InCommit{ancestors=(prev,current)} (From from) =
-          return s{ancestors=(prev, from:current)}
+        process (InCommit mark (prev, current) branch start ps info_) (From from) =
+          return $ InCommit mark (prev, from:current) branch start ps info_
 
-        process s@InCommit{ancestors=(prev,current)} (Merge from) =
-          return $ s{ancestors=(prev, from:current)}
+        process (InCommit mark (prev, current) branch start ps info_) (Merge from) =
+          return $ InCommit mark (prev, from:current) branch start ps info_
 
-        process s@InCommit{} (Copy names) = do
+        process s@InCommit {} (Copy names) = do
             (from, to) <- extractNames names
             TM.copy (decodePath from) (decodePath to)
             -- We can't tell Darcs that a file has been copied, so it'll
             -- show as an addfile.
             diffCurrent s
 
-        process s@InCommit{tree_=start,..} (Rename names) = do
+        process s@(InCommit mark ancestors branch start _ info_) (Rename names) = do
           (from, to) <- extractNames names
           let uFrom = decodePath from
               uTo = decodePath to
@@ -427,18 +419,18 @@ fastImport' repo diffalg marks = do
               if targetDirExists || targetFileExists
                   then TM.unlink uTo
                   else unless parentDirExists $ TM.createDirectory parentDir
-          InCommit{ps=newPs} <- diffCurrent s
+          (InCommit _ _ _ _ newPs _) <- diffCurrent s
           TM.rename uFrom uTo
           let ps' = newPs :<: move uFrom uTo
           current <- updateHashes
           -- ensure empty dirs get deleted
           deleteEmptyParents uFrom
           -- run diffCurrent to add the dir deletions prims
-          diffCurrent InCommit{tree_=current,ps=ps',..}
+          diffCurrent (InCommit mark ancestors branch current ps' info_)
 
         -- When we leave the commit, create a patch for the cumulated
         -- prims.
-        process InCommit{..} x = do
+        process (InCommit mark ancestors branch _ ps info_) x = do
           case ancestors of
             (_, []) -> return () -- OK, previous commit is the ancestor
             (Just n, list)
@@ -450,20 +442,21 @@ fastImport' repo diffalg marks = do
               liftIO $ putStrLn $ "WARNING: Linearising non-linear ancestry " ++ show list
 
           {- current <- updateHashes -} -- why not?
-          prims' :: FL (PrimOf p) cX cY <-
+          (prims :: FL (PrimOf p) cX cY) <-
             return $ canonizeFL diffalg $ reverseRL ps
           let patch :: Named p cX cY
-              patch = infopatch info prims'
-          liftIO $ addToTentativeInventory (repoCache repo) (n2pia patch)
+              patch = infopatch info_ prims
+          liftIO $
+              addToTentativeInventory (repoCache repo) (n2pia patch)
           case mark of
             Nothing -> return ()
             Just n -> case getMark marks n of
               Nothing -> liftIO $ modifyIORef marksref $ \m -> addMark m n (patchHash $ n2pia patch)
               Just n' -> fail $ "FATAL: Mark already exists: " ++ decodeLocale n'
-          process Toplevel{..} x
+          process (Toplevel mark branch) x
 
         process state obj = do
-          liftIO $ putStrLn $ show obj
+          liftIO $ print obj
           fail $ "Unexpected object in state " ++ show state
 
         extractNames :: CopyRenameNames

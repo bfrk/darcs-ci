@@ -178,7 +178,6 @@ Library
                       Darcs.Patch.Prim.FileUUID.Commute
                       Darcs.Patch.Prim.FileUUID.Core
                       Darcs.Patch.Prim.FileUUID.Details
-                      Darcs.Patch.Prim.FileUUID.Format
                       Darcs.Patch.Prim.FileUUID.ObjectMap
                       Darcs.Patch.Prim.FileUUID.Read
                       Darcs.Patch.Prim.FileUUID.Show
@@ -189,7 +188,6 @@ Library
                       Darcs.Patch.Prim.V1.Commute
                       Darcs.Patch.Prim.V1.Core
                       Darcs.Patch.Prim.V1.Details
-                      Darcs.Patch.Prim.V1.Format
                       Darcs.Patch.Prim.V1.Mangle
                       Darcs.Patch.Prim.V1.Read
                       Darcs.Patch.Prim.V1.Show
@@ -218,7 +216,6 @@ Library
                       Darcs.Patch.V1.Apply
                       Darcs.Patch.V1.Commute
                       Darcs.Patch.V1.Core
-                      Darcs.Patch.V1.Format
                       Darcs.Patch.V1.Prim
                       Darcs.Patch.V1.Read
                       Darcs.Patch.V1.Show
@@ -357,16 +354,14 @@ Library
                       Darcs.Util.Exception
                       Darcs.Util.Exec
                       Darcs.Util.File
-                      Darcs.Util.Format
                       Darcs.Util.Global
                       Darcs.Util.Graph
                       Darcs.Util.Hash
                       Darcs.Util.HTTP
+                      Darcs.Util.Index
                       Darcs.Util.IndexedMonad
                       Darcs.Util.IsoDate
                       Darcs.Util.Lock
-                      Darcs.Util.ObjectStore
-                      Darcs.Util.ObjectStore.Utils
                       Darcs.Util.Parser
                       Darcs.Util.Path
                       Darcs.Util.Printer
@@ -380,9 +375,7 @@ Library
                       Darcs.Util.Ssh
                       Darcs.Util.StrictIdentity
                       Darcs.Util.Tree
-                      Darcs.Util.Tree.Diff
                       Darcs.Util.Tree.Hashed
-                      Darcs.Util.Tree.Index
                       Darcs.Util.Tree.Monad
                       Darcs.Util.Tree.Plain
                       Darcs.Util.URL
@@ -464,6 +457,7 @@ Library
                       zlib              >= 0.6.1.2 && < 0.8,
                       xml               >= 1.3.14 && < 1.4,
                       network-uri       >= 2.6 && < 2.8,
+                      network           >= 2.6 && < 3.3,
                       conduit           >= 1.3.0 && < 1.4,
                       http-conduit      >= 2.3 && < 2.4,
                       http-types        >= 0.12.1 && < 0.12.5,
@@ -486,7 +480,6 @@ Library
       ghc-options:    -Werror
 
     ghc-options:      -Wall -funbox-strict-fields -fwarn-tabs
-    ghc-options:      -Wredundant-constraints
 
     -- It's a deliberate choice to use NoMonoLocalBinds and tolerate this warning long-term,
     -- as otherwise we'd need 10s of extra type signatures in our code.
@@ -551,7 +544,6 @@ Executable          darcs
     ghc-options:    -Werror
 
   ghc-options:      -Wall -funbox-strict-fields -fwarn-tabs
-  ghc-options:      -Wredundant-constraints
 
   if flag(threaded)
     ghc-options:    -threaded
@@ -603,16 +595,13 @@ test-suite darcs-test
                     quickcheck-instances       >= 0.3.29.1 && < 0.4,
                     leancheck    >= 0.9 && < 1.1,
                     HUnit        >= 1.3 && < 1.7,
-                    tasty               >= 1.4.3 && < 1.5,
-                    tasty-hunit         >= 0.10.1 && < 0.11,
-                    tasty-quickcheck    >= 0.10.2 && < 0.11,
-                    tasty-leancheck     >= 0.0.2 && < 0.1,
-                    tagged              >= 0.8.8 && < 0.9,
+                    test-framework             >= 0.8.1.1 && < 0.9,
+                    test-framework-hunit       >= 0.3.0.2 && < 0.4,
+                    test-framework-quickcheck2 >= 0.3.0.3 && < 0.4,
+                    test-framework-leancheck   >= 0.0.1 && < 0.1,
                     vector,
                     zip-archive,
                     shelly,
-                    ansi-terminal,
-                    terminal-size,
 
   -- the tests shell out to a built darcs binary, so we depend on it to make
   -- sure that it's built. It's not actually required for build, just at runtime,
@@ -623,52 +612,50 @@ test-suite darcs-test
   -- include them in the tarball
   other-modules:    Darcs.Test.Email
                     Darcs.Test.HashedStorage
-                    Darcs.Test.Misc
-                    Darcs.Test.Misc.CommandLine
-                    Darcs.Test.Misc.Encoding
-                    Darcs.Test.Misc.Graph
-                    Darcs.Test.Misc.URL
-                    Darcs.Test.Patch
-                    Darcs.Test.Patch.Arbitrary.Generic
-                    Darcs.Test.Patch.Arbitrary.Mergeable
-                    Darcs.Test.Patch.Arbitrary.Named
-                    Darcs.Test.Patch.Arbitrary.NamedPrim
-                    Darcs.Test.Patch.Arbitrary.PatchTree
-                    Darcs.Test.Patch.Arbitrary.PrimFileUUID
-                    Darcs.Test.Patch.Arbitrary.PrimV1
-                    Darcs.Test.Patch.Arbitrary.RepoPatchV1
-                    Darcs.Test.Patch.Arbitrary.RepoPatchV2
-                    Darcs.Test.Patch.Arbitrary.RepoPatchV3
-                    Darcs.Test.Patch.Arbitrary.Sealed
-                    Darcs.Test.Patch.Arbitrary.Shrink
-                    Darcs.Test.Patch.Binary
-                    Darcs.Test.Patch.ChangePref
                     Darcs.Test.Patch.Check
                     Darcs.Test.Patch.Depends
                     Darcs.Test.Patch.Examples.Set1
                     Darcs.Test.Patch.Examples.Set2
                     Darcs.Test.Patch.Examples.Unwind
-                    Darcs.Test.Patch.FileUUIDModel
                     Darcs.Test.Patch.Info
-                    Darcs.Test.Patch.Merge.Checked
                     Darcs.Test.Patch.Properties
-                    Darcs.Test.Patch.Properties.Check
-                    Darcs.Test.Patch.Properties.Generic
-                    Darcs.Test.Patch.Properties.Mergeable
-                    Darcs.Test.Patch.Properties.RepoPatchV3
                     Darcs.Test.Patch.Properties.V1Set1
                     Darcs.Test.Patch.Properties.V1Set2
+                    Darcs.Test.Patch.Properties.Generic
+                    Darcs.Test.Patch.Properties.Check
+                    Darcs.Test.Patch.Properties.Mergeable
+                    Darcs.Test.Patch.Properties.RepoPatchV3
+                    Darcs.Test.Patch.Arbitrary.Generic
+                    Darcs.Test.Patch.Arbitrary.Named
+                    Darcs.Test.Patch.Arbitrary.NamedPrim
+                    Darcs.Test.Patch.Arbitrary.PatchTree
+                    Darcs.Test.Patch.Arbitrary.PrimFileUUID
+                    Darcs.Test.Patch.Arbitrary.PrimV1
+                    Darcs.Test.Patch.Arbitrary.Mergeable
+                    Darcs.Test.Patch.Arbitrary.RepoPatchV1
+                    Darcs.Test.Patch.Arbitrary.RepoPatchV2
+                    Darcs.Test.Patch.Arbitrary.RepoPatchV3
+                    Darcs.Test.Patch.Arbitrary.Sealed
+                    Darcs.Test.Patch.Arbitrary.Shrink
+                    Darcs.Test.Patch.Merge.Checked
                     Darcs.Test.Patch.Rebase
                     Darcs.Test.Patch.RepoModel
                     Darcs.Test.Patch.Selection
+                    Darcs.Test.Patch.Utils
+                    Darcs.Test.Patch.V1Model
+                    Darcs.Test.Patch.FileUUIDModel
                     Darcs.Test.Patch.Types.MergeableSequence
                     Darcs.Test.Patch.Types.Merged
                     Darcs.Test.Patch.Types.Pair
                     Darcs.Test.Patch.Types.Triple
                     Darcs.Test.Patch.Unwind
-                    Darcs.Test.Patch.Utils
-                    Darcs.Test.Patch.V1Model
                     Darcs.Test.Patch.WithState
+                    Darcs.Test.Patch
+                    Darcs.Test.Misc
+                    Darcs.Test.Misc.CommandLine
+                    Darcs.Test.Misc.Encoding
+                    Darcs.Test.Misc.Graph
+                    Darcs.Test.Misc.URL
                     Darcs.Test.Repository.Inventory
                     Darcs.Test.Shell
                     Darcs.Test.TestOnly.Instance
@@ -678,16 +665,13 @@ test-suite darcs-test
                     Darcs.Test.UI.Commands.Test.Commutable
                     Darcs.Test.UI.Commands.Test.IndexedApply
                     Darcs.Test.UI.Commands.Test.Simple
-                    Darcs.Test.Util.ConsoleFormat
-                    Darcs.Test.Util.ConsoleReporter
-                    Darcs.Test.Util.QuickCheck
                     Darcs.Test.Util.TestResult
+                    Darcs.Test.Util.QuickCheck
 
   if flag(warn-as-error)
     ghc-options:    -Werror
 
   ghc-options:      -Wall -funbox-strict-fields -fwarn-tabs
-  ghc-options:      -Wredundant-constraints
 
   if impl(ghc >= 9.4.1)
     ghc-options:    -Wno-gadt-mono-local-binds

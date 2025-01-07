@@ -11,43 +11,39 @@ import Darcs.Repository.Inventory
     , PatchHash
     , PristineHash
     , parseInventory
-    , formatInventory
+    , showInventory
     , skipPristineHash
     , peekPristineHash
     , pokePristineHash
-    , prop_inventoryParseFormat
+    , prop_inventoryParseShow
     , prop_peekPokePristineHash
     , prop_skipPokePristineHash
     )
 import Darcs.Patch.Info ( rawPatchInfo )
-import Darcs.Util.Hash ( sha256 )
-import Darcs.Util.Format ( toStrictByteString )
+import Darcs.Util.Hash ( sha256strict )
+import Darcs.Util.Printer ( renderPS )
 import Darcs.Util.ValidHash ( decodeValidHash, fromHash, fromSizeAndHash )
 
 import Darcs.Test.Patch.Info ()
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC
-import qualified Data.ByteString.Lazy as BL
 import Data.Maybe ( fromJust )
+import Test.Framework ( Test, testGroup )
+import Test.Framework.Providers.HUnit ( testCase )
+import Test.Framework.Providers.QuickCheck2 ( testProperty )
 import Test.HUnit ( Assertion, (@=?) )
 import Test.QuickCheck
 import Test.QuickCheck.Instances.ByteString ()
-import Test.Tasty ( TestTree, adjustOption, testGroup )
-import Test.Tasty.HUnit ( testCase )
-import Test.Tasty.QuickCheck ( QuickCheckMaxSize(..), testProperty )
 
-halveSize :: TestTree -> TestTree
-halveSize = adjustOption (\(QuickCheckMaxSize n) -> QuickCheckMaxSize (n `div` 2))
-
-testSuite :: TestTree
+testSuite :: Test
 testSuite = testGroup "Darcs.Repository.Inventory"
-  [ halveSize $ testProperty "parse/format roundtrips" prop_inventoryParseFormat
-  , testProperty "peek gets back what we poked" prop_peekPokePristineHash
-  , testProperty "skip/poke roundtrips" prop_skipPokePristineHash
-  , testCase "example1" (testInventory rawHeadInv1 headInv1)
-  , testCase "example2" (testInventory rawHeadInv2 headInv2)
-  ]
+ [ testProperty "parse/show roundtrips" prop_inventoryParseShow
+ , testProperty "peek gets back what we poked" prop_peekPokePristineHash
+ , testProperty "skip/poke roundtrips" prop_skipPokePristineHash
+ , testCase "example1" (testInventory rawHeadInv1 headInv1)
+ , testCase "example2" (testInventory rawHeadInv2 headInv2)
+ ]
 
 instance Arbitrary Inventory where
   arbitrary = uncurry Inventory <$> arbitrary
@@ -63,8 +59,8 @@ arbitraryHash :: ValidHash h => Gen h
 arbitraryHash = do
   content       <- arbitrary
   size_prefixed <- arbitrary
-  let size = BL.length content
-      hash = sha256 content
+  let size = B.length content
+      hash = sha256strict content
   if size_prefixed && size < 1000000000
     then return (fromSizeAndHash size hash)
     else return (fromHash hash)
@@ -74,8 +70,8 @@ testInventory raw (hash,inv) = do
   hash @=? peekPristineHash raw
   let rest = skipPristineHash raw
   Right inv @=? parseInventory rest
-  rest @=? toStrictByteString (formatInventory inv)
-  raw @=? toStrictByteString (pokePristineHash hash rest)
+  rest @=? renderPS (showInventory inv)
+  raw @=? renderPS (pokePristineHash hash rest)
 
 mkValidHash :: ValidHash a => String -> a
 mkValidHash = fromJust . decodeValidHash

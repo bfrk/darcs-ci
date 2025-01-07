@@ -5,6 +5,10 @@ module Darcs.Patch.V1.Core
 
 import Darcs.Prelude
 
+import Darcs.Patch.Format
+    ( PatchListFormat(..)
+    , ListFormat(ListFormatV1)
+    )
 import Darcs.Patch.Debug ( PatchDebug(..) )
 import Darcs.Patch.FromPrim
     ( FromPrim(..)
@@ -84,6 +88,13 @@ isMerger _ = False
 mergerUndo :: RepoPatchV1 prim wX wY -> FL (RepoPatchV1 prim) wX wY
 mergerUndo (Merger undo _ _ _) = undo
 mergerUndo _ = error "impossible case"
+
+instance PatchListFormat (RepoPatchV1 prim) where
+   -- In principle we could use ListFormatDefault when prim /= V1 Prim patches,
+   -- as those are the only case where we need to support a legacy on-disk
+   -- format. In practice we don't expect Patch to be used with any other argument
+   -- anyway, so it doesn't matter.
+   patchListFormat = ListFormatV1
 
 instance Check (RepoPatchV1 prim)
    -- no checks

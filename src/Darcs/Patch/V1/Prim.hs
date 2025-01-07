@@ -5,22 +5,24 @@ module Darcs.Patch.V1.Prim ( Prim(..) ) where
 
 import Darcs.Prelude
 
-import Control.Monad ( (<=<) )
-import qualified Data.ByteString.Char8 as BC ( pack, unpack )
 import Data.Coerce ( coerce )
 
 import Darcs.Patch.Annotate ( Annotate(..) )
 import Darcs.Patch.Apply ( Apply(..) )
 import Darcs.Patch.Commute ( Commute(..) )
 import Darcs.Patch.FileHunk ( IsHunk(..) )
-import Darcs.Patch.Format ( FormatPatch(..) )
+import Darcs.Patch.Format
+    ( PatchListFormat(..)
+    , ListFormat(ListFormatV1)
+    , FileNameFormat(FileNameFormatV1,FileNameFormatDisplay) )
 import Darcs.Patch.Inspect ( PatchInspect )
 import Darcs.Patch.Invert ( Invert )
 import Darcs.Patch.Merge ( CleanMerge )
-import Darcs.Patch.Read ( ReadPatch(..), ReadPatches(..), legacyReadPatchFL' )
+import Darcs.Patch.Read ( ReadPatch(..) )
 import Darcs.Patch.Repair ( RepairToFL(..) )
 import Darcs.Patch.Show
     ( ShowPatchBasic(..)
+    , ShowPatchFor(..)
     , ShowPatch(..)
     , ShowContextPatch(..)
     )
@@ -33,15 +35,12 @@ import Darcs.Patch.Witnesses.Sealed ( mapSeal )
 import Darcs.Patch.Prim.Class
     ( PrimConstruct(..), PrimCoalesce(..)
     , PrimDetails(..)
+    , PrimShow(..), PrimRead(..)
     , PrimApply(..)
     , PrimSift(..)
     , PrimMangleUnravelled(..)
     )
-import qualified Darcs.Patch.Prim.V1 as Base ( Prim, formatPrim, readPrim )
-
-import Darcs.Util.ByteString ( decodeLocale, encodeLocale, unpackPSFromUTF8 )
-import Darcs.Util.Format ( stringUtf8 )
-import Darcs.Util.Path ( anchorPath, decodeWhite, encodeWhite, floatPath )
+import qualified Darcs.Patch.Prim.V1 as Base ( Prim )
 
 newtype Prim x y = Prim { unPrim :: Base.Prim x y } deriving
     ( Annotate
@@ -59,8 +58,6 @@ newtype Prim x y = Prim { unPrim :: Base.Prim x y } deriving
     , PrimMangleUnravelled
     , PrimSift
     , Show
-    , ShowContextPatch
-    , ShowPatchBasic
     )
 
 instance Show1 (Prim wX)
@@ -68,25 +65,25 @@ instance Show1 (Prim wX)
 instance Show2 Prim
 
 instance ReadPatch Prim where
-  readPatch' = fmap (mapSeal Prim) (Base.readPrim decodePath)
-    where
-      -- baroque legacy encoding
-      decodePath =
-        floatPath <=< decodeWhite . decodeLocale . BC.pack . unpackPSFromUTF8
+  readPatch' = fmap (mapSeal Prim) (readPrim FileNameFormatV1)
 
-instance ReadPatches Prim where
-  readPatchFL' = legacyReadPatchFL'
+fileNameFormat :: ShowPatchFor -> FileNameFormat
+fileNameFormat ForDisplay = FileNameFormatDisplay
+fileNameFormat ForStorage = FileNameFormatV1
+
+instance ShowPatchBasic Prim where
+  showPatch fmt = showPrim (fileNameFormat fmt) . unPrim
+
+instance ShowContextPatch Prim where
+  showPatchWithContextAndApply fmt = showPrimWithContextAndApply (fileNameFormat fmt) . unPrim
 
 instance ShowPatch Prim where
   summary = plainSummaryPrim . unPrim
   summaryFL = plainSummaryPrims False
   thing _ = "change"
 
-instance FormatPatch Prim where
-  formatPatch = Base.formatPrim encodePath . unPrim
-    where
-      encodePath =
-        stringUtf8 . BC.unpack . encodeLocale . encodeWhite . anchorPath "."
+instance PatchListFormat Prim where
+  patchListFormat = ListFormatV1
 
 instance RepairToFL Prim where
   applyAndTryToFixFL = fmap coerce . applyAndTryToFixFL . unPrim

@@ -45,9 +45,12 @@ import Darcs.Test.Patch.WithState
 
 type Patch = RepoPatchV1 V1.Prim
 
-instance (ArbitraryPrim prim, ApplyState prim ~ RepoState (ModelOf prim)) =>
-         ArbitraryMergeable (RepoPatchV1 prim) where
-  notRepoPatchV1 = Nothing
+instance
+  (ArbitraryPrim prim, ApplyState prim ~ RepoState (ModelOf prim))
+  => ArbitraryMergeable (RepoPatchV1 prim)
+  where
+
+    notRepoPatchV1 = Nothing
 
 instance PrimPatch prim => CheckedMerge (RepoPatchV1 prim) where
   validateMerge v =

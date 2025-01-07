@@ -32,7 +32,9 @@ module Darcs.Patch
     , binary
     , description
     , showPatchWithContext
+    , ShowPatchFor(..)
     , showPatch
+    , displayPatch
     , content
     , infopatch
     , changepref
@@ -54,8 +56,6 @@ module Darcs.Patch
     , commuteFL
     , commuteRL
     , readPatch
-    , readPatchFL
-    , formatPatch
     , readPatchPartial
     , canonizeFL
     , sortCoalesceFL
@@ -86,7 +86,6 @@ import Darcs.Patch.Apply ( apply, effectOnPaths, applyToTree,
 import Darcs.Patch.Commute ( commute, commuteFL, commuteRL )
 import Darcs.Patch.Conflict ( resolveConflicts )
 import Darcs.Patch.Effect ( Effect(effect) )
-import Darcs.Patch.Format ( formatPatch )
 import Darcs.Patch.Invert ( invert, invertRL, invertFL )
 import Darcs.Patch.Inspect ( listTouchedFiles, hunkMatches )
 import Darcs.Patch.Merge ( merge )
@@ -103,11 +102,11 @@ import Darcs.Patch.Prim ( canonizeFL,
                           binary, changepref, hunk, move,
                           tryToShrink,
                           PrimPatch )
-import Darcs.Patch.Read ( readPatch, readPatchFL, readPatchPartial )
+import Darcs.Patch.Read ( readPatch, readPatchPartial )
 import Darcs.Patch.Repair ( isInconsistent )
 import Darcs.Patch.RepoPatch ( RepoPatch )
-import Darcs.Patch.Show ( description, showPatch, content
-                        , summary, summaryFL, thing, things
+import Darcs.Patch.Show ( description, showPatch, content, displayPatch
+                        , summary, summaryFL, thing, things, ShowPatchFor(..)
                         , showPatchWithContext )
 import Darcs.Patch.Summary
     ( listConflictedFiles

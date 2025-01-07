@@ -24,7 +24,6 @@ module Darcs.Patch.V3.Contexted
       -- * 'ReadPatch' and 'ShowPatch' helpers
     , showCtx
     , readCtx
-    , formatCtx
       -- * Properties
     , prop_ctxInvariants
     , prop_ctxEq
@@ -38,15 +37,15 @@ import Data.Maybe ( isNothing, isJust )
 import Darcs.Prelude
 
 import Darcs.Patch.Commute
-import Darcs.Patch.Format ( FormatPatch(..) )
+import Darcs.Patch.Format ( PatchListFormat(..) )
 import Darcs.Patch.Ident
 import Darcs.Patch.Invert
 import Darcs.Patch.Inspect
 import Darcs.Patch.Merge ( CleanMerge(..) )
-import Darcs.Patch.Read ( ReadPatch(..), ReadPatches(..) )
+import Darcs.Patch.Read ( ReadPatch(..) )
 import Darcs.Patch.Permutations ( (=\~/=) )
 import Darcs.Util.Parser ( Parser, lexString )
-import Darcs.Patch.Show ( ShowPatchBasic(..) )
+import Darcs.Patch.Show ( ShowPatchBasic(..), ShowPatchFor )
 import Darcs.Patch.Viewing ()
 import Darcs.Patch.Witnesses.Eq
 import Darcs.Patch.Witnesses.Ordered
@@ -55,7 +54,6 @@ import Darcs.Patch.Witnesses.Show
 
 import Darcs.Util.Path ( AnchoredPath )
 import Darcs.Util.Printer
-import qualified Darcs.Util.Format as F
 
 {-
 | (Definition 10.1) A 'Contexted' patch is a patch transferred to, or viewed
@@ -240,16 +238,15 @@ ctxHunkMatches f (Contexted ps p) = hunkMatches f ps || hunkMatches f p
 -- context. But this means that we need access to the patches preceding us.
 -- So these functions would no longer be independent of context.
 
-showCtx :: ShowPatchBasic p => Contexted p wX -> Doc
-showCtx (Contexted c p) =
-  hiddenPrefix "|" (showPatch c) $$ hiddenPrefix "|" (blueText ":") $$ showPatch p
+showCtx :: (ShowPatchBasic p, PatchListFormat p)
+        => ShowPatchFor -> Contexted p wX -> Doc
+showCtx f (Contexted c p) =
+  hiddenPrefix "|" (showPatch f c) $$ hiddenPrefix "|" (blueText ":") $$ showPatch f p
 
-formatCtx :: FormatPatch p => Contexted p wX -> F.Format
-formatCtx (Contexted c p) = F.vcat [formatPatchFL c, F.ascii ":", formatPatch p]
-
-readCtx :: ReadPatches p => Parser (Contexted p wX)
+readCtx :: (ReadPatch p, PatchListFormat p)
+        => Parser (Contexted p wX)
 readCtx = do
-  Sealed ps <- readPatchFL'
+  Sealed ps <- readPatch'
   lexString (BC.pack ":")
   Sealed p <- readPatch'
   return $ Contexted ps p

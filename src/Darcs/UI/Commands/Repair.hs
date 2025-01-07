@@ -52,7 +52,7 @@ import Darcs.Repository
 import Darcs.Repository.Hashed ( writeTentativeInventory )
 import Darcs.Repository.Pending ( setTentativePending )
 
-import Darcs.Patch ( showPatch )
+import Darcs.Patch ( displayPatch )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(..) )
 
 import Darcs.Util.Printer ( Doc, text, ($$) )
@@ -120,7 +120,7 @@ repairCmd opts
             putInfo opts "Writing out repaired patches..."
             writeTentativeInventory repo ps
           maybeDo fixedPristine $ \(tree, Sealed diff) -> do
-            putVerbose opts $ "Pristine differences:" $$ showPatch diff
+            putVerbose opts $ "Pristine differences:" $$ displayPatch diff
             putInfo opts "Fixing pristine tree..."
             void $ writePristine repo tree
           maybeDo fixedPending $ \(Sealed pend) -> do
@@ -164,7 +164,7 @@ checkCmd opts = withRepository (useCache ? opts) $ RepoJob $ \repository -> do
     putInfo opts "Found broken patches."
   maybeDo fixedPristine $ \(_, Sealed diff) -> do
     putInfo opts "Found broken pristine tree."
-    putVerbose opts $ "Differences:" $$ showPatch diff
+    putVerbose opts $ "Differences:" $$ displayPatch diff
   maybeDo fixedPending $ \_ ->
     putInfo opts "Found broken pending."
   bad_index <-

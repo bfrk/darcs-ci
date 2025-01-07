@@ -16,56 +16,34 @@ import Control.Concurrent ( setNumCapabilities )
 import Control.Monad ( filterM, unless, when )
 import Data.List ( isPrefixOf, isSuffixOf, sort )
 import GHC.IO.Encoding ( textEncodingName )
-import System.Console.CmdArgs hiding ( args, Quiet )
+import System.Console.CmdArgs hiding ( args )
 import System.Console.CmdArgs.Explicit ( process )
 import System.Directory ( doesFileExist, doesPathExist, exeExtension, listDirectory )
-import System.Environment ( setEnv )
 import System.Environment.FindBin ( getProgPath )
 import System.FilePath ( isAbsolute, takeBaseName, takeDirectory, (</>) )
 import System.IO ( BufferMode(NoBuffering), hSetBuffering, localeEncoding, stdout )
-import System.Exit ( exitFailure )
-
-import Test.Tasty ( {- Timeout(..), -} testGroup )
-import Test.Tasty.Ingredients ( tryIngredients )
-import Darcs.Test.Util.ConsoleReporter
-    ( HideSuccesses(..)
-    , UseColor(..)
-    , consoleTestReporter
+import Test.Framework
+    ( ColorMode(..)
+    , RunnerOptions'(..)
+    , Seed(..)
+    , TestOptions'(..)
+    , defaultMainWithOpts
     )
-import Test.Tasty.LeanCheck ( LeanCheckTests(..) )
-import Test.Tasty.Options ( OptionSet, defaultValue, singleOption )
-import Test.Tasty.Patterns.Types ( Expr(Or) )
-import Test.Tasty.QuickCheck
-    ( QuickCheckMaxRatio(..)
-{-
-    , QuickCheckMaxShrinks(..)
-    , QuickCheckMaxSize(..)
--}
-    , QuickCheckReplay(..)
-{-
-    , QuickCheckShowReplay(..)
--}
-    , QuickCheckTests(..)
-    , QuickCheckVerbose(..)
-    )
-import Test.Tasty.Runners ( NumThreads(..), TestPattern(..), parseExpr )
-
 
 data Config = Config { suites :: String
                      , formats :: String
                      , diffalgs :: String
                      , index :: String
                      , cache :: String
-                     , failing :: String
                      , full :: Bool
                      , darcs :: String
-                     , patterns :: [String]
+                     , tests :: [String]
                      , testDir :: Maybe FilePath
                      , ghcFlags :: String
                      , plain :: Bool
                      , hideSuccesses :: Bool
                      , threads :: Int
-                     , count :: Int
+                     , qcCount :: Int
                      , replay :: Maybe Int
                      }
             deriving (Data, Typeable, Eq, Show)
@@ -74,21 +52,20 @@ data Config = Config { suites :: String
 defaultConfigAnn :: Annotate Ann
 defaultConfigAnn
  = record Config{}
-     [ suites        := "snu"    += help "Select which test suites to run: (s=shell, n=network, u=unit, h=hashed) [snu]" += typ "SET"
+     [ suites        := "snu"    += help "Select which test suites to run: (s=shell, n=network, u=unit, f=failing, h=hashed) [snu]" += typ "SET"
      , formats       := "123"    += help "Select which darcs formats to test: (1=darcs-1, 2=darcs-2, 3=darcs-3) [123]" += name "f" += typ "SET"
      , diffalgs      := "p"      += help "Select which diff alorithms to use (p=patience, m=myers) [p]" += name "a" += typ "SET"
      , index         := "y"      += help "Select whether to use the index (n=no, y=yes) [y]" += typ "SET"
      , cache         := "y"      += help "Select whether to use the cache (n=no, y=yes) [y]" += typ "SET"
-     , failing       := "n"      += help "Select whether to use failing tests (n=no, y=yes) [n]" += typ "SET"
      , full          := False    += help "Shortcut for -s=snu -f=123 -a=mp -c=yn -i=yn"
      , darcs         := ""       += help "Darcs binary path" += typ "PATH"
-     , patterns      := []       += help "Pattern to limit the tests to run" += typ "PATTERN" += name "t"
+     , tests         := []       += help "Pattern to limit the tests to run" += typ "PATTERN" += name "t"
      , testDir       := Nothing  += help "Directory to run tests in" += typ "PATH" += name "d"
      , ghcFlags      := ""       += help "GHC flags to use when compiling tests" += typ "FLAGS" += name "g"
      , plain         := False    += help "Use plain-text output [no]"
      , hideSuccesses := False    += help "Hide successes [no]"
      , threads       := 1        += help "Number of threads [1]" += name "j"
-     , count         := 100      += help "Number of Quick/LeanCheck iterations per test [100]" += name "q"
+     , qcCount       := 100      += help "Number of QuickCheck iterations per test [100]" += name "q"
      , replay        := Nothing  += help "Replay QC tests with given seed" += typ "SEED"
      ]
    += summary "Darcs test harness"
@@ -144,6 +121,7 @@ run conf = do
           when e $ die ("Directory " ++ d ++ " already exists. Cowardly exiting")
 
     let hashed   = 'h' `elem` suites conf
+        failing  = 'f' `elem` suites conf
         shell    = 's' `elem` suites conf
         network  = 'n' `elem` suites conf
         unit     = 'u' `elem` suites conf
@@ -161,14 +139,11 @@ run conf = do
         nocache   = 'n' `elem` cache conf
         withcache = 'y' `elem` cache conf
 
-        withFailing    = 'y' `elem` failing conf
-        withSucceeding = 'n' `elem` failing conf
-
     darcsBin <-
       case darcs conf of
         "" -> findDarcs
         v -> return v
-    when (shell || network) $ do
+    when (shell || network || failing) $ do
       unless (isAbsolute $ darcsBin) $
         die ("Argument to --darcs should be an absolute path")
       unless (exeExtension `isSuffixOf` darcsBin) $
@@ -195,82 +170,60 @@ run conf = do
     let findTestFiles dir = select . map (dir </>) <$> listDirectory dir
           where
             filter_failing =
-              case (withFailing, withSucceeding) of
-                (True,True) -> id -- "yn"
-                (False,True) -> -- "n"
-                  filter $ not . ("failing-" `isPrefixOf`) . takeBaseName
-                (True,False) -> -- "y"
-                  filter $ ("failing-" `isPrefixOf`) . takeBaseName
-                (False,False) -> const [] -- ""
+              if failing
+                then id
+                else filter $ not . ("failing-" `isPrefixOf`) . takeBaseName
             select = sort . filter_failing . filter (".sh" `isSuffixOf`)
 
     stests <-
       if shell
         then do
           files <- findTestFiles "tests"
-          return $
-            genShellTests darcsBin files (testDir conf) (ghcFlags conf) diffAlgorithm
-              repoFormat useIndex useCache
+          findShell darcsBin files (testDir conf) (ghcFlags conf) diffAlgorithm
+            repoFormat useIndex useCache
         else return []
     ntests <-
       if network
         then do
           files <- findTestFiles "tests/network"
-          return $
-            genShellTests darcsBin files (testDir conf) (ghcFlags conf) diffAlgorithm
-              repoFormat useIndex useCache
+          findShell darcsBin files (testDir conf) (ghcFlags conf) diffAlgorithm
+            repoFormat useIndex useCache
         else return []
     let utests =
           if unit then
-            [ Darcs.Test.Email.testSuite ] ++
-            Darcs.Test.Misc.testSuite ++
-            [ Darcs.Test.Repository.Inventory.testSuite
+            [ Darcs.Test.Email.testSuite
+            , Darcs.Test.Misc.testSuite
+            , Darcs.Test.Repository.Inventory.testSuite
             , Darcs.Test.UI.testSuite
             ] ++
             Darcs.Test.Patch.testSuite
           else []
         hstests = if hashed then Darcs.Test.HashedStorage.tests else []
 
-    exprs <-
-      case patterns conf of
-        [] -> return Nothing
-        ps ->
-          case mapM parseExpr ps of
-            Just exprs -> return $ Just exprs
-            Nothing -> fail "invalid pattern(s)"
-    let core_options = mconcat
-          [ singleOption $ HideSuccesses $ hideSuccesses conf
-          , singleOption $ if plain conf then Never else Auto
-          , singleOption $ NumThreads $ threads conf
-          -- , singleOption $ NoTimeout -- default; else @mkTimeout 20_000_000@
-          , singleOption $ TestPattern $ foldr1 (Or) <$> exprs
-          ]
-    let lc_options = singleOption $ LeanCheckTests (count conf)
-    let qc_options = mconcat
-          [ singleOption $
-            case defaultValue of -- default is 10
-              QuickCheckMaxRatio n -> QuickCheckMaxRatio (7 * n)
-          -- , singleOption $ QuickCheckMaxShrinks maxBound -- default
-          -- , singleOption $ QuickCheckMaxSize 100 -- default
-          , singleOption $ QuickCheckReplay $ replay conf
-          -- , singleOption $ QuickCheckShowReplay True -- default
-          , singleOption $ QuickCheckTests $ count conf -- default is 100
-          , singleOption $ QuickCheckVerbose False
-          ]
-    let options :: OptionSet = mconcat [core_options, qc_options, lc_options]
-    let all_tests =
-          testGroup "All Tests" $ stests ++ utests ++ ntests ++ hstests
-    case tryIngredients [consoleTestReporter] options all_tests of
-      Nothing -> fail "no ingredient found"
-      Just runIngredient -> do
-        result <- runIngredient
-        unless result exitFailure
+    let testRunnerOptions = RunnerOptions
+          { ropt_threads = Just (threads conf)
+          , ropt_test_options = Just $ TestOptions
+              { topt_seed = FixedSeed <$> replay conf
+              , topt_maximum_generated_tests = Just (qcCount conf)
+              , topt_maximum_unsuitable_generated_tests = Just (7 * qcCount conf)
+              , topt_maximum_test_size = Nothing
+              , topt_maximum_test_depth = Nothing
+              , topt_timeout = Nothing
+              }
+          , ropt_test_patterns =
+              if null (tests conf) then Nothing else Just (map read (tests conf))
+          , ropt_xml_output = Nothing
+          , ropt_xml_nested = Nothing
+          , ropt_color_mode = if plain conf then Just ColorNever else Nothing
+          , ropt_hide_successes = Just (hideSuccesses conf)
+          , ropt_list_only = Nothing
+          }
+    defaultMainWithOpts (stests ++ utests ++ ntests ++ hstests) testRunnerOptions
 
 main :: IO ()
 main = do hSetBuffering stdout NoBuffering
           clp  <- cmdArgs_ defaultConfigAnn
           setNumCapabilities (threads clp)
-          setEnv "DARCS_ESCAPE_8BIT" "1"
           run $
             if full clp then clp
               { formats  = "123"

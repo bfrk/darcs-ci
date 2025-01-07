@@ -21,7 +21,6 @@
 module Darcs.Repository.Merge
     ( tentativelyMergePatches
     , considerMergeToWorking
-    , oldTentativelyMergePatches -- exported for darcsden
     ) where
 
 import Darcs.Prelude
@@ -49,7 +48,7 @@ import Darcs.Patch.PatchInfoAnd ( PatchInfoAnd, n2pia, hopefully )
 import Darcs.Patch.Progress( progressFL, progressRL )
 import Darcs.Patch.Set ( PatchSet, Origin, appendPSFL, patchSet2RL )
 import Darcs.Patch.Witnesses.Ordered
-    ( FL(..), RL(..), Fork(..), (:>)(..), (:\/:)(..), (:/\:)(..), (+>+), (+<<+)
+    ( FL(..), RL(..), Fork(..), (:\/:)(..), (:/\:)(..), (+>+), (+<<+)
     , lengthFL, mapFL_FL, concatFL, reverseFL )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(Sealed), seal )
 
@@ -133,9 +132,8 @@ state after we finalize our changes.
 
 But we're not done yet: we must also adapt the pending patch and the working
 tree. Note that changing the working tree is not done in this procedure, we
-merely calculate what is needed to adapt the working tree and return that.
-Let us add the difference between pristine and working, which we call pw, to
-the picture.
+merely return a list of prims to apply to working. Let us add the difference
+between pristine and working, which we call pw, to the picture.
 
      T       U
     / \     /
@@ -217,18 +215,12 @@ To see if this is the case we check whether pw' has conflicts. As an extra
 precaution we backup any conflicted files, so the user can refer to them to
 restore things or compare in a diff viewer.
 
+The patches we return are what we need to update U to U'' i.e. them''+>+res.
 The new pending patch starts out at the new tentative state, so as explained
 above, we set it to pw'+>+res, and again rely on sifting to commute out and
 drop anything we don't need.
 
-The information we return should contain what is needed to update U to U''.
-We could return them''+>+res and let the calling code apply that to the
-working tree. In earlier versions we did just that, however, this is very
-inefficient if them'' happens to be a long list of patches. Note that we
-already did the work of applying all of them'' to the pristine tree. So
-instead, we return just pw'+>+res and expect the calling code to overwrite
-the working tree with the the new pristine and then apply the returned list.
-
+TODO: We should return a properly coerced @Repository 'RW p wU wR@.
 -}
 
 tentativelyMergePatches_ :: (RepoPatch p, ApplyState p ~ Tree)
@@ -241,9 +233,7 @@ tentativelyMergePatches_ :: (RepoPatch p, ApplyState p ~ Tree)
                          -> Fork (PatchSet p)
                                  (FL (PatchInfoAnd p))
                                  (FL (PatchInfoAnd p)) Origin wR wY
-                         -> IO ( Sealed (FL (PrimOf p) wU)
-                               , Sealed ((FL (PrimOf p) :> FL (PrimOf p)) wR)
-                               )
+                         -> IO (Sealed (FL (PrimOf p) wU))
 tentativelyMergePatches_ mc _repo cmd allowConflicts wantGuiPause
   reorder diffingOpts@DiffOpts{..} (Fork context us them) = do
     (them' :/\: us') <-
@@ -331,13 +321,8 @@ tentativelyMergePatches_ mc _repo cmd allowConflicts wantGuiPause
                 _repo <- tentativelyAddPatches_ DontUpdatePristine _repo
                           NoUpdatePending them
                 tentativelyAddPatches_ DontUpdatePristine _repo NoUpdatePending us'
-        -- reolutions are currently restricted to hunks so they will
-        -- be sifted out anyway
-        setTentativePending _repo (effect pw' {- +>+ resolution -})
-    return
-      ( seal (effect them''content +>+ resolution)
-      , seal (effect them' :> effect pw' +>+ resolution)
-      )
+        setTentativePending _repo (effect pw' +>+ resolution)
+    return $ seal (effect them''content +>+ resolution)
 
 tentativelyMergePatches :: (RepoPatch p, ApplyState p ~ Tree)
                         => Repository 'RW p wU wR -> String
@@ -348,22 +333,8 @@ tentativelyMergePatches :: (RepoPatch p, ApplyState p ~ Tree)
                         -> Fork (PatchSet p)
                                 (FL (PatchInfoAnd p))
                                 (FL (PatchInfoAnd p)) Origin wR wY
-                        -> IO (Sealed ((FL (PrimOf p) :> FL (PrimOf p)) wR))
-tentativelyMergePatches r s a w o d f =
-  snd <$> tentativelyMergePatches_ MakeChanges r s a w o d f
-
-oldTentativelyMergePatches :: (RepoPatch p, ApplyState p ~ Tree)
-                        => Repository 'RW p wU wR -> String
-                        -> AllowConflicts
-                        -> WantGuiPause
-                        -> Reorder
-                        -> DiffOpts
-                        -> Fork (PatchSet p)
-                                (FL (PatchInfoAnd p))
-                                (FL (PatchInfoAnd p)) Origin wR wY
                         -> IO (Sealed (FL (PrimOf p) wU))
-oldTentativelyMergePatches r s a w o d f =
-  fst <$> tentativelyMergePatches_ MakeChanges r s a w o d f
+tentativelyMergePatches = tentativelyMergePatches_ MakeChanges
 
 considerMergeToWorking :: (RepoPatch p, ApplyState p ~ Tree)
                        => Repository 'RW p wU wR -> String
@@ -375,5 +346,4 @@ considerMergeToWorking :: (RepoPatch p, ApplyState p ~ Tree)
                                (FL (PatchInfoAnd p))
                                (FL (PatchInfoAnd p)) Origin wR wY
                        -> IO (Sealed (FL (PrimOf p) wU))
-considerMergeToWorking r s a w o d f =
-  fst <$> tentativelyMergePatches_ DontMakeChanges r s a w o d f
+considerMergeToWorking = tentativelyMergePatches_ DontMakeChanges

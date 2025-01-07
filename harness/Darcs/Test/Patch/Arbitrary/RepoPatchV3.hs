@@ -24,9 +24,12 @@ instance MightHaveDuplicate (RepoPatchV3 prim) where
 
 type instance ModelOf (RepoPatchV3 prim) = ModelOf prim
 
-instance (ArbitraryPrim prim, ApplyState prim ~ RepoState (ModelOf prim)) =>
-         ArbitraryMergeable (RepoPatchV3 prim) where
-  notRepoPatchV1 = Just (NotRepoPatchV1 (\case {}))
+instance
+  (ArbitraryPrim prim, ApplyState prim ~ RepoState (ModelOf prim))
+  => ArbitraryMergeable (RepoPatchV3 prim)
+  where
+
+    notRepoPatchV1 = Just (NotRepoPatchV1 (\case {}))
 
 instance PrimPatch prim => CheckedMerge (RepoPatchV3 prim)
 

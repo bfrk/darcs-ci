@@ -6,10 +6,8 @@
 -- This code was made generic in the element type by Juliusz Chroboczek.
 module Darcs.Util.Printer
     (
-    -- * Class 'Print'
-    Print(..)
     -- * 'Doc' type and structural combinators
-    , Doc(Doc,unDoc)
+      Doc(Doc,unDoc)
     , empty, (<>), (<?>), (<+>), ($$), ($+$), vcat, vsep, hcat, hsep
     -- * Constructing 'Doc's
     , newline
@@ -23,6 +21,7 @@ module Darcs.Util.Printer
     , userchunk, packedString
     , prefix
     , hiddenPrefix
+    , prefixLines
     , invisiblePS, userchunkPS
     , fromXml
     -- * Rendering to 'String'
@@ -37,6 +36,8 @@ module Darcs.Util.Printer
     , simplePrinters, invisiblePrinter, simplePrinter
     -- * Printables
     , Printable(..)
+    , doc
+    , printable, invisiblePrintable, hiddenPrintable, userchunkPrintable
     -- * Constructing colored 'Doc's
     , Color(..)
     , blueText, redText, greenText, magentaText, cyanText
@@ -60,18 +61,8 @@ import qualified Data.ByteString as B ( ByteString, hPut, concat )
 import qualified Data.ByteString.Char8 as BC ( singleton )
 import qualified Text.XML.Light as XML
 
-import Darcs.Util.ByteString ( decodeLocale, encodeLocale, gzWriteHandle )
+import Darcs.Util.ByteString ( linesPS, decodeLocale, encodeLocale, gzWriteHandle )
 import Darcs.Util.Global ( debugMessage )
-
-
-class Print a where
-  print :: a -> Doc
-
-instance (Print a, Print b) => Print (a, b) where
-  print (a, b) = print a $$ print b
-
-instance Print () where
-  print () = empty
 
 -- | A 'Printable' is either a String, a packed string, or a chunk of
 -- text with both representations.
@@ -244,6 +235,12 @@ prefix s (Doc d) = Doc $ \st ->
                    case d st' of
                      Document d'' -> Document $ (p:) . d''
                      Empty -> Empty
+
+-- TODO try to find another way to do this, it's rather a violation
+-- of the Doc abstraction
+prefixLines :: Doc -> Doc -> Doc
+prefixLines prefixer prefixee =
+  vcat $ map (prefixer <+>) $ map packedString $ linesPS $ renderPS prefixee
 
 lineColor :: Color -> Doc -> Doc
 lineColor c d = Doc $ \st -> case lineColorT (printers st) c d of

@@ -32,26 +32,21 @@ import Darcs.Repository
     , tentativelyMergePatches
     , finalizeRepositoryChanges
     , applyToWorking
-    , readUnrecorded
     , setScriptsExecutablePatches
     )
 import Darcs.Repository.Pristine ( readPristine )
 import Darcs.Repository.Job ( RepoJob(RepoJob) )
-import Darcs.Repository.Working ( replaceWorking )
 import Darcs.Patch ( RepoPatch, description )
 import Darcs.Patch.Apply( ApplyState )
 import Darcs.Patch.FromPrim ( PrimOf )
-import Darcs.Patch.Progress ( progressFL )
 import Darcs.Patch.Set ( PatchSet, Origin )
 import Darcs.Patch.Witnesses.Ordered
-    ( FL, Fork(..), (:>)(..), (+>+), mapFL, nullFL )
-import Darcs.Patch.Witnesses.Sealed ( Sealed(..) )
-import Darcs.Patch.Witnesses.Unsafe ( unsafeCoercePStart )
+    ( FL, Fork(..), mapFL, nullFL )
+import Darcs.Patch.Witnesses.Sealed ( Sealed(Sealed) )
 
 import Darcs.Util.English ( presentParticiple )
 import Darcs.Util.Printer ( vcat, text )
 import Darcs.Util.Tree( Tree )
-import Darcs.Util.Progress ( debugMessage )
 
 data PatchProxy (p :: Type -> Type -> Type) = PatchProxy
 
@@ -95,11 +90,8 @@ standardApplyPatches :: (RepoPatch p, ApplyState p ~ Tree)
 standardApplyPatches cmdName opts repository patches@(Fork _ _ to_be_applied) = do
     !no_patches <- return (nullFL to_be_applied)
     applyPatchesStart cmdName opts to_be_applied
-    -- this is the working tree without un-added items (but with pending adds)
-    -- FIXME Why does this not work with O.UseIndex?????
-    working_tree <- readUnrecorded repository O.IgnoreIndex Nothing
-    pw <- mergeAndTest cmdName opts repository patches
-    applyPatchesFinish cmdName opts repository working_tree pw (not no_patches)
+    Sealed pw <- mergeAndTest cmdName opts repository patches
+    applyPatchesFinish cmdName opts repository pw (not no_patches)
 
 mergeAndTest :: (RepoPatch p, ApplyState p ~ Tree)
              => String
@@ -108,7 +100,7 @@ mergeAndTest :: (RepoPatch p, ApplyState p ~ Tree)
              -> Fork (PatchSet p)
                      (FL (PatchInfoAnd p))
                      (FL (PatchInfoAnd p)) Origin wR wZ
-             -> IO (Sealed ((FL (PrimOf p) :> FL (PrimOf p)) wR))
+             -> IO (Sealed (FL (PrimOf p) wU))
 mergeAndTest cmdName opts repository patches = do
     pw <- tentativelyMergePatches repository cmdName
                          (allowConflicts opts)
@@ -141,22 +133,15 @@ applyPatchesFinish :: (RepoPatch p, ApplyState p ~ Tree)
                    => String
                    -> [DarcsFlag]
                    -> Repository 'RW p wU wR
-                   -> Tree IO
-                   -> Sealed ((FL (PrimOf p) :> FL (PrimOf p)) wR)
+                   -> FL (PrimOf p) wU wY
                    -> Bool
                    -> IO ()
-applyPatchesFinish cmdName opts _repository old_working (Sealed (them' :> pw)) any_applied = do
-    new_pristine <- readPristine _repository
+applyPatchesFinish cmdName opts _repository pw any_applied = do
     withSignalsBlocked $ do
         _repository <- finalizeRepositoryChanges _repository (O.dryRun ? opts)
-        debugMessage "Replacing working tree with (new) pristine"
-        _repository <-
-            replaceWorking _repository (diffingOpts opts) old_working new_pristine
-        debugMessage "Applying new pending/working changes"
-        void $ applyToWorking _repository (verbosity ? opts) (unsafeCoercePStart pw)
+        void $ applyToWorking _repository (verbosity ? opts) pw
         when (setScriptsExecutable ? opts == O.YesSetScriptsExecutable) $
-            setScriptsExecutablePatches $
-            progressFL "Setting files executable" $ them' +>+ pw
+            setScriptsExecutablePatches pw
     case (any_applied, reorder ? opts == O.Reorder) of
         (True,True)  -> putFinished opts $ "reordering"
         (False,True) -> putFinished opts $ presentParticiple cmdName ++ " and reordering"

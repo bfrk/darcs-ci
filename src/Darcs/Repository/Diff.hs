@@ -29,7 +29,8 @@
 -- Portability : portable
 
 module Darcs.Repository.Diff
-    ( treeDiff
+    (
+      treeDiff
     ) where
 
 import Darcs.Prelude
@@ -64,8 +65,22 @@ import Darcs.Patch  ( PrimPatch
 import Darcs.Repository.Prefs ( FileType(..) )
 import Darcs.Patch.Witnesses.Ordered ( FL(..), (+>+), concatGapsFL, consGapFL )
 import Darcs.Patch.Witnesses.Sealed ( Gap(..) )
-import Darcs.Util.Diff ( DiffAlgorithm(..) )
-import Darcs.Util.Tree.Diff ( TreeDiff(..), getTreeDiff, organise )
+import Darcs.Repository.Flags ( DiffAlgorithm(..) )
+
+data Diff m = Added (TreeItem m)
+            | Removed (TreeItem m)
+            | Changed (TreeItem m) (TreeItem m)
+
+
+getDiff :: AnchoredPath
+        -> Maybe (TreeItem m)
+        -> Maybe (TreeItem m)
+        -> (AnchoredPath, Diff m)
+getDiff p Nothing (Just t) = (p, Added t)
+getDiff p (Just from) (Just to) = (p, Changed from to)
+getDiff p (Just t) Nothing = (p, Removed t)
+getDiff _ Nothing Nothing = error "impossible case" -- zipTrees should never return this
+
 
 treeDiff :: forall m w prim . (Monad m, Gap w, PrimPatch prim)
          => DiffAlgorithm
@@ -75,10 +90,24 @@ treeDiff :: forall m w prim . (Monad m, Gap w, PrimPatch prim)
          -> m (w (FL prim))
 treeDiff da ft t1 t2 = do
     (from, to) <- diffTrees t1 t2
-    diffs <- mapM (uncurry diff) $ sortBy organise $ zipTrees getTreeDiff from to
+    diffs <- mapM (uncurry diff) $ sortBy organise $ zipTrees getDiff from to
     return $ concatGapsFL diffs
   where
-    diff :: AnchoredPath -> TreeDiff m -> m (w (FL prim))
+    -- sort into removes, changes, adds, with removes in reverse-path order
+    -- and everything else in forward order
+    organise :: (AnchoredPath, Diff m) -> (AnchoredPath, Diff m) -> Ordering
+
+    organise (p1, Changed _ _ ) (p2, Changed _ _) = compare p1 p2
+    organise (p1, Added _)      (p2, Added _)   = compare p1 p2
+    organise (p1, Removed _)    (p2, Removed _) = compare p2 p1
+
+    organise (_, Removed _) _ = LT
+    organise _ (_, Removed _) = GT
+
+    organise (_, Changed _ _) _ = LT
+    organise _ (_, Changed _ _) = GT
+
+    diff :: AnchoredPath -> Diff m -> m (w (FL prim))
     diff _ (Changed (SubTree _) (SubTree _)) = return (emptyGap NilFL)
     diff p (Removed (SubTree _)) =
         -- Note: With files we first make the file empty before removing it.

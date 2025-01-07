@@ -288,11 +288,12 @@ iswanted extract mflags = MatchCriterion
 
 -- | Run a 'PatchSelection' action in the given 'SelectionConfig',
 -- without assuming that patches are invertible.
-runSelection
-  :: (MatchableRP p, ShowPatch p, ShowContextPatch p, ApplyState p ~ Tree)
-  => FL p wX wY
-  -> SelectionConfig p
-  -> IO ((FL p :> FL p) wX wY)
+runSelection :: ( MatchableRP p, ShowPatch p, ShowContextPatch p
+                , ApplyState p ~ Tree, ApplyState p ~ ApplyState (PrimOf p)
+                )
+             => FL p wX wY
+             -> SelectionConfig p
+             -> IO ((FL p :> FL p) wX wY)
 runSelection _ PSC { splitter = Just _ } =
   -- a Splitter makes sense for prim patches only and these are invertible anyway
   error "cannot use runSelection with Splitter"
@@ -392,7 +393,7 @@ runInvertibleSelection ps psc = runReaderT (selection ps) psc where
   {- end of runInvertibleSelection -}
 
 -- | The equivalent of 'runSelection' for the @darcs log@ command
-viewChanges :: (ShowPatch p, ShowContextPatch p)
+viewChanges :: (ShowPatch p, ShowContextPatch p, ApplyState p ~ Tree)
             => PatchSelectionOptions -> [Sealed2 p] -> IO ()
 viewChanges ps_opts = textView ps_opts Nothing 0 []
 
@@ -421,7 +422,7 @@ keysFor = concatMap (map kp)
 
 -- | The function for selecting a patch to amend record. Read at your own risks.
 withSelectedPatchFromList
-    :: (Commute p, Matchable p, ShowPatch p, ShowContextPatch p)
+    :: (Commute p, Matchable p, ShowPatch p, ShowContextPatch p, ApplyState p ~ Tree)
     => String   -- name of calling command (always "amend" as of now)
     -> RL p wX wY
     -> PatchSelectionOptions
@@ -445,7 +446,7 @@ data WithSkipped p wX wY = WithSkipped
 -- patches, including pending and also that the skipped sequences has an
 -- ending context that matches the recorded state, z, of the repository.
 wspfr :: forall p wX wY wZ.
-         (Commute p, Matchable p, ShowPatch p, ShowContextPatch p)
+         (Commute p, Matchable p, ShowPatch p, ShowContextPatch p, ApplyState p ~ Tree)
       => String
       -> (forall wA wB . p wA wB -> Bool)
       -> RL p wX wY
@@ -536,7 +537,7 @@ initialSelectionState lps pcs =
 
 -- | The actual interactive selection process.
 textSelect :: ( Commute p, Invert p, ShowPatch p, ShowContextPatch p
-              , PatchInspect p )
+              , PatchInspect p, ApplyState p ~ Tree )
            => FL (LabelledPatch p) wX wY
            -> PatchChoices p wX wY
            -> PatchSelectionM p IO (PatchChoices p wX wY)
@@ -550,7 +551,7 @@ textSelect lps' pcs =
       unless (rightmost z) $ textSelect'
 
 textSelect' :: ( Commute p, Invert p, ShowPatch p, ShowContextPatch p
-               , PatchInspect p )
+               , PatchInspect p, ApplyState p ~ Tree )
             => InteractiveSelectionM p wX wY ()
 textSelect' = do
   z <- gets lps
@@ -903,7 +904,7 @@ printCurrent = do
       liftIO $ printFriendly (verbosity o) (withSummary o) $ unLabel lp
 
 -- | The interactive part of @darcs changes@
-textView :: (ShowPatch p, ShowContextPatch p)
+textView :: (ShowPatch p, ShowContextPatch p, ApplyState p ~ Tree)
          => PatchSelectionOptions -> Maybe Int -> Int
          -> [Sealed2 p] -> [Sealed2 p]
          -> IO ()

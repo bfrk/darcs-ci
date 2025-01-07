@@ -251,7 +251,7 @@ remotePatches opts repository nirs = do
     patchSetUnion `fmap` mapM readNir nirsPaths
   where
     readNir n = do
-        Sealed2 r <- identifyRepositoryFor Reading repository (O.useCache ? opts) n
+        r <- identifyRepositoryFor Reading repository (O.useCache ? opts) n
         rps <- readPatches r
         return (Sealed rps)
 

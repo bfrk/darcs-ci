@@ -26,8 +26,6 @@ module Darcs.Patch.V2.Non
     , unNon
     , showNon
     , showNons
-    , formatNon
-    , formatNons
     , readNon
     , readNons
     , commutePrimsOrAddToCtx
@@ -45,11 +43,11 @@ module Darcs.Patch.V2.Non
 import Darcs.Prelude hiding ( (*>) )
 
 import Data.List ( delete )
-import Control.Applicative ( (<|>) )
+import Control.Monad ( liftM, mzero )
 import Darcs.Patch.Apply ( Apply(..) )
 import Darcs.Patch.Commute ( commuteFL )
 import Darcs.Patch.Effect ( Effect(..) )
-import Darcs.Patch.Format ( FormatPatch(..) )
+import Darcs.Patch.Format ( PatchListFormat )
 import Darcs.Patch.Invert ( Invert, invertFL, invertRL )
 import Darcs.Patch.FromPrim
     ( FromPrim(..), ToFromPrim
@@ -58,21 +56,21 @@ import Darcs.Patch.FromPrim
 import Darcs.Patch.Prim ( sortCoalesceFL )
 import Darcs.Patch.Commute ( Commute(..) )
 import Darcs.Patch.Invert ( Invert(invert) )
-import Darcs.Patch.Read ( ReadPatch(..), ReadPatches(..) )
+import Darcs.Patch.Read ( ReadPatch(..) )
 import Darcs.Patch.Show ( showPatch )
-import Darcs.Util.Parser ( Parser, lexChar, lexString )
+import Darcs.Util.Parser ( Parser, lexChar )
 import Darcs.Patch.Witnesses.Eq ( Eq2(..), EqCheck(..) )
 import Darcs.Patch.Witnesses.Ordered
     ( FL(..), RL(..), (+>+), mapRL_RL
     , (:>)(..), reverseFL, reverseRL )
 import Darcs.Patch.Witnesses.Show ( Show1, Show2, appPrec, showsPrec2 )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(Sealed) )
-import Darcs.Patch.Show ( ShowPatchBasic )
+import Darcs.Patch.Read ( peekfor )
+import Darcs.Patch.Show ( ShowPatchBasic, ShowPatchFor )
 import Darcs.Patch.Viewing ()
 import Darcs.Patch.Permutations ( (=\~/=), removeFL, commuteWhatWeCanFL )
-import qualified Darcs.Util.Format as F
 import Darcs.Util.Printer ( Doc, empty, vcat, hiddenPrefix, blueText, ($$) )
-import qualified Data.ByteString.Char8 as BC ( pack )
+import qualified Data.ByteString.Char8 as BC ( pack, singleton )
 
 -- |A 'Non' stores a context with a 'Prim' patch. It is a patch whose effect
 -- isn't visible - a Non-affecting patch.
@@ -92,41 +90,37 @@ instance (Show2 p, Show2 (PrimOf p)) => Show (Non p wX) where
 instance (Show2 p, Show2 (PrimOf p)) => Show1 (Non p)
 
 -- |showNons creates a Doc representing a list of Nons.
-showNons :: (ShowPatchBasic p, PrimPatchBase p)
-         => [Non p wX] -> Doc
-showNons [] = empty
-showNons xs = blueText "{{" $$ vcat (map showNon xs) $$ blueText "}}"
+showNons :: (ShowPatchBasic p, PatchListFormat p, PrimPatchBase p)
+         => ShowPatchFor -> [Non p wX] -> Doc
+showNons _ [] = empty
+showNons f xs = blueText "{{" $$ vcat (map (showNon f) xs) $$ blueText "}}"
 
 -- |showNon creates a Doc representing a Non.
-showNon :: (ShowPatchBasic p, PrimPatchBase p)
-        => Non p wX
+showNon :: (ShowPatchBasic p, PatchListFormat p, PrimPatchBase p)
+        => ShowPatchFor
+        -> Non p wX
         -> Doc
-showNon (Non c p) = hiddenPrefix "|" (showPatch c)
+showNon f (Non c p) = hiddenPrefix "|" (showPatch f c)
                       $$ hiddenPrefix "|" (blueText ":")
-                      $$ showPatch p
-
-formatNons :: (FormatPatch p, FormatPatch (PrimOf p)) => [Non p wX] -> F.Format
-formatNons [] = mempty
-formatNons xs = F.ascii "{{" F.$$ F.vcat (map formatNon xs) F.$$ F.ascii "}}"
-
-formatNon :: (FormatPatch p, FormatPatch (PrimOf p)) => Non p wX -> F.Format
-formatNon (Non c p) = formatPatchFL c F.$$ F.ascii ":" F.$$ formatPatch p
+                      $$ showPatch f p
 
 -- |readNons is a parser that attempts to read a list of Nons.
-readNons :: (ReadPatches p, PrimPatchBase p) => Parser [Non p wX]
-readNons = (lexString (BC.pack "{{") >> go) <|> return []
-  where
-    go = none <|> some
-    none = lexString (BC.pack "}}") >> return []
-    some = (:) <$> readNon <*> go
+readNons :: (ReadPatch p, PatchListFormat p, PrimPatchBase p)
+         => Parser [Non p wX]
+readNons = peekfor (BC.pack "{{") rns (return [])
+  where rns = peekfor (BC.pack "}}") (return []) $
+              do Sealed ps <- readPatch'
+                 lexChar ':'
+                 Sealed p <- readPatch'
+                 (Non ps p :) `liftM` rns
 
 -- |readNon is a parser that attempts to read a single Non.
-readNon :: (ReadPatches p, PrimPatchBase p) => Parser (Non p wX)
-readNon = do
-    Sealed ps <- readPatchFL'
-    lexChar ':'
-    Sealed p <- readPatch'
-    return (Non ps p)
+readNon :: (ReadPatch p, PatchListFormat p, PrimPatchBase p)
+        => Parser (Non p wX)
+readNon = do Sealed ps <- readPatch'
+             let doReadPrim = do Sealed p <- readPatch'
+                                 return $ Non ps p
+             peekfor (BC.singleton ':') doReadPrim mzero
 
 -- |Nons are equal if their context patches are equal, and they have an equal
 -- prim patch.

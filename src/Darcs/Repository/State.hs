@@ -108,7 +108,7 @@ import Darcs.Util.Tree( Tree, restrict, FilterTree, expand, emptyTree, overlay, 
                       , ItemType(..), itemType, readBlob, modifyTree, findFile, TreeItem(..)
                       , makeBlobBS, expandPath )
 import qualified Darcs.Util.Tree.Plain as PlainTree ( readPlainTree )
-import Darcs.Util.Tree.Index
+import Darcs.Util.Index
     ( Index
     , indexFormatValid
     , openIndex
@@ -116,7 +116,7 @@ import Darcs.Util.Tree.Index
     , updateIndexFrom
     )
 import qualified Darcs.Util.Tree as Tree
-import Darcs.Util.Tree.Index ( listFileIDs, getFileID )
+import Darcs.Util.Index ( listFileIDs, getFileID )
 
 #define TEST_INDEX 0
 
@@ -636,7 +636,7 @@ getReplaces YesLookForReplaces diffalg _repo pending working = do
   where
     modifiedTokens :: PrimOf p wX wY -> [(AnchoredPath, B.ByteString, B.ByteString)]
     modifiedTokens p = case isHunk p of
-      Just (FileHunk _ f _ old new) ->
+      Just (FileHunk f _ old new) ->
         map (\(a,b) -> (f, a, b)) (concatMap checkModified $
           filter (\(a,b) -> length a == length b) -- only keep lines with same number of tokens
             $ zip (map breakToTokens old) (map breakToTokens new))

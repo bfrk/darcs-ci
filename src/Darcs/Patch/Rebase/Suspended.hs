@@ -4,7 +4,6 @@ module Darcs.Patch.Rebase.Suspended
     , countToEdit, simplifyPush, simplifyPushes
     , addFixupsToSuspended, removeFixupsFromSuspended
     , addToEditsToSuspended
-    , formatSuspended
     , readSuspended
     , showSuspended
     ) where
@@ -12,25 +11,23 @@ module Darcs.Patch.Rebase.Suspended
 import Darcs.Prelude
 
 import Darcs.Patch.Effect ( Effect(..) )
-import Darcs.Patch.Format ( formatPatchFL )
 import Darcs.Patch.Invert ( invert )
 import Darcs.Patch.Named ( Named(..) )
 import Darcs.Patch.Info ( replaceJunk )
 import Darcs.Patch.Read ( ReadPatch(..) )
 import Darcs.Patch.FromPrim ( PrimPatchBase(..) )
-import Darcs.Patch.Read ( readBracketedFL )
+import Darcs.Patch.Read ( bracketedFL )
 import Darcs.Patch.Rebase.Fixup ( RebaseFixup(..), namedToFixups )
 import Darcs.Patch.Rebase.Name ( RebaseName(..) )
 import Darcs.Patch.RepoPatch ( RepoPatch )
 import qualified Darcs.Patch.Rebase.Change as Change ( simplifyPush, simplifyPushes )
 import Darcs.Patch.Rebase.Change ( RebaseChange(..), addNamedToRebase )
 import Darcs.Patch.Rebase.Legacy.Item as Item ( toRebaseChanges )
-import Darcs.Patch.Show ( ShowPatchBasic(..) )
+import Darcs.Patch.Show ( ShowPatchBasic(..), ShowPatchFor )
 import Darcs.Util.Parser ( Parser, lexString, lexWord )
 import Darcs.Patch.Witnesses.Ordered
 import Darcs.Patch.Witnesses.Sealed
 import Darcs.Patch.Witnesses.Show ( Show2 )
-import qualified Darcs.Util.Format as F ( Format, ascii, vcat )
 import Darcs.Util.Printer ( Doc, vcat, text, blueText, ($$), (<+>) )
 import qualified Darcs.Util.Diff as D ( DiffAlgorithm(MyersDiff) )
 
@@ -45,14 +42,11 @@ data Suspended p wX where
 
 deriving instance (Show2 p, Show2 (PrimOf p)) => Show (Suspended p wX)
 
-formatSuspended :: PrimPatchBase p => Suspended p wX -> F.Format
-formatSuspended (Items ps) =
-  F.vcat [F.ascii "rebase 0.2 {", formatPatchFL ps, F.ascii "}"]
-
-showSuspended :: PrimPatchBase p => Suspended p wX -> Doc
-showSuspended (Items ps)
+showSuspended :: PrimPatchBase p
+              => ShowPatchFor -> Suspended p wX -> Doc
+showSuspended f (Items ps)
        = blueText "rebase" <+> text "0.2" <+> blueText "{"
-         $$ vcat (mapFL showPatch ps)
+         $$ vcat (mapFL (showPatch f) ps)
          $$ blueText "}"
 
 readSuspended :: forall p wX. RepoPatch p => Parser (Suspended p wX)
@@ -63,7 +57,7 @@ readSuspended =
          _ | version == BC.pack "0.2" ->
               (lexString (BC.pack "{}") >> return (Items NilFL))
               <|>
-              (unseal Items <$> readBracketedFL readPatch' '{' '}')
+              (unseal Items <$> bracketedFL readPatch' '{' '}')
            -- version 0.1 was a very temporary intermediate state on the way to 0.2
            -- and we don't offer an upgrade path for it.
            | version == BC.pack "0.0" ->
@@ -80,7 +74,7 @@ readSuspended =
                (lexString (BC.pack "{}") >> return (Items NilFL))
                <|>
                (unseal Items . unseal (Item.toRebaseChanges @p) <$>
-                readBracketedFL readPatch' '{' '}')
+                bracketedFL readPatch' '{' '}')
            | otherwise -> error $ "can't handle rebase version " ++ show version
 
 countToEdit :: Suspended p wX -> Int

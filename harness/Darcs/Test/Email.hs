@@ -30,16 +30,16 @@ import Data.Char ( isPrint )
 import qualified Data.ByteString as B ( length, unpack, null, head,
                                         cons, empty, foldr, ByteString )
 import qualified Data.ByteString.Char8 as BC ( unlines )
-import Test.Tasty ( TestTree, testGroup )
-import Test.Tasty.QuickCheck ( testProperty )
+import Test.Framework ( Test, testGroup )
+import Test.Framework.Providers.QuickCheck2 ( testProperty )
 import Test.QuickCheck.Instances.ByteString ()
 
 import Darcs.Util.Printer ( text, renderPS, packedString )
 import Darcs.UI.Email ( makeEmail, readEmail, formatHeader, prop_qp_roundtrip )
 import Safe ( tailErr )
 
-testSuite :: TestTree
-testSuite = testGroup "Darcs.UI.Email"
+testSuite :: Test
+testSuite = testGroup "Darcs.Email"
   [ emailParsing
   , emailHeaderNoLongLines
   , emailHeaderAsciiChars
@@ -49,8 +49,8 @@ testSuite = testGroup "Darcs.UI.Email"
   ]
 
 -- | Checks that darcs can read the emails it generates
-emailParsing :: TestTree
-emailParsing = testProperty "email can be parsed" $ \bs ->
+emailParsing :: Test
+emailParsing = testProperty "Checking that email can be parsed" $ \bs ->
     BC.unlines (B.empty:bs++[B.empty,B.empty]) ==
               readEmail (renderPS
                     $ makeEmail "reponame" [] (Just (text "contents\n"))
@@ -59,40 +59,40 @@ emailParsing = testProperty "email can be parsed" $ \bs ->
 
 -- | Check that formatHeader never creates lines longer than 78 characters
 -- (excluding the carriage return and line feed)
-emailHeaderNoLongLines :: TestTree
+emailHeaderNoLongLines :: Test
 emailHeaderNoLongLines =
-    testProperty "email header line length" $ \field value ->
+    testProperty "Checking email header line length" $ \field value ->
       let cleanField = cleanFieldString field
       in not $ any (>78) $ map B.length $ bsLines $ formatHeader cleanField value
 
 -- Check that an email header does not contain non-ASCII characters
 -- formatHeader doesn't escape field names, there is no such thing as non-ascii
 -- field names afaik
-emailHeaderAsciiChars :: TestTree
+emailHeaderAsciiChars :: Test
 emailHeaderAsciiChars =
-    testProperty "no illegal characters" $ \field value ->
+    testProperty "Checking email for illegal characters" $ \field value ->
       let cleanField = cleanFieldString field
       in not (any (>127) (B.unpack (formatHeader cleanField value)))
 
 -- Check that header the second and later lines of a header start with a space
-emailHeaderLinesStart :: TestTree
+emailHeaderLinesStart :: Test
 emailHeaderLinesStart =
-    testProperty "spaces at start of folded email header lines" $ \field value ->
+    testProperty "Checking for spaces at start of folded email header lines" $ \field value ->
       let headerLines = bsLines (formatHeader cleanField value)
           cleanField  = cleanFieldString field
       in all (\l -> B.null l || B.head l == 32) (tailErr headerLines)
 
 -- Checks that there are no lines in email headers with only whitespace
-emailHeaderNoEmptyLines :: TestTree
+emailHeaderNoEmptyLines :: Test
 emailHeaderNoEmptyLines =
-    testProperty "no empty lines in email headers" $ \field value ->
+    testProperty "Checking that there are no empty lines in email headers" $ \field value ->
       let headerLines = bsLines (formatHeader cleanField value)
           cleanField  = cleanFieldString field
           in all (not . B.null) headerLines --(not . B.null . B.filter (not . (`elem` [10, 32, 9]))) headerLines
 
-emailCodecRoundtrip :: TestTree
+emailCodecRoundtrip :: Test
 emailCodecRoundtrip =
-    testProperty "quoted printable en- then decoding is id" $ prop_qp_roundtrip
+    testProperty "Checking that quoted printable en- then decoding is id" $ prop_qp_roundtrip
 
 bsLines :: B.ByteString -> [B.ByteString]
 bsLines = finalizeFold . B.foldr splitAtLines (B.empty, [])

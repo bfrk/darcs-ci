@@ -35,12 +35,12 @@ echo "foo" > file
 darcs record -al -m "add file"
 echo "bar_longer" > file          # replace by token of different length
 echo yy | darcs record --look-for-replaces -m "replace foo bar_longer file"
-darcs changes --last 1 -v 2>&1 | tail -n +4 | grep -vw hash > log
+darcs changes --last 1 -v 2>&1 | tail -n +4  > log
 cat > log.expected <<EOF
   * replace foo bar_longer file
     replace ./file [A-Za-z_0-9] foo bar_longer
 EOF
-diff -u log log.expected >&2
+diff -u log log.expected
 rm -rf *
 
 # simple full complete replace (amend-record)
@@ -49,7 +49,7 @@ echo "foo" > file
 darcs record -al -m "add file"
 echo "bar" > file
 echo yyy | darcs amend-record --look-for-replaces
-darcs changes --last 1 -v 2>&1 | tail -n +4 | grep -v "^    {\|    }$" | grep -vw hash > log
+darcs changes --last 1 -v 2>&1 | tail -n +4 | grep -v "^    {\|    }$" > log
 cat > log.expected <<EOF
   * add file
     addfile ./file
@@ -57,7 +57,7 @@ cat > log.expected <<EOF
     +foo
     replace ./file [A-Za-z_0-9] foo bar
 EOF
-diff -u log log.expected >&2
+diff -u log log.expected
 rm -rf *
 
 # simple full complete replace (whatsnew)
@@ -65,11 +65,11 @@ darcs init
 echo "foo" > file
 darcs record -al -m "add file"
 echo "bar" > file
-darcs whatsnew --look-for-replaces 2>&1 | grep -vw hash > log
+darcs whatsnew --look-for-replaces 2>&1 > log
 cat > log.expected <<EOF
 replace ./file [A-Za-z_0-9] foo bar
 EOF
-diff -u log log.expected >&2
+diff -u log log.expected
 rm -rf *
 
 # partial replace (only some of the words/chunks replaced) (record)
@@ -78,7 +78,7 @@ echo "foo foo" > file
 darcs record -al -m "add file"
 echo "bar foo" > file
 echo yyy | darcs record --look-for-replaces -m "replace foo bar file"
-darcs changes --last 1 -v 2>&1 | tail -n +4 | grep -v "^    {\|    }$" | grep -vw hash > log
+darcs changes --last 1 -v 2>&1 | tail -n +4 | grep -v "^    {\|    }$" > log
 cat > log.expected <<EOF
   * replace foo bar file
     replace ./file [A-Za-z_0-9] foo bar
@@ -86,7 +86,7 @@ cat > log.expected <<EOF
     -bar bar
     +bar foo
 EOF
-diff -u log log.expected >&2
+diff -u log log.expected
 rm -rf *
 
 # partial replace (only some of the words/chunks replaced) (amend-record)
@@ -105,14 +105,14 @@ echo "foo foo" > file
 darcs record -al -m "add file"
 echo "bar foo" > file
 echo yyyy | darcs amend-record --look-for-replaces
-darcs changes --last 1 -v 2>&1 | tail -n +4 | grep -v "^    {\|    }$" | grep -vw hash > log
+darcs changes --last 1 -v 2>&1 | tail -n +4 | grep -v "^    {\|    }$" > log
 cat > log.expected <<EOF
   * add file
     addfile ./file
     hunk ./file 1
     +bar foo
 EOF
-diff -u log log.expected >&2
+diff -u log log.expected
 rm -rf *
 
 # partial replace (only some of the words/chunks replaced) (whatsnew)
@@ -120,14 +120,14 @@ darcs init
 echo "foo foo" > file
 darcs record -al -m "add file"
 echo "bar foo" > file
-darcs whatsnew --look-for-replaces | grep -vw hash > log
+darcs whatsnew --look-for-replaces > log
 cat > log.expected <<EOF
 replace ./file [A-Za-z_0-9] foo bar
 hunk ./file 1
 -bar bar
 +bar foo
 EOF
-diff -u log log.expected >&2
+diff -u log log.expected
 rm -rf *
 
 # forced replace (the word is in the file) (record)
@@ -144,7 +144,7 @@ bar
 bar
 EOF
 echo yyy | darcs record --look-for-replaces -m "replace foo bar file"
-darcs changes --last 1 -v 2>&1 | tail -n +4 | grep -v "^    {\|    }$" | grep -vw hash > log
+darcs changes --last 1 -v 2>&1 | tail -n +4 | grep -v "^    {\|    }$" > log
 cat > log.expected <<EOF
   * replace foo bar file
     hunk ./file 3
@@ -152,7 +152,7 @@ cat > log.expected <<EOF
     +foo
     replace ./file [A-Za-z_0-9] foo bar
 EOF
-diff -u log log.expected >&2
+diff -u log log.expected
 rm -rf *
 
 # forced replace (the word is in the file) (amend-record)
@@ -175,7 +175,7 @@ bar
 bar
 EOF
 echo yyyy | darcs amend-record --look-for-replaces
-darcs changes --last 1 -v 2>&1 | tail -n +4 | grep -v "^    {\|    }$" | grep -vw hash > log
+darcs changes --last 1 -v 2>&1 | tail -n +4 | grep -v "^    {\|    }$" > log
 cat > log.expected <<EOF
   * change file
     hunk ./file 3
@@ -183,7 +183,7 @@ cat > log.expected <<EOF
     +foo
     replace ./file [A-Za-z_0-9] foo bar
 EOF
-diff -u log log.expected >&2
+diff -u log log.expected
 rm -rf *
 
 # forced replace (the word is in the file) (whatsnew)
@@ -199,14 +199,14 @@ bar
 bar
 bar
 EOF
-darcs whatsnew --look-for-replaces 2>&1 | grep -vw hash > log
+darcs whatsnew --look-for-replaces 2>&1 > log
 cat > log.expected <<EOF
 hunk ./file 3
 -bar
 +foo
 replace ./file [A-Za-z_0-9] foo bar
 EOF
-diff -u log log.expected >&2
+diff -u log log.expected
 rm -rf *
 
 # multiple replaces (record)
@@ -223,14 +223,14 @@ rur
 kee
 EOF
 echo yyyy | darcs record --look-for-replaces -m "multiple replaces"
-darcs changes --last 1 -v 2>&1 | tail -n +4 | grep -v "^    {\|    }$" | grep -vw hash > log
+darcs changes --last 1 -v 2>&1 | tail -n +4 | grep -v "^    {\|    }$" > log
 cat > log.expected <<EOF
   * multiple replaces
     replace ./file [A-Za-z_0-9] bar rur
     replace ./file [A-Za-z_0-9] foo ter
     replace ./file [A-Za-z_0-9] ser kee
 EOF
-diff -u log log.expected >&2
+diff -u log log.expected
 rm -rf *
 
 # multiple replaces (amend-record)
@@ -247,7 +247,7 @@ rur
 kee
 EOF
 echo yyyyy | darcs amend-record --look-for-replaces
-darcs changes --last 1 -v 2>&1 | tail -n +4 | grep -v "^    {\|    }$" | grep -vw hash > log
+darcs changes --last 1 -v 2>&1 | tail -n +4 | grep -v "^    {\|    }$" > log
 cat > log.expected <<EOF
   * add file
     addfile ./file
@@ -259,7 +259,7 @@ cat > log.expected <<EOF
     replace ./file [A-Za-z_0-9] foo ter
     replace ./file [A-Za-z_0-9] ser kee
 EOF
-diff -u log log.expected >&2
+diff -u log log.expected
 rm -rf *
 
 # multiple replaces (whatsnew)
@@ -275,13 +275,13 @@ ter
 rur
 kee
 EOF
-darcs whatsnew --look-for-replaces 2>&1 | grep -vw hash > log
+darcs whatsnew --look-for-replaces 2>&1 > log
 cat > log.expected <<EOF
 replace ./file [A-Za-z_0-9] bar rur
 replace ./file [A-Za-z_0-9] foo ter
 replace ./file [A-Za-z_0-9] ser kee
 EOF
-diff -u log log.expected >&2
+diff -u log log.expected
 rm -rf *
 
 # conflicting replaces (whatsnew)
@@ -295,7 +295,7 @@ cat > file <<EOF
 bar
 ber
 EOF
-darcs whatsnew --look-for-replaces 2>&1 | grep -vw hash > log
+darcs whatsnew --look-for-replaces 2>&1 > log
 cat > log.expected <<EOF
 hunk ./file 1
 -foo
@@ -303,7 +303,7 @@ hunk ./file 1
 +bar
 +ber
 EOF
-diff -u log log.expected >&2
+diff -u log log.expected
 rm -rf *
 
 # same line replaces
@@ -317,7 +317,7 @@ cat > file <<EOF
 bar bar2 bar3
 bor bor2 bor3
 EOF
-darcs whatsnew --look-for-replaces 2>&1 | grep -vw hash > log
+darcs whatsnew --look-for-replaces 2>&1 > log
 cat > log.expected <<EOF
 replace ./file [A-Za-z_0-9] fee bor
 replace ./file [A-Za-z_0-9] fee2 bor2
@@ -326,7 +326,7 @@ replace ./file [A-Za-z_0-9] foo bar
 replace ./file [A-Za-z_0-9] foo2 bar2
 replace ./file [A-Za-z_0-9] foo3 bar3
 EOF
-diff -u log log.expected >&2
+diff -u log log.expected
 rm -rf *
 
 # 2

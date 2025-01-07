@@ -18,7 +18,7 @@ import Darcs.Patch.CommuteNoConflicts ( CommuteNoConflicts(..) )
 import Darcs.Patch.Permutations ()
 import Darcs.Patch.FromPrim ( PrimOf )
 import Darcs.Patch.Prim ( PrimMangleUnravelled(..), Mangled, Unravelled )
-import Darcs.Patch.Show ( ShowPatch(..), showPatch )
+import Darcs.Patch.Show ( ShowPatch(..), ShowPatchFor(ForStorage), showPatch )
 import Darcs.Patch.Witnesses.Ordered ( (:>)(..), FL(..), RL(..), mapFL, (+<<+) )
 import Darcs.Util.Printer ( renderString, text, vcat, ($$) )
 
@@ -105,11 +105,11 @@ findConflicting context patch = go (context :> NilFL :> patch :> NilFL) where
     | not (isConflicted p) = prune (ctx +<<+ deps :> p :> NilRL :> nondeps)
   go (NilRL :> deps :> p :> nondeps) =
     error $ renderString $ text "precondition violated:" $$
-      vcat (mapFL showPatch deps) $$
+      vcat (mapFL (showPatch ForStorage) deps) $$
       text "===============" $$
-      text "patch:" $$ showPatch p $$
+      text "patch:" $$ (showPatch ForStorage) p $$
       text "===============" $$
-      vcat (mapFL showPatch nondeps)
+      vcat (mapFL (showPatch ForStorage) nondeps)
   go (cs :<: c :> deps :> p :> nondeps) =
     case commuteFL (c :> deps) of
       Nothing -> go (cs :> c :>: deps :> p :> nondeps)

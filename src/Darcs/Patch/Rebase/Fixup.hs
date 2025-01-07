@@ -8,7 +8,6 @@ module Darcs.Patch.Rebase.Fixup
     , commuteNamedFixup, commuteFixupNamed
     , pushFixupFixup
     , flToNamesPrims, namedToFixups
-    , primNamedToFixups
     ) where
 
 import Darcs.Prelude
@@ -17,13 +16,13 @@ import Darcs.Patch.Apply ( Apply(..) )
 import Darcs.Patch.Commute ( Commute(..), selfCommuter )
 import Darcs.Patch.CommuteFn ( totalCommuterIdFL )
 import Darcs.Patch.Effect ( Effect(..) )
-import Darcs.Patch.Format ( FormatPatch(..) )
 import Darcs.Patch.Inspect ( PatchInspect(..) )
 import Darcs.Patch.Invert ( Invert(..) )
 import Darcs.Patch.Named ( Named(..) )
+import Darcs.Patch.Format ( PatchListFormat )
 import Darcs.Patch.FromPrim ( PrimPatchBase(..) )
 import Darcs.Patch.Prim ( PrimPatch, canonizeFL )
-import Darcs.Patch.Read ( ReadPatch(..), ReadPatches(..) )
+import Darcs.Patch.Read ( ReadPatch(..) )
 import Darcs.Patch.Rebase.Name
     ( RebaseName(..)
     , commuteNamedName, commuteNameNamed
@@ -41,7 +40,6 @@ import Darcs.Patch.Witnesses.Sealed ( Sealed, mapSeal )
 import Darcs.Patch.Witnesses.Show ( Show1, Show2, showsPrec2, appPrec )
 
 import qualified Darcs.Util.Diff as D ( DiffAlgorithm )
-import qualified Darcs.Util.Format as F ( vcat, ascii )
 import Darcs.Util.Parser ( Parser, lexString )
 import Darcs.Util.Printer ( ($$), (<+>), blueText )
 
@@ -56,12 +54,7 @@ data RebaseFixup prim wX wY where
   NameFixup :: RebaseName wX wY -> RebaseFixup prim wX wY
 
 namedToFixups :: Effect p => Named p wX wY -> FL (RebaseFixup (PrimOf p)) wX wY
-namedToFixups (NamedP p _ contents) =
-  NameFixup (AddName p) :>: mapFL_FL PrimFixup (effect contents)
-
-primNamedToFixups :: Named prim wX wY -> FL (RebaseFixup prim) wX wY
-primNamedToFixups (NamedP p _ contents) =
-  NameFixup (AddName p) :>: mapFL_FL PrimFixup contents
+namedToFixups (NamedP p _ contents) = NameFixup (AddName p) :>: mapFL_FL PrimFixup (effect contents)
 
 instance Show2 prim => Show (RebaseFixup prim wX wY) where
     showsPrec d (PrimFixup p) =
@@ -94,20 +87,16 @@ instance PatchInspect prim => PatchInspect (RebaseFixup prim) where
     hunkMatches f (PrimFixup p) = hunkMatches f p
     hunkMatches f (NameFixup n) = hunkMatches f n
 
-instance FormatPatch prim => FormatPatch (RebaseFixup prim) where
-  formatPatch (PrimFixup p) =
-    F.vcat [F.ascii "rebase-fixup (", formatPatch p, F.ascii ")"]
-  formatPatch (NameFixup p) =
-    F.vcat [F.ascii "rebase-name (", formatPatch p, F.ascii ")"]
+instance PatchListFormat (RebaseFixup prim)
 
 instance ShowPatchBasic prim => ShowPatchBasic (RebaseFixup prim) where
-  showPatch (PrimFixup p) =
-    blueText "rebase-fixup" <+> blueText "(" $$ showPatch p $$ blueText ")"
-  showPatch (NameFixup p) =
-    blueText "rebase-name" <+> blueText "(" $$ showPatch p $$ blueText ")"
+  showPatch f (PrimFixup p) =
+    blueText "rebase-fixup" <+> blueText "(" $$ showPatch f p $$ blueText ")"
+  showPatch f (NameFixup p) =
+    blueText "rebase-name" <+> blueText "(" $$ showPatch f p $$ blueText ")"
 
 instance ReadPatch prim => ReadPatch (RebaseFixup prim) where
-  readPatch' =
+ readPatch' =
    mapSeal PrimFixup <$> readWith (BC.pack "rebase-fixup" ) <|>
    mapSeal NameFixup <$> readWith (BC.pack "rebase-name"  )
    where
@@ -119,7 +108,6 @@ instance ReadPatch prim => ReadPatch (RebaseFixup prim) where
        lexString (BC.pack ")")
        return res
 
-instance ReadPatch prim => ReadPatches (RebaseFixup prim)
 
 instance Commute prim => Commute (RebaseFixup prim) where
     commute (PrimFixup p :> PrimFixup q) = do
