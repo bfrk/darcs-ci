@@ -212,9 +212,6 @@ module Darcs.UI.Options.All
     , ChangesFormat (..)
     , changesFormat
 
-    -- record
-    , canonize
-
     -- replace
     , tokens
     , forceReplace
@@ -234,9 +231,6 @@ module Darcs.UI.Options.All
     -- show repo
     , EnumPatches (..)
     , enumPatches
-
-    -- show tags
-    , covering
 
     -- gzcrcs
     , GzcrcsAction (..)
@@ -1233,15 +1227,6 @@ changesFormat = withDefault Nothing
   , RawNoArg [] ["number"] F.NumberPatches (Just NumberPatches) "number the changes"
   , RawNoArg [] ["count"] F.Count (Just CountPatches) "output count of changes" ]
 
--- ** record, amend
-
--- | This one is only for testing. It allows to reconstruct failing QC test cases
--- for named patches.
-canonize :: PrimDarcsOption Bool
-canonize = withDefault True
-  [ RawNoArg [] ["canonize"] F.Canonize True "canonize changes before recording"
-  , RawNoArg [] ["no-canonize"] F.NoCanonize False "do not canonize changes before recording" ]
-
 -- ** replace
 
 tokens :: PrimDarcsOption (Maybe String)
@@ -1306,13 +1291,6 @@ enumPatches = withDefault YesEnumPatches
     "include statistics requiring enumeration of patches"
   , RawNoArg [] ["no-enum-patches"] F.NoEnumPatches NoEnumPatches
     "don't include statistics requiring enumeration of patches" ]
-
--- ** show tags
-
-covering :: PrimDarcsOption (Maybe String)
-covering = singleStrArg [] ["covering"] F.Covering arg "PATTERN"
-    "show tags that depend on the latest patch that matches PATTERN"
-  where arg (F.Covering s) = Just s; arg _ = Nothing
 
 -- ** gzcrcs
 

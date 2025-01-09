@@ -60,7 +60,7 @@ fi
 inR=(R/_darcs/patches/*-*)
 inS=(S/_darcs/patches/*-*)
 patch=$(basename $inR)
-inC=$(find $DARCS_CACHE_DIR/patches -name $patch)
+inC=$(find $HOME/.cache/darcs/patches -name $patch)
 
 ## Confirm that all three are hard linked.
 same_inode $inR $inS

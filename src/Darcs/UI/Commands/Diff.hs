@@ -62,7 +62,7 @@ import Darcs.Util.Lock ( withTempDir )
 import Darcs.Util.Path ( AbsolutePath, AnchoredPath, isPrefix, toFilePath )
 import Darcs.Util.Printer ( Doc, putDocLn, text, vcat )
 import Darcs.Util.Prompt ( askEnter )
-import Darcs.Util.Tree.Hashed ( hashedTreeIO )
+import Darcs.Util.Tree.Hashed ( hashedTreeIO, writeDarcsHashed )
 import Darcs.Util.Tree.Plain ( writePlainTree )
 import Darcs.Util.Workaround ( getCurrentDirectory )
 
@@ -199,6 +199,8 @@ doDiff opts mpaths = withRepository (useCache ? opts) $ RepoJob $ \repository ->
         -- during the 'apply' and 'unapply' operations below.
         let cache = mkDirCache tdir
         pristine <- readPristine repository
+        -- fill our temporary cache
+        _ <- writeDarcsHashed pristine cache
 
         -- @base@ will be like our working tree, /except/ that it contains only
         -- the unrecorded changes that affect the given file paths, see comment

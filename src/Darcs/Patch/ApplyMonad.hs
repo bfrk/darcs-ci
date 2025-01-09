@@ -1,4 +1,4 @@
-{-# OPTIONS_GHC -Wno-orphans #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -48,7 +48,7 @@ import GHC.Exts ( Constraint )
 
 class (Monad m, ApplyMonad state (ApplyMonadOver state m))
       => ApplyMonadTrans state m where
-  type ApplyMonadOver state m :: Type -> Type
+  type ApplyMonadOver state m :: * -> *
   runApplyMonad :: (ApplyMonadOver state m) x -> state m -> m (x, state m)
 
 instance MonadThrow m => ApplyMonadTrans Tree m where
@@ -59,7 +59,7 @@ evalApplyMonad
   :: ApplyMonadTrans state m => ApplyMonadOver state m a -> state m -> m a
 evalApplyMonad action st = fst <$> runApplyMonad action st
 
-type family ApplyMonadOperations (state :: (Type -> Type) -> Type) :: (Type -> Type) -> Constraint
+type family ApplyMonadOperations (state :: (* -> *) -> *) :: (* -> *) -> Constraint
 
 class MonadThrow m => ApplyMonadTree m where
     -- a semantic, Tree-based interface for patch application
@@ -80,7 +80,7 @@ type instance ApplyMonadOperations Tree = ApplyMonadTree
 class ( Monad m
       , ApplyMonadOperations state m
       )
-      => ApplyMonad (state :: (Type -> Type) -> Type) m | m -> state where
+      => ApplyMonad (state :: (* -> *) -> *) m | m -> state where
 
     readFilePS :: ObjectIdOf state -> m B.ByteString
 

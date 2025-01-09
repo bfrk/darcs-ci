@@ -57,6 +57,7 @@ import Control.Monad ( when, unless, void )
 import Darcs.Util.ByteString
     ( decodeLocale
     , packStringToUTF8
+    , unlinesPS
     , unpackPSFromUTF8
     )
 import qualified Darcs.Util.Parser as RM ( take )
@@ -66,18 +67,18 @@ import Darcs.Util.Parser as RM ( skipSpace, char,
                                       takeTillChar,
                                       linesStartingWithEndingWith)
 import Darcs.Patch.Show ( ShowPatchFor(..) )
-import qualified Data.ByteString       as B  (length, splitAt
-                                             ,isPrefixOf, concat
+import qualified Data.ByteString       as B  (length, splitAt, null
+                                             ,isPrefixOf, tail, concat
+                                             ,empty, head, cons, append
                                              ,ByteString )
 import qualified Data.ByteString.Char8 as BC
-    ( index, notElem, all, unpack, pack )
+    ( index, head, notElem, all, unpack, pack )
 import Data.List( isPrefixOf )
 import Data.List.NonEmpty ( NonEmpty(..) )
 import qualified Data.List.NonEmpty as NE
-import qualified Text.XML.Light as XML
 
 import Darcs.Util.Printer ( Doc, packedString,
-                 empty, ($$), (<+>), vcat, text, cyanText, blueText )
+                 empty, ($$), (<+>), vcat, text, cyanText, blueText, prefix )
 import Darcs.Util.IsoDate ( readUTCDate )
 import System.Time ( CalendarTime, calendarTimeToString, toClockTime,
                      toCalendarTime )
@@ -316,33 +317,35 @@ friendlyD d = unsafePerformIO $ do
     ct <- toCalendarTime $ toClockTime $ readPatchDate d
     return $ calendarTimeToString ct
 
-toXml :: PatchInfo -> XML.Element
+toXml :: PatchInfo -> Doc
 toXml = toXml' True
 
-toXmlShort :: PatchInfo -> XML.Element
+toXmlShort :: PatchInfo -> Doc
 toXmlShort = toXml' False
 
-toXml' :: Bool -> PatchInfo -> XML.Element
+toXml' :: Bool -> PatchInfo -> Doc
 toXml' includeComments pi =
-  -- We do NOT use the high-level accessors piName, piAuthor, etc because
-  -- metadataToString does not necessarily produce valid unicode Strings. This
-  -- is important because most programs that take XML as input for further
-  -- processing simply fail otherwise.
-  XML.unode "patch"
-    ( [ XML.Attr (XML.unqual "author") (unpackPSFromUTF8 (_piAuthor pi))
-      , XML.Attr (XML.unqual "date") (piDateString pi)
-      , XML.Attr (XML.unqual "local_date") (friendlyD $ _piDate pi)
-      , XML.Attr (XML.unqual "inverted") (show $ _piLegacyIsInverted pi)
-      , XML.Attr (XML.unqual "hash") (show $ makePatchname pi)
-      ]
-    , [ XML.unode "name" $ unpackPSFromUTF8 (_piName pi) ] ++ comments
-    )
-  where
-    -- note that this is supposed to list junk as well, which is why piLog is not
-    -- appropriate here
-    comments
-      | includeComments = map (XML.unode "comment") (map unpackPSFromUTF8 $ _piLog pi)
-      | otherwise = []
+        text "<patch"
+    <+> text "author='" <> escapeXMLByteString (_piAuthor pi) <> text "'"
+    <+> text "date='" <> escapeXMLByteString (_piDate pi) <> text "'"
+    <+> text "local_date='" <> escapeXML (friendlyD $ _piDate pi) <> text "'"
+    <+> text "inverted='" <> text (show $ _piLegacyIsInverted pi) <> text "'"
+    <+> text "hash='" <> text (show $ makePatchname pi) <> text "'>"
+    $$  indent abstract
+    $$  text "</patch>"
+      where
+        indent = prefix "    "
+        name = text "<name>" <> escapeXMLByteString (_piName pi) <> text "</name>"
+        abstract | includeComments = name $$ commentsAsXml (_piLog pi)
+                 | otherwise = name
+
+commentsAsXml :: [B.ByteString] -> Doc
+commentsAsXml comments
+  | B.length comments' > 0 = text "<comment>"
+                          <> escapeXMLByteString comments'
+                          <> text "</comment>"
+  | otherwise = empty
+    where comments' = unlinesPS comments
 
 -- escapeXML is duplicated in Patch.lhs and Annotate.lhs
 -- It should probably be refactored to exist in one place.
@@ -350,11 +353,28 @@ escapeXML :: String -> Doc
 escapeXML = text . strReplace '\'' "&apos;" . strReplace '"' "&quot;" .
   strReplace '>' "&gt;" . strReplace '<' "&lt;" . strReplace '&' "&amp;"
 
+-- Escape XML characters in a UTF-8 encoded ByteString, and turn it into a Doc.
+-- The data will be in the Doc as a bytestring.
+escapeXMLByteString :: B.ByteString -> Doc
+escapeXMLByteString = packedString . bstrReplace '\'' "&apos;"
+                                   . bstrReplace '"'  "&quot;"
+                                   . bstrReplace '>'  "&gt;"
+                                   . bstrReplace '<'  "&lt;"
+                                   . bstrReplace '&'  "&amp;"
+
 strReplace :: Char -> String -> String -> String
 strReplace _ _ [] = []
 strReplace x y (z:zs)
   | x == z    = y ++ strReplace x y zs
   | otherwise = z : strReplace x y zs
+
+bstrReplace :: Char -> String -> B.ByteString -> B.ByteString
+bstrReplace c s bs | B.null bs   = B.empty
+                   | otherwise   = if BC.head bs == c
+                                     then B.append (BC.pack s)
+                                                   (bstrReplace c s (B.tail bs))
+                                     else B.cons (B.head bs)
+                                                 (bstrReplace c s (B.tail bs))
 
 -- | Hash on patch metadata (patch name, author, date, log, and the legacy
 -- \"inverted\" flag.

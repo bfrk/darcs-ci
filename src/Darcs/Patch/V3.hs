@@ -1,4 +1,4 @@
-{-# OPTIONS_GHC -Wno-orphans #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 module Darcs.Patch.V3 ( RepoPatchV3 ) where
 
 import Darcs.Prelude

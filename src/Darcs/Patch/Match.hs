@@ -53,13 +53,12 @@ module Darcs.Patch.Match
     , firstMatch
     , secondMatch
     , haveNonrangeMatch
-    , PatchSetMatch
+    , PatchSetMatch(..)
     , patchSetMatch
     , checkMatchSyntax
     , hasIndexRange
     , getMatchingTag
     , matchAPatchset
-    , matchOnePatchset
     , MatchFlag(..)
     , matchingHead
     , Matchable
@@ -100,9 +99,8 @@ import Data.List ( isPrefixOf, intercalate )
 import Data.Char ( toLower )
 import Data.Typeable ( Typeable )
 
-import Darcs.Util.Path ( AbsolutePath, toFilePath )
+import Darcs.Util.Path ( AbsolutePath )
 import Darcs.Patch ( hunkMatches, listTouchedFiles )
-import Darcs.Patch.Bundle ( readContextFile )
 import Darcs.Patch.Info ( justName, justAuthor, justLog, makePatchname,
                           piDate, piTag )
 
@@ -646,17 +644,6 @@ getMatchingTag m ps =
   case splitOnMatchingTag m ps of
     PatchSet NilRL _ -> throw $ userError $ "Couldn't find a tag matching " ++ show m
     PatchSet ps' _ -> seal $ PatchSet ps' NilRL
-
--- | Return the patches in a 'PatchSet' up to the given 'PatchSetMatch'.
-matchOnePatchset
-  :: MatchableRP p
-  => PatchSet p Origin wR
-  -> PatchSetMatch
-  -> IO (SealedPatchSet p Origin)
-matchOnePatchset ps (IndexMatch   n   ) = return $ patchSetDrop (n - 1) ps
-matchOnePatchset ps (PatchMatch   m   ) = return $ matchAPatchset m ps
-matchOnePatchset ps (TagMatch     m   ) = return $ getMatchingTag m ps
-matchOnePatchset ps (ContextMatch path) = readContextFile ps (toFilePath path)
 
 -- | Rollback (i.e. apply the inverse) of what remains of a 'PatchSet' after we
 -- extract a 'PatchSetMatch'. This is the counterpart of 'getOnePatchset' and

@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 module Darcs.Patch.Prim
     ( PrimApply(..)
     , PrimCoalesce(..)

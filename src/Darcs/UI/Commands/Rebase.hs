@@ -525,7 +525,7 @@ inject = DarcsCommand
     , commandOptions = injectOpts
     }
   where
-    injectBasicOpts = O.keepDate ^ O.author ^ O.diffAlgorithm ^ O.withSummary
+    injectBasicOpts = O.keepDate ^ O.author ^ O.diffAlgorithm
     injectOpts = injectBasicOpts `withStdOpts` O.umask
     injectDescription =
       "Merge a change from the fixups of a patch into the patch itself."
@@ -600,7 +600,7 @@ obliterate = DarcsCommand
     , commandOptions = obliterateOpts
     }
   where
-    obliterateBasicOpts = O.diffAlgorithm ^ O.withSummary
+    obliterateBasicOpts = O.diffAlgorithm
     obliterateOpts = obliterateBasicOpts `withStdOpts` O.umask
     obliterateDescription =
       "Obliterate a patch that is currently suspended."

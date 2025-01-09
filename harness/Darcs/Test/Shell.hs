@@ -1,5 +1,5 @@
 {-# LANGUAGE CPP, OverloadedStrings, ExtendedDefaultRules, RecordWildCards #-}
-{-# OPTIONS_GHC -Wno-type-defaults #-}
+{-# OPTIONS_GHC -fno-warn-type-defaults #-}
 module Darcs.Test.Shell
     ( Format(..)
     , DiffAlgorithm(..)
@@ -29,6 +29,7 @@ import Shelly
     , mkdir_p
     , onCommandHandles
     , pwd
+    , setenv
     , shelly
     , silently
     , sub
@@ -37,7 +38,7 @@ import Shelly
     , writefile
     , (</>)
     )
-import qualified System.FilePath as Native ( splitSearchPath )
+import qualified System.FilePath as Native ( searchPathSeparator, splitSearchPath )
 import System.FilePath ( makeRelative, takeBaseName, takeDirectory )
 import qualified System.FilePath.Posix as Posix ( searchPathSeparator )
 import System.IO ( hSetBinaryMode )
@@ -112,7 +113,6 @@ runtest' ShellTest{..} srcdir =
           , ("TESTDATA", EnvFilePath (srcdir </> "tests" </> "data"))
           , ("TESTBIN", EnvFilePath (srcdir </> "tests" </> "bin"))
           , ("DARCS_TESTING_PREFS_DIR"   , EnvFilePath $ wd </> ".darcs")
-          , ("DARCS_CACHE_DIR"           , EnvFilePath $ wd </> ".cache/darcs")
           , ("EMAIL"                     , EnvString "tester")
           , ("GIT_AUTHOR_NAME"           , EnvString "tester")
           , ("GIT_AUTHOR_EMAIL"          , EnvString "tester")
@@ -129,9 +129,6 @@ runtest' ShellTest{..} srcdir =
           , ("GHC_VERSION", EnvString $ show (__GLASGOW_HASKELL__ :: Int))
           -- https://www.joshkel.com/2018/01/18/symlinks-in-windows/
           , ("MSYS"                      , EnvString "winsymlinks:nativestrict")
-#ifdef WIN32
-          , ("OS"                        , EnvString "windows")
-#endif
           ]
     -- we write the variables to a shell script and source them from there in
     -- ./lib, so that it's easy to reproduce a test failure after running the
@@ -139,6 +136,8 @@ runtest' ShellTest{..} srcdir =
     writefile "env" $ T.unlines $ map
       (\(k, v) -> T.concat ["export ", k, "=", envItemForScript v])
       env
+    -- just in case the test script doesn't source ./lib:
+    mapM_ (\(k, v) -> setenv k (envItemForEnv v)) env
 
     mkdir ".darcs"
     writefile ".darcs/defaults" defaults
@@ -174,6 +173,13 @@ runtest' ShellTest{..} srcdir =
     ucf = case usecache of
       WithCache -> []
       NoCache   -> ["ALL no-cache"]
+
+    -- convert an 'EnvItem' to a string you can put in the environment directly
+    envItemForEnv :: EnvItem -> Text
+    envItemForEnv (EnvString   v) = pack v
+    envItemForEnv (EnvFilePath v) = toTextIgnore v
+    envItemForEnv (EnvSearchPath vs) =
+      T.intercalate (T.singleton Native.searchPathSeparator) $ map toTextIgnore vs
 
     -- convert an 'EnvItem' to a string that will evaluate to the right value
     -- when embedded in a bash script

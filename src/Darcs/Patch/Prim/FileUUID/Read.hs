@@ -1,5 +1,5 @@
 {-# LANGUAGE ViewPatterns, OverloadedStrings #-}
-{-# OPTIONS_GHC -Wno-orphans #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 module Darcs.Patch.Prim.FileUUID.Read () where
 
 import Darcs.Prelude hiding ( take )

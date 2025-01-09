@@ -1,5 +1,5 @@
 {-# LANGUAGE MultiParamTypeClasses, OverloadedStrings, UndecidableInstances #-}
-{-# OPTIONS_GHC -Wno-orphans #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 module Darcs.Patch.Prim.FileUUID.Apply ( hunkEdit, ObjectMap(..) ) where
 
 import Darcs.Prelude

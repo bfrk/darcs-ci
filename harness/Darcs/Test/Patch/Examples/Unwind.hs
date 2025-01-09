@@ -13,6 +13,7 @@ module Darcs.Test.Patch.Examples.Unwind where
 
 import Darcs.Prelude
 
+import Darcs.Patch.FromPrim
 import Darcs.Patch.Info
 import Darcs.Patch.Merge
 import Darcs.Patch.Named
@@ -27,9 +28,9 @@ import Darcs.Util.Tree
 
 import Darcs.Test.HashedStorage ( unsafeMakeName )
 import Darcs.Test.Patch.Arbitrary.Generic
-import Darcs.Test.Patch.Arbitrary.Named ( WithNames(..) )
+import Darcs.Test.Patch.Arbitrary.Named ()
 import Darcs.Test.Patch.Arbitrary.PrimV1 ()
-import Darcs.Test.Patch.Arbitrary.Mergeable
+import Darcs.Test.Patch.Arbitrary.RepoPatch
 import Darcs.Test.Patch.RepoModel
 import Darcs.Test.Patch.Types.MergeableSequence
     ( MergeableSequence(..) )
@@ -47,10 +48,10 @@ import Data.String
 
 examples
   :: forall p
-   . (ArbitraryMergeable p, ArbitraryPrim (OnlyPrim p), ModelOf p ~ ModelOf (OnlyPrim p))
+   . (ArbitraryRepoPatch p, ArbitraryPrim (OnlyPrim p))
    => [Sealed2 (WithStartState2 (MergeableSequence (Named p)))]
 examples =
-  case (hasPrimConstruct @(OnlyPrim p), usesV1Model @(OnlyPrim p), notRepoPatchV1 @p) of
+  case (hasPrimConstruct @(OnlyPrim p), usesV1Model @(PrimOf p), notRepoPatchV1 @p) of
     (Just Dict, Just Dict, Just _) -> [example1, example2, example3, example4]
     (Just Dict, Just Dict, Nothing) -> [example1, example2, example3]
     _ -> []
@@ -61,11 +62,8 @@ mkNamed hash = NamedP (rawPatchInfo "" "" "" ["Ignore-this: "++hash] False) []
 path :: String -> AnchoredPath
 path s = AnchoredPath [unsafeMakeName s]
 
-repo :: [(String, [BLC.ByteString])] -> WithNames V1Model wX
-repo entries = WithNames (primRepo entries) []
-
-primRepo :: [(String, [BLC.ByteString])] -> V1Model wX
-primRepo entries =
+repo :: [(String, [BLC.ByteString])] -> V1Model wX
+repo entries =
   makeRepo [ (unsafeMakeName s, RepoItem (File (makeBlob (BLC.unlines thelines))))
            | (s, thelines) <- entries
            ]
@@ -180,7 +178,7 @@ example4guts =
   in
    Sealed2
      (WithStartState2
-       (primRepo [("a", s3++s5++s7)])
+       (repo [("a", s3++s5++s7)])
        (
          (NilMS
            `SeqMS` hunk (path "a") (off [s3,s5]) [] (map pack s10)
@@ -208,7 +206,7 @@ example4 =
   case example4guts @p of
    Sealed2 (WithStartState2 model (((NilMS `SeqMS` a1 `SeqMS` a2) `ParMS` (NilMS `SeqMS` a3 `SeqMS` a4)) `ParMS` (NilMS `SeqMS` a5 `SeqMS` a6))) ->
      Sealed2
-       (WithStartState2 (WithNames model [])
+       (WithStartState2 model
          ((NilMS
             `SeqMS`
             mkNamed "91b78b39ea6649b6e43ea74a57070480c87d7053"

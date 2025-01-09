@@ -24,6 +24,7 @@ import Darcs.Repository.Identify ( identifyRepositoryFor, ReadingOrWriting(..) )
 import Darcs.Repository.Pristine
     ( applyToTentativePristine
     , createPristineDirectoryTree
+    , writePristine
     )
 import Darcs.Repository.Hashed
     ( copyHashedInventory
@@ -66,6 +67,7 @@ import Darcs.Repository.Format
     , formatHas
     )
 import Darcs.Repository.Prefs ( addRepoSource, deleteSources )
+import Darcs.Repository.Match ( getOnePatchset )
 import Darcs.Util.File
     ( copyFileOrUrl
     , Cachable(..)
@@ -119,7 +121,7 @@ import Darcs.Patch.Set
     , patchSetInventoryHashes
     , progressPatchSet
     )
-import Darcs.Patch.Match ( MatchFlag(..), patchSetMatch, matchOnePatchset )
+import Darcs.Patch.Match ( MatchFlag(..), patchSetMatch )
 import Darcs.Patch.Progress ( progressRLShowTags, progressFL )
 import Darcs.Patch.Apply ( Apply(..) )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(..) )
@@ -134,7 +136,7 @@ import Darcs.Patch.Witnesses.Ordered
     )
 import Darcs.Patch.PatchInfoAnd ( PatchInfoAnd, extractHash )
 
-import Darcs.Util.Tree( Tree )
+import Darcs.Util.Tree( Tree, emptyTree )
 
 import Darcs.Util.Exception ( catchall )
 import Darcs.Util.English ( englishNum, Noun(..) )
@@ -227,7 +229,7 @@ cloneRepository repourl mysimplename v useCache cloneKind um rdarcs sse
         -- the following is necessary to be able to read _toRepo's patches
         _toRepo <- revertRepositoryChanges _toRepo
         patches <- readPatches _toRepo
-        Sealed context <- matchOnePatchset patches psm
+        Sealed context <- getOnePatchset _toRepo psm
         to_remove :\/: only_in_context <- return $ findUncommon patches context
         case only_in_context of
           NilFL -> do
@@ -387,6 +389,7 @@ copyRepoOldFashioned :: forall p wU wR. (RepoPatch p, ApplyState p ~ Tree)
                         -> IO ()
 copyRepoOldFashioned fromRepo _toRepo verb withWorkingDir = do
   _toRepo <- revertRepositoryChanges _toRepo
+  _ <- writePristine _toRepo emptyTree
   patches <- readPatches fromRepo
   let k = "Copying patch"
   beginTedious k

@@ -23,7 +23,6 @@ module Darcs.Repository
     , repoFormat
     , repoPristineType
     , repoCache
-    , RepoFormat(..)
     , PristineType(..)
     , HashedDir(..)
     , Cache
@@ -172,7 +171,6 @@ import Darcs.Repository.Create
     , EmptyRepository(..)
     )
 import Darcs.Repository.Flags ( UpdatePending(..) )
-import Darcs.Repository.Format ( RepoFormat(..) )
 
 import Darcs.Patch.Set ( PatchSet, SealedPatchSet )
 import Darcs.Patch.PatchInfoAnd ( PatchInfoAnd )

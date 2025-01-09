@@ -24,7 +24,7 @@
 ## CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 ## SOFTWARE.
 
-. lib                  # Load some portability helpers.
+. ../tests/lib                  # Load some portability helpers.
 rm -rf R                        # Another script may have left a mess.
 darcs init      --repo R        # Create our test repo.
 darcs init      --repo S        # Create our test repos.

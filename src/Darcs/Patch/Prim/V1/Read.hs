@@ -1,4 +1,4 @@
-{-# OPTIONS_GHC -Wno-orphans #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 module Darcs.Patch.Prim.V1.Read () where
 
 import Darcs.Prelude

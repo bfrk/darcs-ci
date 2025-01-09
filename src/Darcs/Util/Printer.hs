@@ -9,8 +9,9 @@ module Darcs.Util.Printer
     -- * 'Doc' type and structural combinators
       Doc(Doc,unDoc)
     , empty, (<>), (<?>), (<+>), ($$), ($+$), vcat, vsep, hcat, hsep
+    , minus, newline, plus, space, backslash, lparen, rparen
+    , parens, sentence
     -- * Constructing 'Doc's
-    , newline
     , text
     , hiddenText
     , invisibleText
@@ -21,9 +22,9 @@ module Darcs.Util.Printer
     , userchunk, packedString
     , prefix
     , hiddenPrefix
+    , insertBeforeLastline
     , prefixLines
     , invisiblePS, userchunkPS
-    , fromXml
     -- * Rendering to 'String'
     , renderString, renderStringWith
     -- * Rendering to 'ByteString'
@@ -59,7 +60,6 @@ import Data.String ( IsString(..) )
 import System.IO ( Handle, stdout )
 import qualified Data.ByteString as B ( ByteString, hPut, concat )
 import qualified Data.ByteString.Char8 as BC ( singleton )
-import qualified Text.XML.Light as XML
 
 import Darcs.Util.ByteString ( linesPS, decodeLocale, encodeLocale, gzWriteHandle )
 import Darcs.Util.Global ( debugMessage )
@@ -78,9 +78,41 @@ spaceP   = Both " "  (BC.singleton ' ')
 newlineP :: Printable
 newlineP = S "\n"
 
+-- | A 'Doc' representing a space (\" \")
+space :: Doc
+space = unsafeBoth " "  (BC.singleton ' ')
+
 -- | A 'Doc' representing a newline
 newline :: Doc
 newline = unsafeChar '\n'
+
+-- | A 'Doc' representing a \"-\"
+minus :: Doc
+minus = unsafeBoth "-"  (BC.singleton '-')
+
+-- | A 'Doc' representing a \"+\"
+plus :: Doc
+plus = unsafeBoth "+"  (BC.singleton '+')
+
+-- | A 'Doc' representing a \"\\\"
+backslash :: Doc
+backslash = unsafeBoth "\\" (BC.singleton '\\')
+
+-- | A 'Doc' that represents @\"(\"@
+lparen :: Doc
+lparen = unsafeBoth  "(" (BC.singleton '(')
+
+-- | A 'Doc' that represents @\")\"@
+rparen :: Doc
+rparen = unsafeBoth ")" (BC.singleton ')')
+
+-- | prop> parens d = lparen <> d <> rparen
+parens :: Doc -> Doc
+parens d = lparen <> d <> rparen
+
+-- | Turn a 'Doc' into a sentence. This appends a ".".
+sentence :: Doc -> Doc
+sentence = (<> text ".")
 
 -- | Format a list of 'FilePath's as quoted text. It deliberately refuses to
 -- use English.andClauses but rather separates the quoted strings only with a
@@ -241,6 +273,15 @@ prefix s (Doc d) = Doc $ \st ->
 prefixLines :: Doc -> Doc -> Doc
 prefixLines prefixer prefixee =
   vcat $ map (prefixer <+>) $ map packedString $ linesPS $ renderPS prefixee
+
+-- TODO try to find another way to do this, it's rather a violation
+-- of the Doc abstraction
+insertBeforeLastline :: Doc -> Doc -> Doc
+insertBeforeLastline a b =
+  case reverse $ map packedString $ linesPS $ renderPS a of
+    (ll:ls) -> vcat (reverse ls) $$ b $$ ll
+    [] ->
+      error "empty Doc given as first argument of Printer.insert_before_last_line"
 
 lineColor :: Color -> Doc -> Doc
 lineColor c d = Doc $ \st -> case lineColorT (printers st) c d of
@@ -493,6 +534,3 @@ quoted s = text "\"" <> text (escape s) <> text "\""
     escape (c:cs) = if c `elem` ['\\', '"']
                        then '\\' : c : escape cs
                        else c : escape cs
-
-fromXml :: XML.Element -> Doc
-fromXml = text . XML.ppElement

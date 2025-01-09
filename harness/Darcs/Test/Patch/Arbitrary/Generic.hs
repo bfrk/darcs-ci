@@ -1,6 +1,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 module Darcs.Test.Patch.Arbitrary.Generic
   ( ArbitraryPrim(..)
+  , ShrinkPrim
   , TestablePrim
   , PrimBased(..)
   , NullPatch(..)
@@ -27,7 +28,7 @@ import Darcs.Patch.Witnesses.Ordered
 import Darcs.Patch.Apply ( Apply, ApplyState )
 import Darcs.Patch.Effect ( Effect(..) )
 import Darcs.Patch.Format ( PatchListFormat )
-import Darcs.Patch.Merge ( CleanMerge, Merge(..) )
+import Darcs.Patch.Merge ( Merge(..) )
 import Darcs.Patch.Invert ( Invert(..) )
 import Darcs.Patch.Commute ( Commute(..) )
 import Darcs.Patch.FromPrim ( PrimOf )
@@ -118,8 +119,13 @@ class ( ArbitraryState prim
         default usesV1Model :: ModelOf prim ~ V1Model => Maybe (Dict (ModelOf prim ~ V1Model))
         usesV1Model = Just Dict
 
+type ShrinkPrim prim =
+  ( ShrinkModel prim
+  , PropagateShrink prim prim
+  )
+
 type TestablePrim prim =
-  ( Apply prim, CleanMerge prim, Commute prim, Invert prim, Eq2 prim, Show2 prim
+  ( Apply prim, Commute prim, Invert prim, Eq2 prim
   , PatchListFormat prim, ShowPatchBasic prim, ReadPatch prim
   , RepoModel (ModelOf prim), ApplyState prim ~ RepoState (ModelOf prim)
   , ArbitraryPrim prim
@@ -133,7 +139,7 @@ class ( Effect p, Show2 (OnlyPrim p), ArbitraryState (OnlyPrim p)
       , ModelOf p ~ ModelOf (OnlyPrim p)
       )
     => PrimBased p where
-  type OnlyPrim p :: Type -> Type -> Type
+  type OnlyPrim p :: * -> * -> *
   primEffect :: OnlyPrim p wX wY -> FL (PrimOf p) wX wY
   liftFromPrim :: OnlyPrim p wX wY -> p wX wY
 
@@ -141,3 +147,4 @@ instance (Commute (OnlyPrim p), PrimBased p) => PrimBased (FL p) where
   type OnlyPrim (FL p) = FL (OnlyPrim p)
   primEffect = concatFL . mapFL_FL (primEffect @p)
   liftFromPrim = mapFL_FL liftFromPrim
+

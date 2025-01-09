@@ -41,7 +41,6 @@ import Darcs.UI.External ( editFile )
 import Darcs.UI.Flags ( getEasyAuthor, promptAuthor, getDate )
 import Darcs.UI.Options ( Config, (?) )
 import qualified Darcs.UI.Options.All as O
-import Darcs.UI.Prompt ( promptYornorq )
 import qualified Darcs.UI.SelectChanges as S ( PatchSelectionOptions(..) )
 import Darcs.UI.SelectChanges ( askAboutDepends )
 
@@ -49,7 +48,7 @@ import qualified Darcs.Util.Diff as D ( DiffAlgorithm )
 import Darcs.Util.English ( capitalize )
 import Darcs.Util.Global ( darcsLastMessage )
 import Darcs.Util.Path ( FilePathLike, toFilePath )
-import Darcs.Util.Prompt ( PromptConfig(..), askUser, promptChar )
+import Darcs.Util.Prompt ( PromptConfig(..), askUser, promptChar, promptYorn )
 import Darcs.Util.Printer ( Doc, text, ($+$), vcat, prefixLines, renderString )
 import qualified Darcs.Util.Ratified as Ratified ( hGetContents )
 
@@ -185,12 +184,11 @@ getLog m_name has_pipe log_file ask_long m_old chs =
 
   is_badname = isJust . just_a_badname
 
-  prompt_long_comment oldname = do
-    let verb = case m_old of { Nothing -> "add a"; Just _ -> "edit the" }
-        edit = get_log_using_editor oldname
-        no_edit = return (oldname, default_log, Nothing)
-        prompt = "Do you want to " ++ verb ++ " long comment?"
-    promptYornorq prompt (verb ++ " long comment") edit no_edit
+  prompt_long_comment oldname =
+    do let verb = case m_old of Nothing -> "add a"; Just _ -> "edit the"
+       y <- promptYorn $ "Do you want to "++verb++" long comment?"
+       if y then get_log_using_editor oldname
+            else return (oldname, default_log, Nothing)
 
   get_log_using_editor p =
                        do let logf = darcsLastMessage
@@ -255,7 +253,6 @@ data PatchHeaderConfig = PatchHeaderConfig
   , author :: Maybe String
   , patchname :: Maybe String
   , askLongComment :: Maybe O.AskLongComment
-  , canonizeChanges :: Bool
   }
 
 patchHeaderConfig :: Config -> PatchHeaderConfig
@@ -266,7 +263,6 @@ patchHeaderConfig cfg = PatchHeaderConfig
   , author          = O.author ? cfg
   , patchname       = O.patchname ? cfg
   , askLongComment  = O.askLongComment ? cfg
-  , canonizeChanges = O.canonize ? cfg
   }
 
 -- | Update the metadata for a patch.
@@ -287,8 +283,7 @@ updatePatchHeader :: forall p wX wY wZ . (RepoPatch p, ApplyState p ~ Tree)
                   -> HijackT IO (Maybe String, PatchInfoAnd p wX wZ)
 updatePatchHeader verb ask_deps pSelOpts PatchHeaderConfig{..} oldp chs = do
 
-    let maybeCanonize = if canonizeChanges then canonizeFL diffAlgorithm else id
-    let newchs = maybeCanonize (patchcontents oldp +>+ chs)
+    let newchs = canonizeFL diffAlgorithm (patchcontents oldp +>+ chs)
 
     let old_pdeps = getdeps oldp
     newdeps <-

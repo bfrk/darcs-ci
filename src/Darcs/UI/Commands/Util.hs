@@ -43,8 +43,6 @@ import Data.Maybe ( fromMaybe )
 import System.Exit ( ExitCode(..), exitWith, exitSuccess )
 import System.Posix.Files ( isDirectory )
 
-import qualified Text.XML.Light as XML
-
 import Darcs.Patch ( RepoPatch, xmlSummary )
 import Darcs.Patch.Apply ( ApplyState )
 import Darcs.Patch.Depends
@@ -93,8 +91,8 @@ import Darcs.Util.Exception ( clarifyErrors )
 import Darcs.Util.File ( getFileStatus )
 import Darcs.Util.Path ( AnchoredPath, displayPath, getUniquePathName )
 import Darcs.Util.Printer
-    ( Doc, formatWords, ($+$), text, (<+>), hsep, ($$), vsep
-    , putDocLn, fromXml
+    ( Doc, formatWords, ($+$), text, (<+>), hsep, ($$), vcat, vsep
+    , putDocLn, insertBeforeLastline, prefix
     , putDocLnWith, pathlist
     )
 import Darcs.Util.Printer.Color ( fancyPrinters )
@@ -149,19 +147,23 @@ printDryRunMessageAndExit action v s d x interactive patches = do
         putInfoX $ hsep [ "Will", text action, "the following patches:" ]
         putDocLn put_mode
   where
-    put_mode =
-      if x == YesXml
-        then
-          fromXml $ XML.unode "patches" $ mapFL (xml_info s) patches
-        else vsep $ mapFL (showFriendly v s) patches
+    put_mode = if x == YesXml
+                   then text "<patches>" $$
+                        vcat (mapFL (indent . xml_info s) patches) $$
+                        text "</patches>"
+                   else vsep $ mapFL (showFriendly v s) patches
 
     putInfoX = if x == YesXml then const (return ()) else putDocLn
 
-    xml_info YesSummary hp
-        | Just p <- hopefullyM hp =
-            let el = toXml (info hp)
-            in el { XML.elContent = XML.elContent el ++ [XML.Elem (xmlSummary p)] }
-    xml_info _ hp = toXml (info hp)
+    xml_info YesSummary = xml_with_summary
+    xml_info NoSummary  = toXml . info
+
+    xml_with_summary hp
+        | Just p <- hopefullyM hp = insertBeforeLastline (toXml $ info hp)
+                                        (indent $ xmlSummary p)
+    xml_with_summary hp = toXml (info hp)
+
+    indent = prefix "    "
 
 -- | Given a repository and two common command options, classify the given list
 -- of paths according to whether they exist in the pristine or working tree.

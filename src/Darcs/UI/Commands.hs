@@ -58,7 +58,6 @@ import System.Console.GetOpt ( OptDescr )
 import System.IO ( stderr )
 import System.IO.Error ( catchIOError )
 import System.Environment ( setEnv )
-import qualified Text.XML.Light as XML
 
 import Darcs.Prelude
 
@@ -98,7 +97,7 @@ import Darcs.UI.PrintPatch ( showWithSummary )
 import Darcs.Util.ByteString ( decodeLocale, packStringToUTF8 )
 import Darcs.Util.Path ( AbsolutePath, anchorPath )
 import Darcs.Util.Printer
-    ( Doc, text, (<+>), ($+$), hsep
+    ( Doc, text, (<+>), ($$), ($+$), hsep, vcat
     , putDocLnWith, hPutDocLn, renderString
     )
 import Darcs.Util.Printer.Color ( fancyPrinters, ePutDocLn )
@@ -313,9 +312,10 @@ setEnvDarcsPatches ps = do
     finishedOneIO k "DARCS_PATCHES"
     setEnvCautiously "DARCS_PATCHES" (renderString $ showWithSummary ps)
     finishedOneIO k "DARCS_PATCHES_XML"
-    setEnvCautiously
-      "DARCS_PATCHES_XML" $
-      XML.ppElement $ XML.unode "patches" $ mapFL (toXml . info) ps
+    setEnvCautiously "DARCS_PATCHES_XML" . renderString $
+        text "<patches>" $$
+        vcat (mapFL (toXml . info) ps) $$
+        text "</patches>"
     finishedOneIO k "DARCS_FILES"
     setEnvCautiously "DARCS_FILES" $ unlines filepaths
     endTedious k

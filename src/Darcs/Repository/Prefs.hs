@@ -301,14 +301,9 @@ xdgCacheDir = do
     `catchall` return Nothing
 
 globalCacheDir :: IO (Maybe FilePath)
-globalCacheDir = do
-    env <- getEnvironment
-    case lookup "DARCS_CACHE_DIR" env of
-      Nothing
-        | windows   -> ((</> "cache2") `fmap`) `fmap` globalPrefsDir
-        | osx       -> ((</> "darcs") `fmap`) `fmap` osxCacheDir
-        | otherwise -> ((</> "darcs") `fmap`) `fmap` xdgCacheDir
-      d -> return d
+globalCacheDir | windows   = ((</> "cache2") `fmap`) `fmap` globalPrefsDir
+               | osx       = ((</> "darcs") `fmap`) `fmap` osxCacheDir
+               | otherwise = ((</> "darcs") `fmap`) `fmap` xdgCacheDir
 
 -- |tryMakeBoringRegexp attempts to create a Regex from a given String. The
 -- evaluation is forced, to ensure any malformed exceptions are thrown here,
@@ -770,8 +765,7 @@ prefsFilesHelp  =
       , ""
       , "A global cache is enabled by default in your home directory under"
       , "`.cache/darcs` (older versions of darcs used `.darcs/cache` for this),"
-      , "or `$DARCS_CACHE_DIR` if the environment variable is set,"
-      , "or else `$XDG_CACHE_HOME/darcs` if the environment variable is set, see"
+      , "or `$XDG_CACHE_HOME/darcs` if the environment variable is set, see"
       , "https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html."
       , "The cache allows darcs to avoid re-downloading patches (for example, when"
       , "doing a second darcs clone of the same repository), and also allows darcs"

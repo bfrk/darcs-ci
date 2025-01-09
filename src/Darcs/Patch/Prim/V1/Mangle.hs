@@ -1,5 +1,5 @@
 {-# LANGUAGE ViewPatterns #-}
-{-# OPTIONS_GHC -Wno-orphans #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 module Darcs.Patch.Prim.V1.Mangle () where
 
 import Darcs.Prelude

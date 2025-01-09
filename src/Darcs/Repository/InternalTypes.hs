@@ -66,7 +66,7 @@ data SAccessType (rt :: AccessType) where
 --
 --        * the recorded state when outside a transaction, or
 --        * the tentative state when inside a transaction.
-data Repository (rt :: AccessType) (p :: Type -> Type -> Type) wU wR =
+data Repository (rt :: AccessType) (p :: * -> * -> *) wU wR =
   Repo !String !RepoFormat !PristineType Cache (SAccessType rt)
 
 type role Repository nominal nominal nominal nominal

@@ -1,6 +1,6 @@
 Cabal-Version:  2.4
 Name:           darcs
-version:        2.19.1
+version:        2.18.5
 License:        GPL-2.0-or-later
 License-file:   COPYING
 Author:         David Roundy <droundy@darcs.net>, <darcs-devel@darcs.net>
@@ -61,6 +61,9 @@ extra-source-files:
   release/distributed-version
   release/distributed-context
 
+  -- bundled shelly (the bare minimum required)
+  shelly/LICENSE
+
   -- testsuite
   tests/data/*.tgz
   tests/data/README
@@ -120,8 +123,8 @@ flag warn-as-error
 -- ----------------------------------------------------------------------
 
 custom-setup
-    setup-depends: base      >= 4.10 && < 4.21,
-                   Cabal     >= 2.4 && < 3.13,
+    setup-depends: base      >= 4.10 && < 4.20,
+                   Cabal     >= 2.4 && < 3.11,
                    process   >= 1.2.3.0 && < 1.7,
                    filepath  >= 1.4.1 && < 1.5.0.0,
                    directory >= 1.2.7 && < 1.4
@@ -413,7 +416,7 @@ Library
       build-depends:  unix              >= 2.7.1.0 && < 2.9,
                       directory         >= 1.2.7 && < 1.4
 
-    build-depends:    base              >= 4.10 && < 4.21,
+    build-depends:    base              >= 4.10 && < 4.20,
                       safe              >= 0.3.20 && < 0.4,
                       stm               >= 2.1 && < 2.6,
                       binary            >= 0.5 && < 0.11,
@@ -445,7 +448,7 @@ Library
                       async             >= 2.0.2 && < 2.3,
                       constraints       >= 0.11 && < 0.15,
                       unix-compat       >= 0.6 && < 0.8,
-                      bytestring        >= 0.11.3.0 && < 0.13,
+                      bytestring        >= 0.10.6 && < 0.13,
                       old-time          >= 1.1.0.3 && < 1.2,
                       time              >= 1.9 && < 1.15,
                       text              >= 1.2.1.3 && < 2.2,
@@ -455,7 +458,6 @@ Library
                       hashable          >= 1.2.3.3 && < 1.5,
                       mmap              >= 0.5.9 && < 0.6,
                       zlib              >= 0.6.1.2 && < 0.8,
-                      xml               >= 1.3.14 && < 1.4,
                       network-uri       >= 2.6 && < 2.8,
                       network           >= 2.6 && < 3.3,
                       conduit           >= 1.3.0 && < 1.4,
@@ -481,11 +483,11 @@ Library
 
     ghc-options:      -Wall -funbox-strict-fields -fwarn-tabs
 
-    -- It's a deliberate choice to use NoMonoLocalBinds and tolerate this warning long-term,
-    -- as otherwise we'd need 10s of extra type signatures in our code.
-    -- See https://mail.haskell.org/pipermail/glasgow-haskell-users/2010-November/019464.html
     if impl(ghc >= 9.4.1)
       ghc-options:    -Wno-gadt-mono-local-binds
+
+    if impl(ghc >= 9.0.1)
+      ghc-options:    -Wno-star-is-type
 
     -- The terminfo package cannot be built on Windows.
     if flag(terminfo) && !os(windows)
@@ -571,7 +573,7 @@ test-suite darcs-test
   type:             exitcode-stdio-1.0
   default-language: Haskell2010
   main-is:          test.hs
-  hs-source-dirs:   harness
+  hs-source-dirs:   harness, shelly/src
 
   if os(windows)
     cpp-options:    -DWIN32
@@ -601,7 +603,17 @@ test-suite darcs-test
                     test-framework-leancheck   >= 0.0.1 && < 0.1,
                     vector,
                     zip-archive,
-                    shelly,
+                    -- additional dependencies needed by the shelly modules
+                    async,
+                    exceptions,
+                    monad-control              >= 0.3.2 && < 1.1,
+                    process,
+                    system-filepath            >= 0.4.7 && < 0.5,
+                    -- exclude 0.3.16.5 which fails to build on Windows
+                    system-fileio              < 0.3.16.5 || > 0.3.16.5 && < 0.4,
+                    time,
+                    transformers-base,
+                    unix-compat,
 
   -- the tests shell out to a built darcs binary, so we depend on it to make
   -- sure that it's built. It's not actually required for build, just at runtime,
@@ -615,15 +627,17 @@ test-suite darcs-test
                     Darcs.Test.Patch.Check
                     Darcs.Test.Patch.Depends
                     Darcs.Test.Patch.Examples.Set1
-                    Darcs.Test.Patch.Examples.Set2
+                    Darcs.Test.Patch.Examples.Set2Unwitnessed
                     Darcs.Test.Patch.Examples.Unwind
+                    Darcs.Test.Patch.WSub
                     Darcs.Test.Patch.Info
                     Darcs.Test.Patch.Properties
                     Darcs.Test.Patch.Properties.V1Set1
                     Darcs.Test.Patch.Properties.V1Set2
                     Darcs.Test.Patch.Properties.Generic
+                    Darcs.Test.Patch.Properties.GenericUnwitnessed
                     Darcs.Test.Patch.Properties.Check
-                    Darcs.Test.Patch.Properties.Mergeable
+                    Darcs.Test.Patch.Properties.RepoPatch
                     Darcs.Test.Patch.Properties.RepoPatchV3
                     Darcs.Test.Patch.Arbitrary.Generic
                     Darcs.Test.Patch.Arbitrary.Named
@@ -631,7 +645,7 @@ test-suite darcs-test
                     Darcs.Test.Patch.Arbitrary.PatchTree
                     Darcs.Test.Patch.Arbitrary.PrimFileUUID
                     Darcs.Test.Patch.Arbitrary.PrimV1
-                    Darcs.Test.Patch.Arbitrary.Mergeable
+                    Darcs.Test.Patch.Arbitrary.RepoPatch
                     Darcs.Test.Patch.Arbitrary.RepoPatchV1
                     Darcs.Test.Patch.Arbitrary.RepoPatchV2
                     Darcs.Test.Patch.Arbitrary.RepoPatchV3
@@ -667,6 +681,9 @@ test-suite darcs-test
                     Darcs.Test.UI.Commands.Test.Simple
                     Darcs.Test.Util.TestResult
                     Darcs.Test.Util.QuickCheck
+                    Shelly
+                    Shelly.Base
+                    Shelly.Find
 
   if flag(warn-as-error)
     ghc-options:    -Werror
@@ -675,6 +692,9 @@ test-suite darcs-test
 
   if impl(ghc >= 9.4.1)
     ghc-options:    -Wno-gadt-mono-local-binds
+
+  if impl(ghc >= 9.0.1)
+    ghc-options:    -Wno-star-is-type
 
   if flag(threaded)
     ghc-options:    -threaded

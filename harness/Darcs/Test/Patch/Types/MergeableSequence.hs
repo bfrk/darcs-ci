@@ -3,7 +3,6 @@ module Darcs.Test.Patch.Types.MergeableSequence
   ( MergeableSequence(..)
   , arbitraryMergeableSequence
   , mergeableSequenceToRL
-  , WithSplit(..)
   ) where
 
 import Darcs.Prelude
@@ -22,7 +21,7 @@ import Darcs.Patch.Witnesses.Maybe
 import Darcs.Patch.Witnesses.Sealed
 import Darcs.Patch.Witnesses.Unsafe
 import Darcs.Patch.Witnesses.Ordered
-import Darcs.Patch.Apply ( ApplyState )
+import Darcs.Patch.Apply ( Apply, ApplyState )
 import Darcs.Patch.Effect ( Effect(..) )
 import Darcs.Patch.Invert ( Invert(..) )
 import Darcs.Patch.FromPrim ( PrimPatchBase, PrimOf )
@@ -206,7 +205,7 @@ arbitraryMergeableSequence
    . ( RepoModel model
      , CheckedMerge p
      , PrimBased p
-     , RepoApply p, ApplyState p ~ RepoState model
+     , Apply p, ApplyState p ~ RepoState model
      )
   => (forall wA . model wA -> Gen (Sealed (WithEndState model (OnlyPrim p wA))))
   -> model wX
@@ -238,7 +237,7 @@ arbitraryMergeableSequence arbitrarySingle = go
 
 instance
   ( RepoModel model
-  , RepoApply p, ApplyState p ~ RepoState model
+  , Apply p, ApplyState p ~ RepoState model
   , model ~ ModelOf (OnlyPrim p)
   , model ~ ModelOf p
   , CheckedMerge p
@@ -246,57 +245,3 @@ instance
   )
   => ArbitraryState (MergeableSequence p) where
   arbitraryState rm = bSized 3 0.035 9 $ arbitraryMergeableSequence arbitraryState rm
-
-data WithSplit p wX wY = WithSplit Int (p wX wY)
-
-type instance ModelOf (WithSplit p) = ModelOf p
-
-instance PrimPatchBase p => PrimPatchBase (WithSplit p) where
-  type PrimOf (WithSplit p) = PrimOf p
-
-instance Effect p => Effect (WithSplit p) where
-  effect (WithSplit _ p) = effect p
-
-instance Shrinkable p => Shrinkable (WithSplit p) where
-  shrinkInternally (WithSplit n ms) = map (WithSplit n) (shrinkInternally ms)
-  shrinkAtStart (WithSplit n ms) = map (mapFlipped (WithSplit n)) (shrinkAtStart ms)
-  shrinkAtEnd (WithSplit n ms) = map (mapSeal (WithSplit n)) (shrinkAtEnd ms)
-
-instance
-  ( PropagateShrink prim (OnlyPrim p)
-  , CheckedMerge p, Effect p, PrimOf p ~ prim
-  , Invert prim, PrimCoalesce prim
-  , PrimBased p
-  )
-  => PropagateShrink prim (WithSplit (MergeableSequence p)) where
-  propagateShrink (x :> WithSplit n p) =
-    case propagateShrink (x :> p) of
-      Nothing -> Nothing
-      Just (Just2 p' :> x') -> Just (Just2 (WithSplit n p') :> x')
-      Just (Nothing2 :> x') -> Just (Nothing2 :> x')
-
-instance Show2 p => Show2 (WithSplit p)
-
-instance Show2 p => Show (WithSplit p wX wY) where
-  showsPrec d (WithSplit n p) =
-    showParen (d > appPrec) $
-      showString "WithSplit " . shows n . showString " " . showsPrec2 (appPrec + 1) p
-
-instance
-  ( RepoModel model
-  , RepoApply p, ApplyState p ~ RepoState model
-  , model ~ ModelOf (OnlyPrim p)
-  , model ~ ModelOf p
-  , CheckedMerge p
-  , PrimBased p
-  )
-  => ArbitraryState (WithSplit (MergeableSequence p)) where
-  arbitraryState s = do
-    Sealed (WithEndState ms s') <- arbitraryState s
-    n <- chooseInt (0, lengthMS ms)
-    return $ seal $ WithEndState (WithSplit n ms) s'
-
-lengthMS :: MergeableSequence p wX wY -> Int
-lengthMS NilMS = 0
-lengthMS (ParMS a b) = lengthMS a + lengthMS b
-lengthMS (SeqMS a _) = lengthMS a + 1

@@ -57,7 +57,7 @@ not grep author2 log
 not grep author3 log
 #hash
 darcs changes --xml-output --match='exact "\"second\" \ patch"' > log
-hash=$(grep hash log | sed -E -e 's/.*hash="([^"]+)".*/\1/')
+hash=`grep hash log | sed -e "s/.*hash='//" -e "s/'.*//"`
 echo $hash
 darcs changes --match="hash $hash"
 not grep author1 log

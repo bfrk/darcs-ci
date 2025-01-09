@@ -50,7 +50,7 @@ import Darcs.Util.Printer ( Doc )
 -- | The reason this is not associated to class 'Ident' is that for technical
 -- reasons we want to be able to define type instances for patches that don't
 -- have an identity and therefore cannot be lawful members of class 'Ident'.
-type family PatchId (p :: Type -> Type -> Type)
+type family PatchId (p :: * -> * -> *)
 
 {- | Class of patches that have an identity/name.
 

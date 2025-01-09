@@ -94,7 +94,7 @@ darcs init temp1
 cd temp1
 echo first > a
 darcs record -lam 'first'
-firsthash=$(darcs log --xml | grep 'hash=' | sed -E -e 's/.*hash="([^"]+)".*/\1/')
+firsthash=`darcs log --xml | grep 'hash=' | sed -e "s/.*hash='//" -e "s/'>//"`
 echo second > b
 darcs record -lam 'second'
 cd ..

@@ -1,4 +1,4 @@
-{-# OPTIONS_GHC -Wno-orphans #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE MultiWayIf #-}
 module Darcs.Patch.Prim.V1.Apply () where
 

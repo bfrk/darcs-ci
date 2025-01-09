@@ -47,7 +47,7 @@ data Location = L !UUID !Name
 -- TODO use HashMap instead?
 type DirContent = M.Map Name UUID
 
-data Object (m :: Type -> Type)
+data Object (m :: * -> *)
   = Directory DirContent
   | Blob (m FileContent) !(Maybe Hash)
 
@@ -59,7 +59,7 @@ isDirectory :: Object m -> Bool
 isDirectory Directory{} = True
 isDirectory Blob{} = False
 
-data ObjectMap (m :: Type -> Type) = ObjectMap
+data ObjectMap (m :: * -> *) = ObjectMap
   { getObject :: UUID -> m (Maybe (Object m))
   , putObject :: UUID -> Object m -> m (ObjectMap m)
   , listObjects :: m [UUID]

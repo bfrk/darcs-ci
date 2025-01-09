@@ -25,8 +25,10 @@
 
 . ./lib
 
+cacheDir=$HOME/.cache/darcs
+
 rm -rf R S
 darcs init  --repo R
 darcs get R S
-not grep "$DARCS_CACHE_DIR" S/_darcs/prefs/sources
+not grep "$cacheDir" S/_darcs/prefs/sources
 not grep "cache:" S/_darcs/prefs/sources

@@ -7,7 +7,6 @@ module Darcs.Patch.Conflict
     , mangleOrFail
     , combineConflicts
     , findConflicting
-    , isConflicted
     ) where
 
 import Darcs.Prelude
@@ -38,11 +37,8 @@ mangleOrFail parts =
     conflictParts = parts
   }
 
-isConflicted :: Conflict p => p wX wY ->  Bool
-isConflicted p = numConflicts p > 0
-
 class Conflict p where
-    numConflicts :: p wX wY ->  Int
+    isConflicted :: p wX wY ->  Bool
     -- | The first parameter is a context containing all patches
     -- preceding the ones for which we want to calculate the conflict
     -- resolution, which is the second parameter.

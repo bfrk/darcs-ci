@@ -8,7 +8,7 @@ import Distribution.PackageDescription ( PackageDescription )
 import Distribution.Package ( packageVersion )
 import Distribution.Version( Version )
 import Distribution.Simple.LocalBuildInfo
-         ( LocalBuildInfo(..), absoluteInstallDirs, buildDir )
+         ( LocalBuildInfo(..), absoluteInstallDirs )
 import Distribution.Simple.InstallDirs (mandir, CopyDest (NoCopyDest))
 import Distribution.Simple.Setup
     (buildVerbosity, copyDest, copyVerbosity, fromFlag,

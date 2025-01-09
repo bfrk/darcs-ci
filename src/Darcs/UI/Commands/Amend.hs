@@ -185,7 +185,6 @@ amend = DarcsCommand
     advancedOpts
       = O.umask
       ^ O.setScriptsExecutable
-      ^ O.canonize
     allOpts = withStdOpts basicOpts advancedOpts
     amendCmd fps flags args = pathSetFromArgs fps args >>= doAmend flags
 
@@ -205,14 +204,13 @@ doAmend cfg files =
         readPendingAndWorking (diffingOpts cfg) repository files
       -- auxiliary function needed because the witness types differ for the
       -- isTag case
-      let da = O.diffAlgorithm ? cfg
       let go :: FL (PrimOf p) wR wU1 -> IO ()
           go NilFL | not (hasEditMetadata cfg) = putInfo cfg "No changes!"
           go ch = do
             let selection_config =
                    selectionConfigPrim First "record"
                        (patchSelOpts cfg)
-                       (Just (primSplitter da))
+                       (Just (primSplitter (O.diffAlgorithm ? cfg)))
                        files
             (chosenPatches :> _) <- runInvertibleSelection ch selection_config
             addChangesToPatch cfg repository kept oldp chosenPatches pending working
@@ -223,15 +221,14 @@ doAmend cfg files =
             then do
               let selection_config =
                     selectionConfigPrim Last "unrecord" (patchSelOpts cfg)
-                      (Just (primSplitter da))
+                      (Just (primSplitter (O.diffAlgorithm ? cfg)))
                       files
               (_ :> chosenPrims) <-
                 runInvertibleSelection (effect oldp) selection_config
               let invPrims = reverseRL (invertFL chosenPrims)
               addChangesToPatch cfg repository kept oldp invPrims pending working
-            else do
-              let maybeCanonize = if O.canonize ? cfg then canonizeFL da else id
-              go (maybeCanonize (pending +>+ working))
+            else
+              go (canonizeFL (O.diffAlgorithm ? cfg) (pending +>+ working))
         -- amending a tag
         else
           if hasEditMetadata cfg && isNothing files
