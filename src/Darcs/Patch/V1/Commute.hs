@@ -15,7 +15,7 @@
 --  the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 --  Boston, MA 02110-1301, USA.
 
-{-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 
 module Darcs.Patch.V1.Commute
@@ -331,8 +331,9 @@ instance PrimPatch prim => CommuteNoConflicts (RepoPatchV1 prim) where
   commuteNoConflicts x = toMaybe $ everythingElseCommute x
 
 instance PrimPatch prim => Conflict (RepoPatchV1 prim) where
-  isConflicted (PP _) = False
-  isConflicted _ = True
+  numConflicts (PP _) = 0
+  numConflicts (Merger _ _ q p) = 1 + numConflicts q + numConflicts p
+  numConflicts (Regrem _ _ q p) = 1 + numConflicts q + numConflicts p
   resolveConflicts _ = map mangleOrFail . combineConflicts resolveOne
     where
       resolveOne p | isMerger p = [publicUnravel p]

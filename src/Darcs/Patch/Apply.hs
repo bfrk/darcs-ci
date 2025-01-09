@@ -47,8 +47,8 @@ import Darcs.Patch.Invert ( Invert(..) )
 import Darcs.Patch.Object ( ObjectIdOf )
 import Darcs.Patch.Witnesses.Ordered ( FL(..), RL(..) )
 
-class Apply p where
-    type ApplyState p :: (* -> *) -> *
+class Apply (p :: Type -> Type -> Type) where
+    type ApplyState p :: (Type -> Type) -> Type
     apply :: ApplyMonad (ApplyState p) m => p wX wY -> m ()
     unapply :: ApplyMonad (ApplyState p) m => p wX wY -> m ()
     default unapply :: (ApplyMonad (ApplyState p) m, Invert p) => p wX wY -> m ()

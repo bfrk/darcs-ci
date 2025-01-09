@@ -64,6 +64,10 @@ readPatchesFromInventoryFile invPath repo = do
 
 -- | Read a complete 'PatchSet' from a 'Cache', by following the chain of
 -- 'Inventory's, starting with the given one.
+-- Note that we read inventories and patches lazily, explicitly using
+-- 'unsafeInterleaveIO' to delay IO actions until the value is demanded. This
+-- is justified by the fact that inventories and patches are stored in hashed
+-- format, which implies that the files we read are never mutated.
 readPatchesFromInventory :: (PatchListFormat p, ReadPatch p)
                          => Cache
                          -> Inventory

@@ -2,14 +2,11 @@ module Darcs.Repository.Traverse
     ( cleanRepository
     , cleanPristineDir
     , listInventories
-    , listInventoriesRepoDir
-    , listPatchesLocalBucketed
     , specialPatches
     ) where
 
 import Darcs.Prelude
 
-import Data.Maybe ( fromJust )
 import qualified Data.ByteString.Char8 as BC ( unpack, pack )
 import qualified Data.Set as Set
 
@@ -33,38 +30,27 @@ import Darcs.Repository.InternalTypes
     , withRepoDir
     )
 import Darcs.Repository.Paths
-    ( tentativeHashedInventory
+    ( tentativeHashedInventoryPath
     , tentativePristinePath
-    , inventoriesDir
     , inventoriesDirPath
     , patchesDirPath
     , pristineDirPath
     )
-import Darcs.Repository.Prefs ( globalCacheDir )
 
 import Darcs.Util.ByteString ( gzReadFilePS )
 import Darcs.Util.Cache
     ( Cache
     , HashedDir(HashedPristineDir)
-    , bucketFolder
     , cleanCachesWithHint
     )
 import Darcs.Util.Exception ( ifDoesNotExistError )
-import Darcs.Util.Global ( darcsdir, debugMessage )
+import Darcs.Util.Global ( debugMessage )
 import Darcs.Util.Lock ( removeFileMayNotExist )
 import Darcs.Util.Tree.Hashed ( followPristineHashes )
 
 
 cleanRepository :: Repository 'RW p wU wR -> IO ()
 cleanRepository r = cleanPristine r >> cleanInventories r >> cleanPatches r
-
--- | The way patchfiles, inventories, and pristine trees are stored.
--- 'PlainLayout' means all files are in the same directory. 'BucketedLayout'
--- means we create a second level of subdirectories, such that all files whose
--- hash starts with the same two letters are in the same directory.
--- Currently, only the global cache uses 'BucketedLayout' while repositories
--- use the 'PlainLayout'.
-data DirLayout = PlainLayout | BucketedLayout
 
 -- | Remove unreferenced entries in the pristine cache.
 cleanPristine :: Repository 'RW p wU wR -> IO ()
@@ -116,96 +102,53 @@ specialPatches = ["unrevert", "pending", "pending.tentative"]
 cleanPatches :: Repository 'RW p wU wR -> IO ()
 cleanPatches _ = do
     debugMessage "Cleaning out patches..."
-    hs <- (specialPatches ++) <$> listPatchesLocal PlainLayout darcsdir darcsdir
+    hs <- (specialPatches ++) <$> listPatchesLocal
     fs <- ifDoesNotExistError [] (listDirectory patchesDirPath)
     mapM_ (removeFileMayNotExist . (patchesDirPath </>)) (diffHashLists fs hs)
 
 -- | Return a list of the inventories hashes.
--- The first argument can be readInventory or readInventoryLocal.
--- The second argument specifies whether the files are expected
--- to be stored in plain or in bucketed format.
--- The third argument is the directory of the parent inventory files.
--- The fourth argument is the directory of the head inventory file.
-listInventoriesWith
-  :: (FilePath -> IO Inventory)
-  -> DirLayout
-  -> String -> String -> IO [String]
-listInventoriesWith readInv dirformat baseDir startDir = do
-    mbStartingWithInv <- getStartingWithHash startDir tentativeHashedInventory
-    followStartingWiths mbStartingWithInv
+-- The argument can be 'readInventory' or 'readInventoryLocal'.
+listInventoriesWith :: (FilePath -> IO Inventory) -> IO [String]
+listInventoriesWith readInv = do
+    mbNextInv <- getParent tentativeHashedInventoryPath
+    withCurrentDirectory inventoriesDirPath (follow mbNextInv)
   where
-    getStartingWithHash dir file = inventoryParent <$> readInv (dir </> file)
-
-    invDir = baseDir </> inventoriesDir
-    nextDir dir = case dirformat of
-        BucketedLayout -> invDir </> bucketFolder dir
-        PlainLayout -> invDir
-
-    followStartingWiths Nothing = return []
-    followStartingWiths (Just hash) = do
-        let startingWith = encodeValidHash hash
-        mbNextInv <- getStartingWithHash (nextDir startingWith) startingWith
-        (startingWith :) <$> followStartingWiths mbNextInv
+    getParent path = inventoryParent <$> readInv path
+    follow Nothing = return []
+    follow (Just hash) = do
+      let parentFileName = encodeValidHash hash
+      mbNextInv <- getParent parentFileName
+      (parentFileName :) <$> follow mbNextInv
 
 -- | Return a list of the inventories hashes.
 -- This function attempts to retrieve missing inventory files from the cache.
 listInventories :: IO [String]
-listInventories =
-    listInventoriesWith readInventory PlainLayout darcsdir darcsdir
+listInventories = listInventoriesWith readInventory
 
 -- | Return inventories hashes by following the head inventory.
 -- This function does not attempt to retrieve missing inventory files.
 listInventoriesLocal :: IO [String]
-listInventoriesLocal =
-    listInventoriesWith readInventoryLocal PlainLayout darcsdir darcsdir
-
--- | Return a list of the inventories hashes.
--- The argument @repoDir@ is the directory of the repository from which
--- we are going to read the head inventory file.
--- The rest of hashed files are read from the global cache.
-listInventoriesRepoDir :: String -> IO [String]
-listInventoriesRepoDir repoDir = do
-    gCacheDir' <- globalCacheDir
-    let gCacheInvDir = fromJust gCacheDir'
-    listInventoriesWith
-        readInventoryLocal
-        BucketedLayout
-        gCacheInvDir
-        (repoDir </> darcsdir)
+listInventoriesLocal = listInventoriesWith readInventoryLocal
 
 -- | Return a list of the patch filenames, extracted from inventory
 -- files, by starting with the head inventory and then following the
 -- chain of parent inventories.
 --
 -- This function does not attempt to download missing inventory files.
---
--- * The first argument specifies whether the files are expected
---   to be stored in plain or in bucketed format.
--- * The second argument is the directory of the parent inventory.
--- * The third argument is the directory of the head inventory.
-listPatchesLocal :: DirLayout -> String -> String -> IO [String]
-listPatchesLocal dirformat baseDir startDir = do
-  inventory <- readInventory (startDir </> tentativeHashedInventory)
+listPatchesLocal :: IO [String]
+listPatchesLocal = do
+  inventory <- readInventory tentativeHashedInventoryPath
   followStartingWiths
     (inventoryParent inventory)
     (inventoryPatchNames inventory)
   where
-    invDir = baseDir </> inventoriesDir
-    nextDir dir =
-      case dirformat of
-        BucketedLayout -> invDir </> bucketFolder dir
-        PlainLayout -> invDir
+    invDir = inventoriesDirPath
     followStartingWiths Nothing patches = return patches
     followStartingWiths (Just hash) patches = do
       let startingWith = encodeValidHash hash
-      inv <- readInventoryLocal (nextDir startingWith </> startingWith)
+      inv <- readInventoryLocal (invDir </> startingWith)
       (patches ++) <$>
         followStartingWiths (inventoryParent inv) (inventoryPatchNames inv)
-
--- |listPatchesLocalBucketed is similar to listPatchesLocal, but
--- it read the inventory directory under @darcsDir@ in bucketed format.
-listPatchesLocalBucketed :: String -> String -> IO [String]
-listPatchesLocalBucketed = listPatchesLocal BucketedLayout
 
 -- | Read the given inventory file if it exist, otherwise return an empty
 -- inventory. Used when we expect that some inventory files may be missing.

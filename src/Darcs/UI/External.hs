@@ -415,12 +415,14 @@ getViewer = Just `fmap` (getEnv "DARCS_PAGER" `catchall` getEnv "PAGER")
             return Nothing
 
 pipeDocToPager :: String -> [String] -> Printers -> Doc -> IO ExitCode
-
 pipeDocToPager "" _ pr inp = do
   hPutDocLnWith pr stdout inp
   return ExitSuccess
-
-pipeDocToPager c args pr inp = pipeDocInternal (PipeToOther pr) c args inp
+pipeDocToPager c args pr inp =
+  -- Evaluate pr with the current stdout, not the pipe's write end,
+  -- so we get colored output with less. Note that we pass it -R so
+  -- that it doesn't escape color codes.
+  pipeDocInternal (PipeToOther (const (pr stdout))) c args inp
 
 -- | Given two shell commands as arguments, execute the former.  The
 -- latter is then executed if the former failed because the executable

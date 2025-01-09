@@ -255,12 +255,13 @@ grabSSH src c = do
 copySSH :: String -> SshFilePath -> FilePath -> IO ()
 copySSH rdarcs src dest = do
   debugMessage $ "copySSH file: " ++ sshFilePathOf src
-  -- TODO why do we disable progress reporting here?
-  withoutProgress $ do
-    mc <- getSshConnection rdarcs src
-    case mc of
-      Just v -> withMVar v (grabSSH src >=> B.writeFile dest)
-      Nothing -> do
+  mc <- getSshConnection rdarcs src
+  case mc of
+    Just v -> withMVar v (grabSSH src >=> B.writeFile dest)
+    Nothing ->
+      -- disable progress reporting because child inherits stdout
+      -- TODO check if we can avoid that
+      withoutProgress $ do
         -- remote 'darcs transfer-mode' does not work => use scp
         let u = escape_dollar $ sshFilePathOf src
         (scpcmd, args) <- getSSH SCP

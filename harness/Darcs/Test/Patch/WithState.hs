@@ -189,7 +189,7 @@ makeWSGen stGen = do s <- stGen
 
 -- | A class to help with shrinking complex test cases by simplifying
 -- the starting state of the test case. See also 'PropagateShrink'.
-class ShrinkModel prim where
+class ShrinkModel s prim where
   -- |Given a repository state, produce a patch that simplifies the
   -- repository state. The inverse of the patch can be passed as the
   -- "shrinking fixup" to 'propagateShrink'.
@@ -214,15 +214,20 @@ class ShrinkModel prim where
   --                V                        V
   --               s wX1 ----------------> s wY1
   --                        p1 wX1 wY1
-  shrinkModelPatch :: ModelOf prim wX -> [Sealed (prim wX)]
+  shrinkModelPatch :: s wX -> [Sealed (prim wX)]
 
 checkOK :: Fail a -> [a]
 checkOK = maybe [] (\x -> [x]) . maybeFail
 
 shrinkModel
   :: forall s prim wX
-   . (Apply prim, ApplyState prim ~ RepoState s, ModelOf prim ~ s, RepoModel s, ShrinkModel prim)
-  => s wX -> [Sealed (WithEndState s (prim wX))]
+   . ( ApplyState prim ~ RepoState s
+     , RepoModel s
+     , ShrinkModel s prim
+     , RepoApply prim
+     )
+  => s wX
+  -> [Sealed (WithEndState s (prim wX))]
 shrinkModel s = do
   Sealed prim <- shrinkModelPatch s
   endState <- checkOK $ repoApply s prim
@@ -266,11 +271,11 @@ propagateShrinkMaybe (Just2 prim :> p) = propagateShrink (prim :> p)
 -- patch type of the test case.
 shrinkState
   :: forall s prim p
-   . ( Invert prim, Apply prim, RepoModel s
-     , ShrinkModel prim, PropagateShrink prim p
+   . ( Invert prim, RepoModel s
+     , ShrinkModel s prim, PropagateShrink prim p
      , ApplyState prim ~ RepoState s
      , ModelOf p ~ s
-     , ModelOf prim ~ s
+     , RepoApply prim
      )
   => Sealed2 (WithStartState2 p)
   -> [Sealed2 (WithStartState2 p)]
@@ -281,8 +286,9 @@ shrinkState (Sealed2 (WithStartState2 s p)) = do
 
 shrinkAtStartState
   :: ( Shrinkable p, RepoModel (ModelOf p), Effect p
-     , prim ~ PrimOf p, Invert prim, Apply prim
+     , prim ~ PrimOf p, Invert prim
      , ApplyState prim ~ RepoState (ModelOf p)
+     , RepoApply prim
      )
   => WithStartState2 p wX wY
   -> [FlippedSeal (WithStartState2 p) wY]
@@ -295,10 +301,10 @@ shrinkAtStartState (WithStartState2 s p) = do
 instance
   ( ArbitraryState p, Shrinkable p, RepoModel s
   , s ~ ModelOf p
-  , s ~ ModelOf prim
   , Effect p
-  , Apply prim, ApplyState prim ~ RepoState s
-  , prim ~ PrimOf p, Invert prim, ShrinkModel prim, PropagateShrink prim p
+  , ApplyState prim ~ RepoState s
+  , prim ~ PrimOf p, Invert prim, ShrinkModel s prim, PropagateShrink prim p
+  , RepoApply prim
   )
   => ArbitraryS2 (WithStartState2 p) where
   arbitraryS2 = do

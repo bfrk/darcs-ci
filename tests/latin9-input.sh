@@ -66,12 +66,14 @@ darcs init
 echo 'Selbstverständlich überraschend' > something.txt
 darcs add something.txt
 
-echo 'l33tking¸0r@example.org' > interaction_script.txt
-echo y >> interaction_script.txt
-echo y >> interaction_script.txt
-echo y >> interaction_script.txt
-echo '¤uroh4xx0rz' >> interaction_script.txt
-echo n >> interaction_script.txt
+cat >interaction_script.txt <<EOF
+l33tking¸0r@example.org
+y
+y
+y
+¤uroh4xx0rz
+n
+EOF
 
 unset DARCSEMAIL
 unset EMAIL

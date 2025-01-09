@@ -5,13 +5,13 @@ module Darcs.Test.Patch.Unwind
 import Darcs.Prelude
 
 import Darcs.Patch
-import Darcs.Patch.Commute
+import Darcs.Patch.RepoPatch
 import Darcs.Patch.Unwind
 import Darcs.Patch.Witnesses.Ordered
 import Darcs.Patch.Witnesses.Show
 
 import Darcs.Test.Patch.Arbitrary.Generic
-import Darcs.Test.Patch.Arbitrary.RepoPatch
+import Darcs.Test.Patch.Arbitrary.Mergeable
 import Darcs.Test.Patch.Examples.Unwind
 import Darcs.Test.Patch.Merge.Checked
 import Darcs.Test.Patch.Properties.Generic
@@ -43,10 +43,19 @@ numberedTestCases text runTest = zipWith numbered [1..]
 
 testSuite
   :: forall p
-   . ( ArbitraryRepoPatch p, PrimBased p, ArbitraryPrim (OnlyPrim p)
-     , ShrinkModel (PrimOf p)
-     , Show1 (ModelOf (PrimOf p)), Show2 p
-     , CheckedMerge p, Commute (OnlyPrim p)
+   . ( ArbitraryMergeable p
+     , Apply p
+     , ApplyState (PrimOf p) ~ RepoState (ModelOf p)
+     , Unwind p
+     , PrimPatchBase p
+     , PrimBased p
+     , ArbitraryPrim (OnlyPrim p)
+     , ShrinkModel (ModelOf p) (PrimOf p)
+     , Show1 (ModelOf p)
+     , Show2 p
+     , CheckedMerge p
+     , Commute (OnlyPrim p)
+     , RepoApply (PrimOf p)
      )
   => [Test]
 testSuite =

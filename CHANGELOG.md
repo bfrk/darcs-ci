@@ -1,21 +1,3 @@
-Darcs 2.18.5, 9 Jan 2025
-
-This release is done solely to keep up with (breaking) changes in some of
-our dependencies. A plain `cabal update && cabal install darcs` should now
-again succeed.
-
-  * restrict upper limit on attoparsec from <0.15 to <14.4 for ghc versions <8.10
-  * exclude system-fileio-0.3.16.5 which fails to build on Windows
-  * raise upper bound on tls, data-default-class -> data-default
-
-Darcs 2.18.4, 26 Oct 2024
-
-  * darcs can now be built with stack against stackage lts-22.34, which is
-    the version that the debian haskell team currently targets
-
-  * resolve issue2725: the permissions of _darcs/patch_index are now
-    generically set to those of its parent directory
-
 Darcs 2.18.3, 26 May 2024
 
   * relax upper bounds for some dependencies

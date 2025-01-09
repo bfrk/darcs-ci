@@ -18,12 +18,14 @@
 -- UndecidableInstances was added because GHC 8.6 needed it
 -- even though GHC 8.2 didn't
 {-# LANGUAGE UndecidableInstances #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 module Darcs.Test.Patch.Properties
   ( unit_V1P1
   , unit_V2P1
   , qc_V1P1
   , qc_V2
   , qc_V3
+  , qc_Named_V3
   , qc_prim
   , qc_named_prim
   ) where
@@ -63,14 +65,16 @@ import Darcs.Patch.V3 ( RepoPatchV3 )
 import Darcs.Patch.Commute ( Commute(..) )
 import Darcs.Patch.Invert ( Invert )
 import Darcs.Patch.Show ( ShowPatchBasic )
-import Darcs.Patch.Apply( Apply, ApplyState )
+import Darcs.Patch.Apply( ApplyState )
 import Darcs.Patch.Merge ( Merge )
+import Darcs.Patch.Named ( Named )
+import qualified Darcs.Patch.RepoPatch as RP
 
 import Darcs.Test.Patch.Arbitrary.Generic
 import Darcs.Test.Patch.Arbitrary.Named ()
 import Darcs.Test.Patch.Arbitrary.PatchTree
 import Darcs.Test.Patch.Arbitrary.PrimFileUUID()
-import Darcs.Test.Patch.Arbitrary.RepoPatch
+import Darcs.Test.Patch.Arbitrary.Mergeable
 import Darcs.Test.Patch.Arbitrary.RepoPatchV1 ()
 import Darcs.Test.Patch.Arbitrary.RepoPatchV2 ()
 import Darcs.Test.Patch.Arbitrary.RepoPatchV3 ()
@@ -85,69 +89,77 @@ import Darcs.Test.Patch.WithState
     , ArbitraryWS(..)
     )
 
-import qualified Darcs.Test.Patch.Examples.Set1 as Ex
-import qualified Darcs.Test.Patch.Examples.Set2Unwitnessed as ExU
+import qualified Darcs.Test.Patch.Examples.Set1 as Ex1
+import qualified Darcs.Test.Patch.Examples.Set2 as Ex2
 
 import Darcs.Test.Patch.Properties.Check( Check(..) )
-import Darcs.Test.Patch.Properties.Generic ( PatchProperty, MergeProperty, SequenceProperty )
+import Darcs.Test.Patch.Properties.Generic
+    ( MergeProperty
+    , PatchProperty
+    , SequenceProperty
+    , SequencePairProperty
+    )
 import qualified Darcs.Test.Patch.Properties.Generic as PropG
-import qualified Darcs.Test.Patch.Properties.RepoPatch as PropR
+import qualified Darcs.Test.Patch.Properties.Mergeable as PropM
 import qualified Darcs.Test.Patch.Properties.RepoPatchV3 as PropR3
-import qualified Darcs.Test.Patch.Properties.GenericUnwitnessed as PropU
 import qualified Darcs.Test.Patch.Properties.V1Set1 as Prop1
 import qualified Darcs.Test.Patch.Properties.V1Set2 as Prop2
 
 import Darcs.Test.Patch.Types.Triple (Triple(..))
 
-import qualified Darcs.Test.Patch.WSub as WSub
 
 type Prim2 = V2.Prim
 
+instance PrimPatch prim => RepoApply (NamedPrim prim)
+instance PrimPatch prim => RepoApply (RepoPatchV1 prim)
+instance PrimPatch prim => RepoApply (RepoPatchV2 prim)
+instance PrimPatch prim => RepoApply (RepoPatchV3 prim)
+
 unit_V1P1:: [Test]
 unit_V1P1 =
-  [ testCases "known commutes" Prop1.checkCommute Ex.knownCommutes
-  , testCases "known non-commutes" Prop1.checkCantCommute Ex.knownCantCommutes
-  , testCases "known merges" Prop1.checkMerge Ex.knownMerges
-  , testCases "known merges (equiv)" Prop1.checkMergeEquiv Ex.knownMergeEquivs
-  , testCases "known canons" Prop1.checkCanon Ex.knownCanons
-  , testCases "merge swaps" Prop1.checkMergeSwap Ex.mergePairs2
-  , testCases "the patch validation works" Prop1.tTestCheck Ex.validPatches
-  , testCases "commute/recommute" (PropG.recommute commute) Ex.commutePairs
-  , testCases "merge properties: merge either way valid" PropG.mergeEitherWayValid Ex.mergePairs
-  , testCases "merge properties: merge swap" PropG.mergeEitherWay Ex.mergePairs
-  , testCases "primitive patch IO functions" (Prop1.tShowRead unsafeCompare) Ex.primitiveTestPatches
-  , testCases "IO functions (test patches)" (Prop1.tShowRead unsafeCompare) Ex.testPatches
-  , testCases "IO functions (named test patches)" (Prop1.tShowRead unsafeCompare) Ex.testPatchesNamed
-  , testCases "primitive commute/recommute" (PropG.recommute commute) Ex.primitiveCommutePairs
+  [ testCases "known commutes" Prop1.checkCommute Ex1.knownCommutes
+  , testCases "known non-commutes" Prop1.checkCantCommute Ex1.knownCantCommutes
+  , testCases "known merges" Prop1.checkMerge Ex1.knownMerges
+  , testCases "known merges (equiv)" Prop1.checkMergeEquiv Ex1.knownMergeEquivs
+  , testCases "known canons" Prop1.checkCanon Ex1.knownCanons
+  , testCases "merge swaps" Prop1.checkMergeSwap Ex1.mergePairs2
+  , testCases "the patch validation works" Prop1.tTestCheck Ex1.validPatches
+  , testCases "commute/recommute" (PropG.recommute commute) Ex1.commutePairs
+  , testCases "merge properties: merge either way valid" PropG.mergeEitherWayValid Ex1.mergePairs
+  , testCases "merge properties: merge swap" PropG.mergeEitherWay Ex1.mergePairs
+  , testCases "primitive patch IO functions" (Prop1.tShowRead unsafeCompare) Ex1.primitiveTestPatches
+  , testCases "IO functions (test patches)" (Prop1.tShowRead unsafeCompare) Ex1.testPatches
+  , testCases "IO functions (named test patches)" (Prop1.tShowRead unsafeCompare) Ex1.testPatchesNamed
+  , testCases "primitive commute/recommute" (PropG.recommute commute) Ex1.primitiveCommutePairs
   ]
 
 unit_V2P1 :: [Test]
 unit_V2P1 =
-  [ testCases "coalesce commute" (PropU.coalesceCommute WSub.coalesce) ExU.primPermutables
-  , testCases "prim recommute" (PropU.recommute WSub.commute) ExU.commutables
-  , testCases "square commute law" (PropU.squareCommuteLaw WSub.commute) ExU.commutables
-  , testCases "prim inverses commute" (PropU.commuteInverses WSub.commute) ExU.commutables
-  , testCases "FL prim recommute" (PropU.recommute WSub.commute) ExU.commutablesFL
-  , testCases "FL square commute law" (PropU.squareCommuteLaw WSub.commute) ExU.commutablesFL
-  , testCases "FL prim inverses commute" (PropU.commuteInverses WSub.commute) $ ExU.commutablesFL
-  , testCases "fails" (PropU.commuteFails WSub.commute) ([] :: [(Prim2 WSub.:> Prim2) wX wY])
-  , testCases "read and show work on Prim" PropU.showRead ExU.primPatches
-  , testCases "read and show work on RepoPatchV2" PropU.showRead ExU.repov2Patches
-  , testCases "example flattenings work" (PropR.propConsistentTreeFlattenings fromPrim2) ExU.repov2PatchLoopExamples
-  , testCases "V2 merge input consistent" (PropU.mergeArgumentsConsistent isConsistent) ExU.repov2Mergeables
-  , testCases "V2 merge input is forward" (PropU.mergeArgumentsConsistent isForward) ExU.repov2Mergeables
-  , testCases "V2 merge output is forward" (PropU.mergeConsistent isForward) ExU.repov2Mergeables
-  , testCases "V2 merge output consistent" (PropU.mergeConsistent isConsistent) ExU.repov2Mergeables
-  , testCases "V2 merge either way" PropU.mergeEitherWay ExU.repov2Mergeables
-  , testCases "V2 merge and commute" PropU.mergeCommute ExU.repov2Mergeables
-
-  , testCases "V2 recommute" (PropU.recommute WSub.commute) ExU.repov2Commutables
-  , testCases "V2 inverses commute" (PropU.commuteInverses WSub.commute) ExU.repov2Commutables
-  , testCases "V2 permutivity" (PropU.permutivity WSub.commute) ExU.repov2NonduplicateTriples
+  [ testCases "coalesce commute" (PropG.coalesceCommute (fmap maybeToFL . coalesce)) Ex2.primPermutables
+  , testCases "prim recommute" (PropG.recommute commute . Pair) Ex2.commutables
+  , testCases "square commute law" (PropG.squareCommuteLaw commute . Pair) Ex2.commutables
+  , testCases "prim inverses commute" (PropG.commuteInverses commute . Pair) Ex2.commutables
+  , testCases "FL prim recommute" (PropG.recommute commute . Pair) Ex2.commutablesFL
+  , testCases "FL square commute law" (PropG.squareCommuteLaw commute . Pair) Ex2.commutablesFL
+  , testCases "FL prim inverses commute" (PropG.commuteInverses commute . Pair) $ Ex2.commutablesFL
+  , sealedCases "read and show work on Prim" PropG.showRead Ex2.primPatches
+  , sealedCases "read and show work on RepoPatchV2" PropG.showRead Ex2.repov2Patches
+  , testCases "example flattenings work" (PropM.propConsistentTreeFlattenings fromPrim2) Ex2.repov2PatchLoopExamples
+  , sealedCases "V2 merge input consistent" (PropG.mergeArgumentsConsistent isConsistent) Ex2.repov2Mergeables
+  , sealedCases "V2 merge input is forward" (PropG.mergeArgumentsConsistent isForward) Ex2.repov2Mergeables
+  , sealedCases "V2 merge output is forward" (PropG.mergeConsistent isForward) Ex2.repov2Mergeables
+  , sealedCases "V2 merge output consistent" (PropG.mergeConsistent isConsistent) Ex2.repov2Mergeables
+  , sealedCases "V2 merge either way" PropG.mergeEitherWay Ex2.repov2Mergeables
+  , sealedCases "V2 merge and commute" PropG.mergeCommute Ex2.repov2Mergeables
+  , sealedCases "V2 recommute" (PropG.recommute commute . Pair) Ex2.repov2Commutables
+  , sealedCases "V2 inverses commute" (PropG.commuteInverses commute . Pair) Ex2.repov2Commutables
+  , sealedCases "V2 permutivity" (PropG.permutivity commute) Ex2.repov2NonduplicateTriples
   ]
   where
-    fromPrim2 :: PropR.FromPrimT RepoPatchV2 Prim2
+    fromPrim2 :: PropM.FromPrimT RepoPatchV2 Prim2
     fromPrim2 = fromAnonymousPrim
+    sealedCases :: String -> (forall wX wY. p wX wY -> TestResult) -> [Sealed2 p] -> Test
+    sealedCases name prop = testCases name (unseal2 prop)
 
 arbitraryThing :: TestGenerator thing (Sealed2 thing)
 arbitraryThing = TestGenerator (\f p -> Just (unseal2 f p))
@@ -157,11 +169,11 @@ arbitraryWSThing = TestGenerator (\f wsp -> Just (unseal2 (f . wsPatch) wsp))
 
 qc_prim :: forall prim.
            ( TestablePrim prim
-           , Show2 prim
            , Show1 (ModelOf prim)
            , MightBeEmptyHunk prim
            , MightHaveDuplicate prim
            , ArbitraryWS prim
+           , RepoApply prim
            ) => [Test]
 qc_prim =
   [testProperty "prim pair coverage" (unseal2 (PropG.propPrimPairCoverage @prim . wsPatch))] ++
@@ -195,7 +207,7 @@ qc_prim =
 
 qc_named_prim :: forall prim.
                  ( TestablePrim prim
-                 , Show2 prim
+                 , PrimPatch prim
                  , Show1 (ModelOf (NamedPrim prim))
                  , MightBeEmptyHunk prim
                  ) => [Test]
@@ -209,7 +221,7 @@ qc_named_prim =
 
 qc_V1P1 :: [Test]
 qc_V1P1 =
-  repoPatchProperties @(RepoPatchV1 V1.Prim) ++
+  mergeablePatchProperties @(RepoPatchV1 V1.Prim) ++
   [ testProperty "commuting by patch and its inverse is ok" (Prop2.propCommuteInverse . mapSeal2 (getPair . wsPatch))
   , testProperty "a patch followed by its inverse is identity" (Prop2.propPatchAndInverseIsIdentity . mapSeal2 (getPair . wsPatch))
   , testProperty "'simple smart merge'" Prop2.propSimpleSmartMergeGoodEnough
@@ -232,17 +244,18 @@ qc_V1P1 =
 qc_V2 :: forall prim wXx wYy.
          ( PrimPatch prim
          , Show1 (ModelOf prim)
-         , ShrinkModel prim
+         , ShrinkModel (ModelOf prim) prim
          , PropagateShrink prim prim
          , ArbitraryPrim prim
          , RepoState (ModelOf prim) ~ ApplyState prim
+         , RepoApply prim
          )
       => prim wXx wYy -> [Test]
 qc_V2 _ =
   [ testProperty "with quickcheck that patches are consistent"
     (withSingle consistent)
   ]
-  ++ repoPatchProperties @(RepoPatchV2 prim)
+  ++ mergeablePatchProperties @(RepoPatchV2 prim)
   ++ concat
   [ merge_properties   @(RepoPatchV2 prim) "tree" (TestGenerator mergePairFromTree)
   , merge_properties   @(RepoPatchV2 prim) "twfp" (TestGenerator mergePairFromTWFP)
@@ -258,10 +271,11 @@ qc_V2 _ =
 qc_V3 :: forall prim wXx wYy.
          ( PrimPatch prim
          , Show1 (ModelOf prim)
-         , ShrinkModel prim
+         , ShrinkModel (ModelOf prim) prim
          , PropagateShrink prim prim
          , ArbitraryPrim prim
          , RepoState (ModelOf prim) ~ ApplyState prim
+         , RepoApply prim
          )
       => prim wXx wYy
       -> [Test]
@@ -269,55 +283,82 @@ qc_V3 _ =
   [ testProperty "repo invariants"
     (withSequence (PropR3.prop_repoInvariants :: SequenceProperty (RepoPatchV3 prim)))
   ]
-  ++ repoPatchProperties @(RepoPatchV3 prim)
-  ++ difficultRepoPatchProperties @(RepoPatchV3 prim)
+  ++ mergeablePatchProperties @(RepoPatchV3 prim)
+  ++ difficultPatchProperties @(RepoPatchV3 prim)
 
-repoPatchProperties :: forall p.
-                       ( ArbitraryRepoPatch p
-                       , Show2 p
-                       , Show1 (ModelOf p)
-                       , CheckedMerge p
-                       , ShrinkModel (PrimOf p)
-                       , PrimBased p
-                       )
-                    => [Test]
-repoPatchProperties =
+instance (ArbitraryPrim prim, ApplyState prim ~ RepoState (ModelOf prim)) =>
+         ArbitraryMergeable (Named (RepoPatchV3 prim)) where
+  notRepoPatchV1 = Just (NotRepoPatchV1 (\case {}))
+
+instance MightHaveDuplicate p => MightHaveDuplicate (Named p)
+
+qc_Named_V3
+  :: forall prim wX wY
+   . ( PrimPatch prim
+     , Show1 (ModelOf prim)
+     , ShrinkModel (ModelOf prim) prim
+     , PropagateShrink prim prim
+     , ArbitraryPrim prim
+     , RepoState (ModelOf prim) ~ ApplyState prim
+     , RepoApply prim
+     )
+  => prim wX wY
+  -> [Test]
+qc_Named_V3 _ =
+  mergeablePatchProperties @(Named (RepoPatchV3 prim)) ++
+  difficultPatchProperties @(Named (RepoPatchV3 prim))
+
+-- | Similar to 'RepoPatch' but with constraints reduced to what is needed for
+-- generation and property testing of mergeable patches, so that we have
+-- instances for @'Named' p@ for all 'RepoPatch' types @p@.
+type MergeablePatch p =
+  ( ApplyState (PrimOf p) ~ ApplyState p
+  , CheckedMerge p
+  , PrimPatch (PrimOf p)
+  , RP.Conflict p
+  , RP.PatchListFormat p
+  , RP.ReadPatch p
+  , Show2 p
+  , ShowPatchBasic p
+  )
+
+mergeablePatchProperties
+  :: forall p
+   . ( ArbitraryMergeable p
+     , MergeablePatch p
+     , Show1 (ModelOf p)
+     , ShrinkModel (ModelOf p) (PrimOf p)
+     , PrimBased p
+     , RepoApply p
+     , RepoApply (PrimOf p)
+     )
+  => [Test]
+mergeablePatchProperties =
   [ testProperty "readPatch/showPatch"
       (withSingle (PropG.showRead :: PatchProperty p))
   , testProperty "readPatch/showPatch (RL)"
       (withSequence (PropG.showRead :: SequenceProperty p))
-{- we no longer support inversion for RepoPatches
-  , testProperty "invert involution"
-      (withSingle (PropG.invertInvolution :: PatchProperty p))
-  , testProperty "inverse composition"
-      (withPair (PropG.inverseComposition :: PairProperty p))
--}
   , testProperty "resolutions don't conflict"
-      (withSequence (PropR.propResolutionsDontConflict :: SequenceProperty p))
+      (withSequence (PropM.propResolutionsDontConflict :: SequenceProperty p))
   ]
 
 -- | These properties regularly fail for RepoPatchV2 with the standard test
 -- case generator when we crank up the number of tests (to e.g. 10000).
-difficultRepoPatchProperties :: forall p.
-                       ( ArbitraryRepoPatch p
-                       , ShrinkModel (PrimOf p)
-                       , Show2 p
-                       , CheckedMerge p
-                       , MightHaveDuplicate p
-                       , Show1 (ModelOf p)
-                       , PrimBased p
-                       )
-                    => [Test]
-difficultRepoPatchProperties =
+difficultPatchProperties
+  :: forall p
+   . ( ArbitraryMergeable p
+     , MergeablePatch p
+     , ShrinkModel (ModelOf p) (PrimOf p)
+     , MightHaveDuplicate p
+     , Show1 (ModelOf p)
+     , PrimBased p
+     , RepoApply p
+     , RepoApply (PrimOf p)
+     )
+  => [Test]
+difficultPatchProperties =
   [ testProperty "reorderings are consistent"
-      (PropR.propConsistentReorderings @p)
-{- we no longer support inversion for RepoPatches
-  , testProperty "inverses commute"
-      (withPair (PropG.commuteInverses com))
-  , testConditional "nontrivial inverses commute"
-      (withPair nontrivialCommute)
-      (withPair (PropG.commuteInverses com))
--}
+      (PropM.propConsistentReorderings @p)
   , testProperty "recommute"
       (withPair (PropG.recommute com))
   , testConditional "nontrivial recommute"
@@ -331,17 +372,13 @@ difficultRepoPatchProperties =
       (withTriple (PropG.permutivity com))
   , testProperty "merge either way"
       (withFork (PropG.mergeEitherWay :: MergeProperty p))
-{- this test relies on inversion and is thereore only valid for prims
-  , testProperty "merge either way valid"
-      (withFork (PropG.mergeEitherWayValid :: MergeProperty p))
--}
   , testConditional "nontrivial merge either way"
       (fromMaybe False . withFork nontrivialMerge)
       (withFork (PropG.mergeEitherWay :: MergeProperty p))
   , testProperty "merge commute"
       (withFork (PropG.mergeCommute :: MergeProperty p))
   , testProperty "resolutions are invariant under reorderings"
-      (withSequence (PropR.propResolutionsOrderIndependent :: SequenceProperty p))
+      (withSequencePair (PropM.propResolutionsOrderIndependent :: SequencePairProperty p))
   ]
   where
     com :: (p :> p) wA wB -> Maybe ((p :> p) wA wB)
@@ -403,9 +440,10 @@ patch_properties genname gen =
 patch_repo_properties
   :: forall p gen
    . ( Show gen, Arbitrary gen
-     , Invert p, Apply p, ShowPatchBasic p
+     , Invert p, ShowPatchBasic p
      , RepoModel (ModelOf p)
      , RepoState (ModelOf p) ~ ApplyState p
+     , RepoApply p
      )
   =>  PropList (WithState p) gen
 patch_repo_properties genname gen =
@@ -448,11 +486,11 @@ pair_repo_properties
      ( Show gen
      , Arbitrary gen
      , Commute p
-     , Apply p
      , ShowPatchBasic p
      , MightBeEmptyHunk p
      , RepoModel (ModelOf p)
      , RepoState (ModelOf p) ~ ApplyState p
+     , RepoApply p
      )
   => PropList (WithState (Pair p)) gen
 pair_repo_properties genname gen =
@@ -461,4 +499,3 @@ pair_repo_properties genname gen =
       , TestCondition (const True)
       , TestCheck (PropG.effectPreserving commute))
     ]
-

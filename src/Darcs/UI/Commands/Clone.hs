@@ -32,13 +32,16 @@ import System.Exit ( ExitCode(..) )
 import System.FilePath.Posix ( joinPath, splitDirectories )
 import Control.Monad ( when, unless )
 
-import Darcs.UI.Commands ( DarcsCommand(..), withStdOpts
-                      , nodefaults
-                      , commandStub
-                      , commandAlias
-                      , putInfo
-                      , putFinished
-                      )
+import Darcs.UI.Commands
+    ( DarcsCommand(..)
+    , commandAlias
+    , commandStub
+    , noPrereq
+    , nodefaults
+    , putFinished
+    , putInfo
+    , withStdOpts
+    )
 import Darcs.UI.Completion ( noArgs )
 import Darcs.UI.Flags
     ( DarcsFlag
@@ -133,7 +136,7 @@ clone = DarcsCommand
     , commandExtraArgs = -1
     , commandExtraArgHelp = ["<REPOSITORY>", "[<DIRECTORY>]"]
     , commandCommand = cloneCmd
-    , commandPrereq = \_ -> return $ Right ()
+    , commandPrereq = noPrereq
     , commandCompleteArgs = noArgs
     , commandArgdefaults = nodefaults
     , commandOptions = cloneOpts

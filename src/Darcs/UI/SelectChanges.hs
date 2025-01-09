@@ -393,7 +393,7 @@ runInvertibleSelection ps psc = runReaderT (selection ps) psc where
   {- end of runInvertibleSelection -}
 
 -- | The equivalent of 'runSelection' for the @darcs log@ command
-viewChanges :: (ShowPatch p, ShowContextPatch p, ApplyState p ~ Tree)
+viewChanges :: (ShowPatch p, ShowContextPatch p)
             => PatchSelectionOptions -> [Sealed2 p] -> IO ()
 viewChanges ps_opts = textView ps_opts Nothing 0 []
 
@@ -422,7 +422,7 @@ keysFor = concatMap (map kp)
 
 -- | The function for selecting a patch to amend record. Read at your own risks.
 withSelectedPatchFromList
-    :: (Commute p, Matchable p, ShowPatch p, ShowContextPatch p, ApplyState p ~ Tree)
+    :: (Commute p, Matchable p, ShowPatch p, ShowContextPatch p)
     => String   -- name of calling command (always "amend" as of now)
     -> RL p wX wY
     -> PatchSelectionOptions
@@ -446,7 +446,7 @@ data WithSkipped p wX wY = WithSkipped
 -- patches, including pending and also that the skipped sequences has an
 -- ending context that matches the recorded state, z, of the repository.
 wspfr :: forall p wX wY wZ.
-         (Commute p, Matchable p, ShowPatch p, ShowContextPatch p, ApplyState p ~ Tree)
+         (Commute p, Matchable p, ShowPatch p, ShowContextPatch p)
       => String
       -> (forall wA wB . p wA wB -> Bool)
       -> RL p wX wY
@@ -537,7 +537,7 @@ initialSelectionState lps pcs =
 
 -- | The actual interactive selection process.
 textSelect :: ( Commute p, Invert p, ShowPatch p, ShowContextPatch p
-              , PatchInspect p, ApplyState p ~ Tree )
+              , PatchInspect p )
            => FL (LabelledPatch p) wX wY
            -> PatchChoices p wX wY
            -> PatchSelectionM p IO (PatchChoices p wX wY)
@@ -551,7 +551,7 @@ textSelect lps' pcs =
       unless (rightmost z) $ textSelect'
 
 textSelect' :: ( Commute p, Invert p, ShowPatch p, ShowContextPatch p
-               , PatchInspect p, ApplyState p ~ Tree )
+               , PatchInspect p )
             => InteractiveSelectionM p wX wY ()
 textSelect' = do
   z <- gets lps
@@ -904,7 +904,7 @@ printCurrent = do
       liftIO $ printFriendly (verbosity o) (withSummary o) $ unLabel lp
 
 -- | The interactive part of @darcs changes@
-textView :: (ShowPatch p, ShowContextPatch p, ApplyState p ~ Tree)
+textView :: (ShowPatch p, ShowContextPatch p)
          => PatchSelectionOptions -> Maybe Int -> Int
          -> [Sealed2 p] -> [Sealed2 p]
          -> IO ()

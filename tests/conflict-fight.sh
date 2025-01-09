@@ -2,6 +2,9 @@
 
 . ./lib
 
+# this crashes nowadays with darcs-2 in step 9
+skip-formats darcs-2
+
 # step 1
 mkdir temp0
 cd temp0

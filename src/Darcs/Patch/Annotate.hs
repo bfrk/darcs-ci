@@ -62,7 +62,7 @@ import qualified Darcs.Patch.Prim.FileUUID as FileUUID
 
 import Darcs.Patch.Annotate.Class
 import Darcs.Patch.Effect ( Effect(..) )
-import Darcs.Patch.FromPrim ( PrimOf(..) )
+import Darcs.Patch.FromPrim ( PrimOf )
 import Darcs.Patch.Info ( displayPatchInfo, piAuthor, makePatchname )
 import Darcs.Patch.Invert ( Invert, invert )
 import Darcs.Patch.Named ( patchcontents )

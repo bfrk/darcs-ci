@@ -15,8 +15,7 @@
 -- the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 -- Boston, MA 02110-1301, USA.
 
-{-# OPTIONS_GHC -fno-warn-orphans #-}
-{-# OPTIONS_GHC -fno-warn-name-shadowing #-}
+{-# OPTIONS_GHC -Wno-name-shadowing #-}
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 
 module Darcs.Patch.V2.RepoPatch
@@ -364,9 +363,9 @@ instance Summary (RepoPatchV2 prim) where
     conflictedEffect (Normal x) = [IsC Okay x]
 
 instance PrimPatch prim => Conflict (RepoPatchV2 prim) where
-    isConflicted (Conflictor {}) = True
-    isConflicted (InvConflictor {}) = True
-    isConflicted _ = False
+    numConflicts (Conflictor ix xx _) = length ix + lengthFL xx
+    numConflicts (InvConflictor ix xx _) = length ix + lengthFL xx
+    numConflicts _ = 0
     resolveConflicts _ = map mangleOrFail . combineConflicts resolveOne
       where
         resolveOne :: RepoPatchV2 prim wX wY -> [[Sealed (FL prim wY)]]

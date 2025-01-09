@@ -32,6 +32,7 @@ import Control.Arrow ( second )
 import Control.Exception ( catch, IOException )
 import Control.Monad ( when, unless )
 import Control.Monad.State.Strict ( evalState, get, gets, modify )
+import qualified Text.XML.Light as XML
 
 import Darcs.UI.PrintPatch ( showFriendly )
 import Darcs.Patch.PatchInfoAnd ( PatchInfoAndG, fmapFLPIAP, hopefullyM, info )
@@ -62,7 +63,7 @@ import Darcs.Repository ( PatchInfoAnd,
 import Darcs.Util.Lock ( withTempDir )
 import Darcs.Patch.Set ( PatchSet, patchSet2RL, Origin )
 import Darcs.Patch.Format ( PatchListFormat )
-import Darcs.Patch.Info ( toXml, toXmlShort, showPatchInfo, displayPatchInfo, escapeXML, PatchInfo )
+import Darcs.Patch.Info ( toXml, toXmlShort, showPatchInfo, displayPatchInfo, PatchInfo )
 import Darcs.Patch.Ident ( PatchId )
 import Darcs.Patch.Invertible ( mkInvertible )
 import Darcs.Patch.Depends ( contextPatches )
@@ -92,12 +93,11 @@ import Darcs.Util.Printer
     , ($$)
     , (<+>)
     , formatWords
+    , fromXml
     , hsep
-    , insertBeforeLastline
     , prefix
     , simplePrinters
     , text
-    , vcat
     , vsep
     )
 import Darcs.Util.Printer.Color ( fancyPrinters )
@@ -373,7 +373,7 @@ changelog :: forall p wStart wX
 changelog opts patches li
     | O.changesFormat ? opts == Just O.CountPatches =
         text $ show $ length $ liPatches li
-    | hasXmlOutput opts = xml_changelog
+    | hasXmlOutput opts = fromXml xml_changelog
     | O.yes (O.withSummary ? opts) || verbose opts =
         vsep (map (number_patch change_with_summary) ps) $$ mbErr
     | otherwise = vsep (map (number_patch description') ps) $$ mbErr
@@ -387,33 +387,28 @@ changelog opts patches li
                 else showFriendly (verbosity ? opts) (O.withSummary ? opts) p
             | otherwise = description hp $$ indent (text "[this patch is unavailable]")
 
-          xml_changelog = vcat
-            [ text "<changelog>"
-            , vcat xml_created_as
-            , vcat xml_changes
-            , text "</changelog>"
-            ]
+          xml_changelog = XML.unode "changelog" (xml_created_as ++ xml_changes)
 
-          xml_with_summary :: Sealed2 (PatchInfoAndG p) -> Doc
+          xml_with_summary :: Sealed2 (PatchInfoAndG p) -> XML.Element
           xml_with_summary (Sealed2 hp) | Just p <- hopefullyM hp =
-                    let
-                      deps = getdeps p
-                      xmlDependencies =
-                        text "<explicit_dependencies>"
-                        $$ vcat (map (indent . toXmlShort) deps)
-                        $$ text "</explicit_dependencies>"
-                      summary | deps == [] = indent $ xmlSummary p
-                              | otherwise = indent $ xmlDependencies $$ xmlSummary p
-                    in
-                      insertBeforeLastline (toXml $ info hp) summary
+              let
+                deps = getdeps p
+                xmlDeps = XML.unode "explicit_dependencies" (map toXmlShort deps)
+                summary | null deps = [xmlSummary p]
+                        | otherwise = [xmlDeps] ++ [xmlSummary p]
+                xml_info = toXml $ info hp
+              in
+                xml_info { XML.elContent = XML.elContent xml_info ++ map XML.Elem summary }
           xml_with_summary (Sealed2 hp) = toXml (info hp)
           indent = prefix "    "
+          xml_changes :: [XML.Element]
           xml_changes =
             case O.withSummary ? opts of
               O.YesSummary -> map xml_with_summary ps
               O.NoSummary -> map (toXml . unseal2 info) ps
+          xml_created_as :: [XML.Element]
           xml_created_as = map create (liRenames li) where
-            create :: (AnchoredPath, AnchoredPath) -> Doc
+            create :: (AnchoredPath, AnchoredPath) -> XML.Element
             create rename@(_, as) = createdAsXml (first_change_of as) rename
             -- We need to reorder the patches when they haven't been reversed
             -- already, so that we find the *first* patch that modifies a given
@@ -457,15 +452,14 @@ logContext opts = do
 changes :: DarcsCommand
 changes = commandAlias "changes" Nothing log
 
-createdAsXml :: PatchInfo -> (AnchoredPath, AnchoredPath) -> Doc
+createdAsXml :: PatchInfo -> (AnchoredPath, AnchoredPath) -> XML.Element
 createdAsXml pinfo (current, createdAs) =
-    text "<created_as current_name='"
-       <> escapeXML (displayPath current)
-       <> text "' original_name='"
-       <> escapeXML (displayPath createdAs)
-       <> text "'>"
-    $$    toXml pinfo
-    $$    text "</created_as>"
+  XML.unode "created_as"
+    ( [ XML.Attr (XML.unqual "current_name") (displayPath current)
+      , XML.Attr (XML.unqual "original_name") (displayPath createdAs)
+      ]
+    , toXml pinfo
+    )
 
 logPatchSelOpts :: [DarcsFlag] -> S.PatchSelectionOptions
 logPatchSelOpts flags = S.PatchSelectionOptions

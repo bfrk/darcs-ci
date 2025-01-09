@@ -49,6 +49,7 @@ module Darcs.UI.Commands
     , amInRepository
     , amNotInRepository
     , findRepository
+    , noPrereq
     ) where
 
 import Control.Monad ( when, unless )
@@ -58,6 +59,7 @@ import System.Console.GetOpt ( OptDescr )
 import System.IO ( stderr )
 import System.IO.Error ( catchIOError )
 import System.Environment ( setEnv )
+import qualified Text.XML.Light as XML
 
 import Darcs.Prelude
 
@@ -97,7 +99,7 @@ import Darcs.UI.PrintPatch ( showWithSummary )
 import Darcs.Util.ByteString ( decodeLocale, packStringToUTF8 )
 import Darcs.Util.Path ( AbsolutePath, anchorPath )
 import Darcs.Util.Printer
-    ( Doc, text, (<+>), ($$), ($+$), hsep, vcat
+    ( Doc, text, (<+>), ($+$), hsep
     , putDocLnWith, hPutDocLn, renderString
     )
 import Darcs.Util.Printer.Color ( fancyPrinters, ePutDocLn )
@@ -142,7 +144,7 @@ data DarcsCommand =
                               -- second one is the path where darcs was executed.
                               (AbsolutePath, AbsolutePath)
                            -> [DarcsFlag] -> [String] -> IO ()
-          , commandPrereq :: [DarcsFlag] -> IO (Either String ())
+          , commandPrereq :: CommandPrereq
           , commandCompleteArgs :: (AbsolutePath, AbsolutePath)
                                 -> [DarcsFlag] -> [String] -> IO [String]
           , commandArgdefaults :: [DarcsFlag] -> AbsolutePath -> [String]
@@ -154,9 +156,11 @@ data DarcsCommand =
           , commandName :: String
           , commandHelp :: Doc
           , commandDescription :: String
-          , commandPrereq :: [DarcsFlag] -> IO (Either String ())
+          , commandPrereq :: CommandPrereq
           , commandSubCommands :: [CommandControl]
           }
+
+type CommandPrereq = [DarcsFlag] -> IO (Either String ())
 
 data CommandOptions = CommandOptions
   { coBasicOptions :: [DarcsOptDescr DarcsFlag]
@@ -312,10 +316,9 @@ setEnvDarcsPatches ps = do
     finishedOneIO k "DARCS_PATCHES"
     setEnvCautiously "DARCS_PATCHES" (renderString $ showWithSummary ps)
     finishedOneIO k "DARCS_PATCHES_XML"
-    setEnvCautiously "DARCS_PATCHES_XML" . renderString $
-        text "<patches>" $$
-        vcat (mapFL (toXml . info) ps) $$
-        text "</patches>"
+    setEnvCautiously
+      "DARCS_PATCHES_XML" $
+      XML.ppElement $ XML.unode "patches" $ mapFL (toXml . info) ps
     finishedOneIO k "DARCS_FILES"
     setEnvCautiously "DARCS_FILES" $ unlines filepaths
     endTedious k
@@ -348,15 +351,18 @@ defaultRepo :: [DarcsFlag] -> AbsolutePath -> [String] -> IO [String]
 defaultRepo _ _ [] = maybeToList <$> getDefaultRepo
 defaultRepo _ _ args = return args
 
-amInHashedRepository :: [DarcsFlag] -> IO (Either String ())
+amInHashedRepository :: CommandPrereq
 amInHashedRepository fs = R.amInHashedRepository (workRepo fs)
 
-amInRepository :: [DarcsFlag] -> IO (Either String ())
+amInRepository :: CommandPrereq
 amInRepository fs = R.amInRepository (workRepo fs)
 
-amNotInRepository :: [DarcsFlag] -> IO (Either String ())
+amNotInRepository :: CommandPrereq
 amNotInRepository fs =
   R.amNotInRepository (maybe WorkRepoCurrentDir WorkRepoDir (newRepo ? fs))
 
-findRepository :: [DarcsFlag] -> IO (Either String ())
+findRepository :: CommandPrereq
 findRepository fs = R.findRepository (workRepo fs)
+
+noPrereq :: CommandPrereq
+noPrereq _ = return $ Right ()

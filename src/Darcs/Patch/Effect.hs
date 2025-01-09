@@ -1,4 +1,3 @@
-{-# OPTIONS_GHC -fno-warn-unrecognised-pragmas #-}
 module Darcs.Patch.Effect ( Effect(..) ) where
 
 import Darcs.Prelude

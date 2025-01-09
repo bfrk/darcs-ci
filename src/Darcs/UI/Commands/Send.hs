@@ -126,7 +126,7 @@ import Darcs.UI.Completion ( prefArgs )
 import Darcs.UI.Commands.Util ( getUniqueDPatchName )
 import Darcs.Util.Printer
     ( Doc, formatWords, vsep, text, ($$), (<+>), putDoc, putDocLn
-    , quoted, renderPS, sentence, vcat
+    , quoted, renderPS, vcat
     )
 import Darcs.Util.English ( englishNum, Noun(..) )
 import Darcs.Util.Exception ( catchall )
@@ -598,7 +598,7 @@ selectionIsNull :: Doc
 selectionIsNull = text "You don't want to send any patches, and that's fine with me!"
 
 emailBackedUp :: String -> Doc
-emailBackedUp mf = sentence $ "Email body left in" <+> text mf <> "."
+emailBackedUp mf = "Email body left in" <+> text mf <> "."
 
 promptCharSetWarning :: String -> String
 promptCharSetWarning msg = "Warning: " ++ msg ++ "  Send anyway?"
@@ -613,8 +613,8 @@ aborted :: Doc
 aborted = "Aborted."
 
 success :: String -> String -> Doc
-success to cc = sentence $
-    "Successfully sent patch bundle to:" <+> text to <+> copies cc
+success to cc =
+    "Successfully sent patch bundle to:" <+> text to <+> copies cc <> "."
   where
     copies "" = ""
     copies x  = "and cc'ed" <+> text x
@@ -623,7 +623,7 @@ postingPatch :: String -> Doc
 postingPatch url = "Posting patch to" <+> text url
 
 wroteBundle :: FilePathLike a => a -> Doc
-wroteBundle a = sentence $ "Wrote patch to" <+> text (toFilePath a)
+wroteBundle a = "Wrote patch to" <+> text (toFilePath a) <> "."
 
 savedButNotSent :: String -> Doc
 savedButNotSent to =

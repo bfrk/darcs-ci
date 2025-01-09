@@ -70,7 +70,7 @@ rmOutputFiles
 whl=$(darcs wh -l)
 echo "$whl" > whoutput2
 cat << EOF > expected2
-R ./foo
+R ./foo -1
 a ./foo/
 a ./foo/bar
 EOF

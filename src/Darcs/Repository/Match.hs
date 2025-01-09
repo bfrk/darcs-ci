@@ -16,33 +16,21 @@
 --  Boston, MA 02110-1301, USA.
 
 module Darcs.Repository.Match
-    (
-      getPristineUpToMatch
-    , getOnePatchset
+    ( getPristineUpToMatch
     ) where
 
 import Darcs.Prelude
 
-import Darcs.Patch.Match
-    ( rollbackToPatchSetMatch
-    , PatchSetMatch(..)
-    , getMatchingTag
-    , matchAPatchset
-    )
-
-import Darcs.Patch.Bundle ( readContextFile )
-import Darcs.Patch.Apply( ApplyState )
 import Darcs.Patch ( RepoPatch )
-import Darcs.Patch.Set ( Origin, SealedPatchSet, patchSetDrop )
+import Darcs.Patch.Apply ( ApplyState )
+import Darcs.Patch.Match ( PatchSetMatch, rollbackToPatchSetMatch )
 
-import Darcs.Repository.InternalTypes ( Repository )
 import Darcs.Repository.Hashed ( readPatches )
+import Darcs.Repository.InternalTypes ( Repository )
 import Darcs.Repository.Pristine ( readPristine )
 
 import Darcs.Util.Tree ( Tree )
 import Darcs.Util.Tree.Monad ( virtualTreeIO )
-
-import Darcs.Util.Path ( toFilePath )
 
 -- | Return the pristine tree up to the given 'PatchSetMatch'.
 -- In the typical case where the match is closer to the end of the repo than
@@ -56,17 +44,3 @@ getPristineUpToMatch r psm = do
   ps <- readPatches r
   tree <- readPristine r
   snd <$> virtualTreeIO (rollbackToPatchSetMatch psm ps) tree
-
--- | Return the patches up to the given 'PatchSetMatch'.
-getOnePatchset :: RepoPatch p
-               => Repository rt p wU wR
-               -> PatchSetMatch
-               -> IO (SealedPatchSet p Origin)
-getOnePatchset repository pm =
-  case pm of
-    IndexMatch n -> patchSetDrop (n-1) <$> readPatches repository
-    PatchMatch m -> matchAPatchset m <$> readPatches repository
-    TagMatch m -> getMatchingTag m <$> readPatches repository
-    ContextMatch path -> do
-      ref <- readPatches repository
-      readContextFile ref (toFilePath path)

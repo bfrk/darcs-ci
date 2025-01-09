@@ -1,4 +1,4 @@
-{-# OPTIONS_GHC -fno-warn-missing-fields #-}
+{-# OPTIONS_GHC -Wno-missing-fields #-}
 module Main ( main, run, defaultConfig, Config(..) ) where
 
 import Darcs.Prelude
@@ -12,6 +12,7 @@ import Darcs.Test.Shell
 import qualified Darcs.Test.UI
 import Darcs.Util.Exception ( die )
 
+import Control.Concurrent ( setNumCapabilities )
 import Control.Monad ( filterM, unless, when )
 import Data.List ( isPrefixOf, isSuffixOf, sort )
 import GHC.IO.Encoding ( textEncodingName )
@@ -34,6 +35,7 @@ data Config = Config { suites :: String
                      , diffalgs :: String
                      , index :: String
                      , cache :: String
+                     , failing :: String
                      , full :: Bool
                      , darcs :: String
                      , tests :: [String]
@@ -51,11 +53,12 @@ data Config = Config { suites :: String
 defaultConfigAnn :: Annotate Ann
 defaultConfigAnn
  = record Config{}
-     [ suites        := "snu"    += help "Select which test suites to run: (s=shell, n=network, u=unit, f=failing, h=hashed) [snu]" += typ "SET"
+     [ suites        := "snu"    += help "Select which test suites to run: (s=shell, n=network, u=unit, h=hashed) [snu]" += typ "SET"
      , formats       := "123"    += help "Select which darcs formats to test: (1=darcs-1, 2=darcs-2, 3=darcs-3) [123]" += name "f" += typ "SET"
      , diffalgs      := "p"      += help "Select which diff alorithms to use (p=patience, m=myers) [p]" += name "a" += typ "SET"
      , index         := "y"      += help "Select whether to use the index (n=no, y=yes) [y]" += typ "SET"
      , cache         := "y"      += help "Select whether to use the cache (n=no, y=yes) [y]" += typ "SET"
+     , failing       := "n"      += help "Select whether to use failing tests (n=no, y=yes) [n]" += typ "SET"
      , full          := False    += help "Shortcut for -s=snu -f=123 -a=mp -c=yn -i=yn"
      , darcs         := ""       += help "Darcs binary path" += typ "PATH"
      , tests         := []       += help "Pattern to limit the tests to run" += typ "PATTERN" += name "t"
@@ -64,7 +67,7 @@ defaultConfigAnn
      , plain         := False    += help "Use plain-text output [no]"
      , hideSuccesses := False    += help "Hide successes [no]"
      , threads       := 1        += help "Number of threads [1]" += name "j"
-     , qcCount       := 100      += help "Number of QuickCheck iterations per test [100]" += name "q"
+     , qcCount       := 1000     += help "Number of QuickCheck iterations per test [1000]" += name "q"
      , replay        := Nothing  += help "Replay QC tests with given seed" += typ "SEED"
      ]
    += summary "Darcs test harness"
@@ -120,7 +123,6 @@ run conf = do
           when e $ die ("Directory " ++ d ++ " already exists. Cowardly exiting")
 
     let hashed   = 'h' `elem` suites conf
-        failing  = 'f' `elem` suites conf
         shell    = 's' `elem` suites conf
         network  = 'n' `elem` suites conf
         unit     = 'u' `elem` suites conf
@@ -138,11 +140,14 @@ run conf = do
         nocache   = 'n' `elem` cache conf
         withcache = 'y' `elem` cache conf
 
+        withFailing    = 'y' `elem` failing conf
+        withSucceeding = 'n' `elem` failing conf
+
     darcsBin <-
       case darcs conf of
         "" -> findDarcs
         v -> return v
-    when (shell || network || failing) $ do
+    when (shell || network) $ do
       unless (isAbsolute $ darcsBin) $
         die ("Argument to --darcs should be an absolute path")
       unless (exeExtension `isSuffixOf` darcsBin) $
@@ -169,9 +174,13 @@ run conf = do
     let findTestFiles dir = select . map (dir </>) <$> listDirectory dir
           where
             filter_failing =
-              if failing
-                then id
-                else filter $ not . ("failing-" `isPrefixOf`) . takeBaseName
+              case (withFailing, withSucceeding) of
+                (True,True) -> id -- "yn"
+                (False,True) -> -- "n"
+                  filter $ not . ("failing-" `isPrefixOf`) . takeBaseName
+                (True,False) -> -- "y"
+                  filter $ ("failing-" `isPrefixOf`) . takeBaseName
+                (False,False) -> const [] -- ""
             select = sort . filter_failing . filter (".sh" `isSuffixOf`)
 
     stests <-
@@ -222,6 +231,7 @@ run conf = do
 main :: IO ()
 main = do hSetBuffering stdout NoBuffering
           clp  <- cmdArgs_ defaultConfigAnn
+          setNumCapabilities (threads clp)
           run $
             if full clp then clp
               { formats  = "123"

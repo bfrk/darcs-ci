@@ -51,9 +51,11 @@ instance NullPatch Prim where
 instance PropagateShrink Prim Prim where
   propagateShrink = propagatePrim
 
-instance ShrinkModel Prim where
+instance ShrinkModel FileUUIDModel Prim where
   -- no shrinking for now
   shrinkModelPatch _ = []
+
+instance RepoApply Prim
 
 ----------------------------------------------------------------------
 -- * QuickCheck generators

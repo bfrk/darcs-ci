@@ -36,6 +36,7 @@ module Darcs.Test.Patch.Properties.Generic
     , PatchProperty
     , MergeProperty
     , SequenceProperty
+    , SequencePairProperty
     , propPrimPairCoverage
     ) where
 
@@ -73,11 +74,12 @@ import Darcs.Patch.Read ( ReadPatch )
 import Darcs.Patch.Show
     ( ShowPatchBasic, displayPatch, showPatch, ShowPatchFor(ForStorage) )
 import Darcs.Patch ()
-import Darcs.Patch.Apply ( Apply, ApplyState )
+import Darcs.Patch.Apply ( ApplyState )
 import Darcs.Patch.Commute ( Commute, commute, commuteFL )
 import Darcs.Patch.CommuteFn ( CommuteFn )
 import Darcs.Patch.Merge ( Merge(merge) )
 import Darcs.Patch.Read ( readPatch )
+import Darcs.Test.Patch.RepoModel ( RepoApply )
 import Darcs.Patch.Invert ( Invert(..) )
 import Darcs.Patch.Witnesses.Eq ( Eq2(..), EqCheck(..) )
 import Darcs.Patch.Witnesses.Ordered
@@ -98,6 +100,7 @@ type PatchProperty p = forall wA wB. p wA wB -> TestResult
 -- type PairProperty p = forall wA wB. (p :> p) wA wB -> TestResult
 type MergeProperty p = forall wA wB. (FL p :\/: FL p) wA wB -> TestResult
 type SequenceProperty p = forall wA wB. RL p wA wB -> TestResult
+type SequencePairProperty p = forall wA wB. (RL p :> RL p) wA wB -> TestResult
 
 -- | @A^^=A@
 invertInvolution :: (Invert p, Eq2 p, ShowPatchBasic p) => p wA wB -> TestResult
@@ -132,10 +135,10 @@ inverseComposition (Pair (a :> b)) =
 invertRollback
   :: ( ApplyState p ~ RepoState model
      , Invert p
-     , Apply p
      , ShowPatchBasic p
      , RepoModel model
      , model ~ ModelOf p
+     , RepoApply p
      )
   => WithState p wA wB
   -> TestResult
@@ -230,12 +233,12 @@ commuteInverses c (Pair (x :> y)) =
 
 -- | effect preserving  AB <--> B'A' then effect(AB) = effect(B'A')
 effectPreserving
-  :: ( Apply p
-     , MightBeEmptyHunk p
+  :: ( MightBeEmptyHunk p
      , RepoModel model
      , model ~ ModelOf p
      , ApplyState p ~ RepoState model
      , ShowPatchBasic p
+     , RepoApply p
      )
   => CommuteFn p p
   -> WithState (Pair p) wA wB
@@ -508,9 +511,10 @@ mergeCommute (x :\/: y) =
 
 -- | coalesce effect preserving
 coalesceEffectPreserving
-            :: TestablePrim prim
-            => (forall wX wY . (prim :> prim) wX wY -> Maybe (FL prim wX wY))
-            -> WithState (Pair prim) wA wB -> TestResult
+  :: (TestablePrim prim, RepoApply prim)
+  => (forall wX wY . (prim :> prim) wX wY -> Maybe (FL prim wX wY))
+  -> WithState (Pair prim) wA wB
+  -> TestResult
 coalesceEffectPreserving j (WithState r (Pair (a :> b)) r') =
   case j (a :> b) of
        Nothing -> rejected

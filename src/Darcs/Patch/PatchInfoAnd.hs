@@ -300,7 +300,7 @@ instance IsHunk (PatchInfoAndG p) where
 instance PatchDebug p => PatchDebug (PatchInfoAndG p)
 
 instance (Commute p, Conflict p, Summary p, PrimPatchBase p, PatchListFormat p, ShowPatch p) => Conflict (PatchInfoAnd p) where
-    isConflicted = isConflicted . hopefully
+    numConflicts = numConflicts . hopefully
     -- Note: this relies on the laziness of 'hopefully' for efficiency
     -- and correctness in the face of lazy repositories
     resolveConflicts context patches =

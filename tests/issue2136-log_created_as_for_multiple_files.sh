@@ -69,7 +69,7 @@ xmlLogRev=$(darcs log --reverse --xml tldir/f2 f5 tldir/d2 d5 f6)
 # xmlLog needs to be quoted everywhere, otherwise this hack to retrieve the
 # 2 following lines won't work.
 checkRename () {
-    echo "$1" | grep "<created_as current_name='\./$2' original_name='\./$3'>" -C2 | tail -1 | grep "<name>$4</name>"
+    echo "$1" | grep "<created_as current_name=\"\./$2\" original_name=\"\./$3\">" -C2 | tail -1 | grep "<name>$4</name>"
 }
 
 checkInXML () {
@@ -83,4 +83,4 @@ checkInXML "$xmlLog"
 checkInXML "$xmlLogRev"
 
 # But don't mention unchanged files.
-echo "$xmlLog" | not grep "<created_as[^>]*'\./f6'"
+echo "$xmlLog" | not grep '<created_as[^>]*"\./f6"'

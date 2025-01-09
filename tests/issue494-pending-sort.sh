@@ -23,6 +23,10 @@
 ## CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 ## SOFTWARE.
 
+. lib
+
+rm -rf R S
+
 mkdir R
 cd R
 darcs init
@@ -38,4 +42,5 @@ mkdir S
 cd S
 darcs init
 darcs pull --all ../R
-darcs whatsnew | grep 'No changes'
+not darcs whatsnew | grep 'No changes'
+cd ..

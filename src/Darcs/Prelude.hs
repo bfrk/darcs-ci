@@ -3,8 +3,9 @@
 
 {-
 This module abstracts over the differences in the Haskell Prelude over
-multiple GHC versions, and also hides some symbols that are exported by the
-Prelude but clash with common names in the Darcs code.
+multiple GHC versions, hides some symbols that are exported by the
+Prelude but clash with common names in the Darcs code, and re-exports
+occasional functions from non-Prelude models that are used widely in Darcs.
 
 Broadly it exports everything that the latest Prelude supports, minus the
 things we explicitly exclude. Since we now use the NoImplicitPrelude extension,
@@ -22,10 +23,11 @@ If something is needed from the Prelude that's hidden by default, then add
 it to the Prelude import.
 -}
 
-{-# LANGUAGE CPP #-}
 module Darcs.Prelude
     ( module Prelude
     , module Control.Applicative
+    , module Data.Kind
+    , module Data.List
     , module Data.Monoid
     , Semigroup(..)
     , module Data.Traversable
@@ -42,11 +44,9 @@ import Prelude hiding
     ,
       -- because it's in the new Prelude but only in Data.Monoid in older GHCs
       Monoid(..)
-#if MIN_VERSION_base(4,11,0)
     ,
       -- because it's in the new Prelude but only in Data.Semigroup in older GHCs
       Semigroup(..)
-#endif
     ,
       -- because it's in the new Prelude but only in Data.Traversable in older GHCs
       traverse
@@ -62,6 +62,8 @@ import Prelude hiding
     )
 
 import Control.Applicative ( Applicative(..), (<$>), (<*>) )
+import Data.List ( foldl' )
+import Data.Kind ( Type )
 import Data.Monoid ( Monoid(..) )
 import Data.Semigroup ( Semigroup(..) )
 import Data.Traversable ( traverse )

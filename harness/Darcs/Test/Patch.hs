@@ -30,11 +30,12 @@ import Darcs.Patch.V1 ( RepoPatchV1 )
 import Darcs.Patch.V2.RepoPatch ( RepoPatchV2 )
 import Darcs.Patch.V3 ( RepoPatchV3 )
 import Darcs.Patch.Commute ( Commute(..) )
+import qualified Darcs.Patch.RepoPatch as RP
 
 import Darcs.Test.Patch.Arbitrary.Generic
 import Darcs.Test.Patch.Arbitrary.Named ()
 import Darcs.Test.Patch.Arbitrary.PrimFileUUID()
-import Darcs.Test.Patch.Arbitrary.RepoPatch
+import Darcs.Test.Patch.Arbitrary.Mergeable
 import Darcs.Test.Patch.Arbitrary.RepoPatchV1 ()
 import Darcs.Test.Patch.Arbitrary.RepoPatchV2 ()
 import Darcs.Test.Patch.Arbitrary.RepoPatchV3 ()
@@ -58,10 +59,12 @@ type Prim2 = V2.Prim
 -- tests (either QuickCheck or Unit) that should be run on any type of patch
 general_patchTests
   :: forall p
-   . ( ArbitraryRepoPatch p, CheckedMerge p
+   . ( ArbitraryMergeable p, CheckedMerge p
+     , RP.RepoPatch p
      , PrimBased p, Commute (OnlyPrim p), ArbitraryPrim (OnlyPrim p)
-     , ShrinkModel (PrimOf p)
-     , Show1 (ModelOf (PrimOf p)), Show2 p
+     , ShrinkModel (ModelOf p) (PrimOf p)
+     , Show1 (ModelOf p), Show2 p
+     , RepoApply (PrimOf p)
      )
   => [Test]
 general_patchTests =
@@ -76,6 +79,7 @@ testSuite =
     , repoPatchV1Tests
     , repoPatchV2Tests
     , repoPatchV3Tests
+    , namedPatchV3Tests
     , Darcs.Test.Patch.Depends.testSuite
     , Darcs.Test.Patch.Info.testSuite
     , Darcs.Test.Patch.Selection.testSuite
@@ -108,4 +112,8 @@ testSuite =
       , testGroup "using Prim.FileUUID" $
           qc_V3 (undefined :: FileUUID.Prim wX wY) ++
           general_patchTests @(RepoPatchV3 FileUUID.Prim)
+      ]
+    namedPatchV3Tests = testGroup "Named RepoPatchV3"
+      [ testGroup "using V2.Prim wrapper for Prim.V1" $
+          qc_Named_V3 (undefined :: Prim2 wX wY)
       ]

@@ -32,7 +32,7 @@ import System.Directory
     , removeDirectoryRecursive
     , withCurrentDirectory
     )
-import Darcs.UI.Commands ( DarcsCommand(..), nodefaults
+import Darcs.UI.Commands ( DarcsCommand(..), nodefaults, noPrereq
                          , amInHashedRepository, amInRepository, putInfo
                          , normalCommand, withStdOpts )
 import Darcs.UI.Completion ( noArgs )
@@ -547,7 +547,7 @@ optimizeGlobalCache = common
     , commandHelp = optimizeHelpGlobalCache
     , commandDescription = "Garbage collect global cache"
     , commandCommand = optimizeGlobalCacheCmd
-    , commandPrereq = \_ -> return $ Right ()
+    , commandPrereq = noPrereq
     }
 
 optimizeHelpGlobalCache :: Doc

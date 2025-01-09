@@ -49,7 +49,7 @@ import Data.List.Ordered ( nubSort )
 import qualified Data.Set as S
 
 import Darcs.Patch.CommuteFn ( MergeFn, commuterIdFL, mergerIdFL )
-import Darcs.Patch.Conflict ( Conflict(..), findConflicting )
+import Darcs.Patch.Conflict ( Conflict(..), findConflicting, isConflicted )
 import Darcs.Patch.Debug ( PatchDebug(..) )
 import Darcs.Patch.Effect ( Effect(effect) )
 import Darcs.Patch.FileHunk ( IsHunk(..) )
@@ -85,8 +85,8 @@ import Darcs.Patch.Viewing () -- for ShowPatch FL instances
 import Darcs.Patch.Witnesses.Eq ( Eq2(..) )
 import Darcs.Patch.Witnesses.Ordered
     ( (:>)(..), (:\/:)(..), (:/\:)(..)
-    , FL(..), RL(..), mapFL, mapRL, mapFL_FL, mapRL_RL
-    , (+<+), (+>+), concatRLFL, reverseFL
+    , FL(..), RL(..), mapFL, mapFL_FL, mapRL_RL
+    , (+<+), (+>+), concatRLFL, reverseFL, reverseRL
     , (+<<+), (+>>+), concatFL
     )
 import Darcs.Patch.Witnesses.Sealed ( Sealed, mapSeal )
@@ -239,31 +239,32 @@ This principle extends to explicit dependencies between 'Named' patches. In
 particular, recording a tag has the effect of resolving any as yet
 unresolved conflicts in a repo.
 
-In general a 'Named' patch contains multiple changes ( a "changeset").
-Consider the named patches
+To implement this here in a generic way without touching existing instances
+for the underlying RepoPatch type @p@, we use the following trick: we move
+the contents of patches which we regard as resolved at the Named patch layer
+from the "interesting" trailing sequence to the "uninteresting" context,
+before passing both on to the lower level 'resolveConflicts'. The challenge
+here is to define and then compute the patches "resolved at this (Named)
+layer" in such a way that it does not depend on patch order.
 
-@
-  Named A [] a
-  Named B [] (b1;b2)
-  Named C [] c
-  Named D [A,B] _
-@
+The algorithm is roughly as follows:
 
-where, at the RepoPatch level, @a@ conflicts with @b1@, and @c@ with @b2@.
-@D@ depends explicitly on both @A@ and @B@, so it fully covers the conflict
-between @a@ and @b1@ and thus we would be justified to consider that
-particular conflict as resolved. Unfortunately we cannot detect this at the
-Named patch level because RepoPatchV1 and V2 have no notion of patch
-identities. Thus, at the Named level the two underlying conflicts appear as
-a single large conflict between the three named patches @A@, @B@, and @C@,
-and this means that patch @D@ does /not/ count as a (partial) resolution
-(even though it arguably should).
+In a first pass (function 'prepare') we accumulate (direct) conflicts
+between Named patches. This is done for all conflicted patches in the
+interesting trailing sequence, as well as for any patch that conflicts with
+one of them. In the same pass we calculate transitive explicit dependency
+sets. This terminates when we have exhausted both the trailing patch
+sequence plus any additional patches we add along the way and which we pass
+along in the first argument (@todo@).
 
-When we decide that a set of conflicting Named patches is resolved, we move
-the RepoPatches contained in them to the context of the resolution. For all
-other named patches, we must commute as much of their contents as possible
-past the ones marked as resolved, using commutation at the RepoPatch level
-(i.e. ignoring explicit dependencies). -}
+In a second pass we actually move (the contents of) patches from the
+trailing to the context sequence.
+
+Implementation note: I think it would be possible to fuse the two passes
+into one, incrementally extending both transitive dependencies and
+conflicts. I fear, however, that this will make it much harder to understand
+what's going on. And the efficiency gain is probably minimal and in any case
+at most an improvement by a constant factor. -}
 
 instance ( Commute p
          , Conflict p
@@ -273,38 +274,29 @@ instance ( Commute p
          , ShowPatch p
          ) =>
          Conflict (Named p) where
-  isConflicted (NamedP _ _ ps) = or (mapFL isConflicted ps)
+  numConflicts (NamedP _ _ ps) = sum (mapFL numConflicts ps)
   resolveConflicts context patches =
-    case separate S.empty [] context patches NilFL NilFL of
+    case separate patches NilFL NilFL of
       resolved :> unresolved ->
         resolveConflicts (patchcontentsRL context +<<+ resolved) (reverseFL unresolved)
     where
-      -- Separate the patch contents of an 'RL' of 'Named' patches into those
-      -- we regard as resolved due to explicit dependencies and any others.
-      -- Implicit dependencies are kept with the resolved patches. The first
-      -- parameter accumulates the PatchInfo of patches which we consider
-      -- resolved; the second one accumulates direct and indirect explicit
-      -- dependencies for the patches we have traversed. The third parameter
-      -- is the context, which is only needed as input to 'findConflicting'.
+      -- This partitions the patch contents into 'resolved' (by explicit
+      -- dependencies) and 'unresolved'. The 'resolved' part contains the
+      -- contents of all patches for which all direct conflicts it is involved
+      -- in are transitively covered via explicit dependencies by a single
+      -- patch. For all other patches we commute as much as we can out to the
+      -- 'unresolved' part.
       separate
-        :: S.Set PatchInfo    -- names of resolved Named patches so far
-        -> [S.Set PatchInfo]  -- transitive explicit dependencies so far
-        -> RL (Named p) w0 w1 -- context for Named patches
-        -> RL (Named p) w1 w2 -- Named patches under consideration
+        :: RL (Named p) w1 w2 -- Named patches under consideration
         -> FL p w2 w3         -- result: resolved at RepoPatch layer so far
         -> FL p w3 w4         -- result: unresolved at RepoPatch layer so far
         -> (FL p :> FL p) w1 w4
-      separate acc_res acc_deps ctx (ps :<: p@(NamedP name deps contents)) resolved unresolved
-        | name `S.member` acc_res || isConflicted p
-        , _ :> _ :> conflicting <- findConflicting (ctx +<+ ps) p
-        , let conflict_ids = S.fromList $ name : mapRL ident conflicting
-        , any (conflict_ids `S.isSubsetOf`) acc_deps =
-          -- Either we already determined that p is considered resolved,
-          -- or p is conflicted and all patches involved in the conflict are
-          -- transitively explicitly depended upon by a single patch.
-          -- The action is to regard everything in 'contents' as resolved.
-          separate (acc_res `S.union` conflict_ids) (extend name deps acc_deps)
-            ctx ps (contents +>+ resolved) unresolved
+      separate (ps :<: NamedP name _ contents) resolved unresolved
+        | -- any direct conflict that we are part of
+          css <- S.filter (name `S.member`) final_conflicts
+          -- ... needs to be fully covered (transitively) by a single patch
+        , all (\cs -> any (cs `S.isSubsetOf`) final_depends) css =
+          separate ps (contents +>+ resolved) unresolved
         | otherwise =
           -- Commute as much as we can of our patch 'contents' past 'resolved',
           -- without dragging dependencies along.
@@ -314,9 +306,55 @@ instance ( Commute p
           case genCommuteWhatWeCanRL (commuterIdFL commute)
                 (reverseFL contents :> resolved) of
             dragged :> resolved' :> more_unresolved ->
-              separate acc_res (extend name deps acc_deps) ctx ps
+              separate ps
                 (dragged +>>+ resolved') (more_unresolved +>>+ unresolved)
-      separate _ _ _ NilRL resolved unresolved = resolved :> unresolved
+      separate NilRL resolved unresolved = resolved :> unresolved
+
+      (final_conflicts, final_depends) = prepare S.empty S.empty [] context patches
+
+      -- Calculate direct conflicts and transitive explicit dependencies. This
+      -- needs to (potentially) look at the complete history, but as we do for
+      -- RepoPatchV3 resolution we terminate early when the set of interesting
+      -- patches ('todo') becomes exhausted.
+      -- Accumulating parameters:
+      -- * todo: patch names to consider, namely all participants in conflicts
+      --   we encounter on the way.
+      --   invariant: never contains name of a patch we already traversed
+      -- * conflicts: set of direct conflicts constructed so far; note that
+      --   each element is a pair i.e. two-element set
+      -- * depends: list of transitive explicit dependency sets so far
+      prepare
+        :: S.Set PatchInfo        -- todo
+        -> S.Set(S.Set PatchInfo) -- direct conflicts so far
+        -> [S.Set PatchInfo]      -- transitive explicit dependencies so far
+        -> RL (Named p) wA wB     -- context
+        -> RL (Named p) wB wC     -- patches under consideration
+        -> (S.Set (S.Set PatchInfo), [S.Set PatchInfo])
+      prepare todo conflicts depends ctx (ps :<: p)
+        | isConflicted p || ident p `S.member` todo =
+            prepare (updTodo p cs todo) (updConflicts p cs conflicts)
+              (updDepends p depends) ctx ps
+        | otherwise = -- not part of any conflict
+            prepare (updTodo p cs todo) conflicts (updDepends p depends) ctx ps
+        where cs = conflictingNames (ctx +<+ ps) p
+      prepare todo conflicts depends _ NilRL
+        | S.null todo = (conflicts, depends)
+      prepare todo conflicts depends (ctx :<: p) NilRL
+        | ident p `S.member` todo || any (`S.member` todo) cs =
+            prepare (updTodo p cs todo) (updConflicts p cs conflicts)
+              (updDepends p depends) ctx NilRL
+        | otherwise =
+            -- may be part of a conflict but not with any interesting
+            -- patch, so we can and should ignore its conflicts
+            prepare (updTodo p S.empty todo) conflicts
+              (updDepends p depends) ctx NilRL
+        where cs = conflictingNames ctx p
+      prepare _ _ _ NilRL NilRL = error "autsch, hit the bottom"
+
+      updTodo (NamedP name _ _) cs todo = cs <> (name `S.delete` todo)
+      updConflicts (NamedP name _ _) our_cs all_cs =
+        S.map (`S.insert` S.singleton name) our_cs <> all_cs
+      updDepends (NamedP n ds _) = extendDeps n ds
 
       -- Extend a list of sets of dependencies by adding the new list of
       -- dependencies to each set that contains the given 'name'. If 'name'
@@ -325,14 +363,44 @@ instance ( Commute p
       -- Since we have to track whether 'name' was found in any of the input
       -- sets, this is not a straight-forward fold, so we use explicit
       -- recursion.
-      extend :: Ord a => a -> [a] -> [S.Set a] -> [S.Set a]
-      extend _ [] acc_deps = acc_deps
-      extend name deps acc_deps = go False (S.fromList deps) acc_deps where
+      extendDeps :: Ord a => a -> [a] -> [S.Set a] -> [S.Set a]
+      extendDeps _ [] = id
+      extendDeps name new_deps = go False (S.fromList new_deps) where
         go False new [] = [new]
         go True _ [] = []
         go found new (ds:dss)
           | name `S.member` ds = ds `S.union` new : go True new dss
           | otherwise = ds : go found new dss
+
+      -- The set of (direct) conflicts we can read off a patch (in context).
+      -- This is slightly more involved than just calling 'findConflicting' due
+      -- to the fact that the latter also commutes out any patch that
+      -- explicitly depends on the ones we actually conflict with.
+      conflictingNames ctx p =
+        case findConflicting ctx p of
+          _ :> p' :> ps -> onlyRealConflicts p' (reverseRL ps) S.empty
+
+      -- This filters out patches that 'findConflicting' finds
+      -- that are /only/ there because they explicitly depend on
+      -- patches that are actually in conflict.
+      onlyRealConflicts
+        :: Named p wB wC
+        -> FL (Named p) wC wD
+        -> S.Set (PatchInfo)
+        -> S.Set (PatchInfo)
+      onlyRealConflicts _ NilFL r = r
+      onlyRealConflicts p (q :>: qs) r =
+        case commute (p :> q) of
+          Just (_ :> p')
+            | numConflicts p /= numConflicts p' ->
+                onlyRealConflicts p' qs (patch2patchinfo q `S.insert` r)
+            | otherwise -> onlyRealConflicts p' qs r
+          Nothing ->
+            -- This should be 'error "impossible"' but due to commutation
+            -- bugs in V1 and V2 we would run into those errors quite a lot.
+            -- So we act as if the rest (qs) are real conflicts. Which is
+            -- wrong but better than crashing darcs for those legacy formats.
+            S.fromList (mapFL patch2patchinfo qs) `S.union` r
 
 instance (PrimPatchBase p, Unwind p) => Unwind (Named p) where
   fullUnwind (NamedP _ _ ps) = squashUnwound (mapFL_FL fullUnwind ps)
@@ -418,4 +486,3 @@ instance Show2 p => Show1 (Named p wX)
 instance Show2 p => Show2 (Named p)
 
 instance PatchDebug p => PatchDebug (Named p)
-

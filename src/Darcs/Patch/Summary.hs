@@ -14,6 +14,7 @@ import Darcs.Prelude
 
 import Data.List.Ordered ( nubSort )
 import Data.Maybe ( catMaybes )
+import qualified Text.XML.Light as XML
 
 import Darcs.Patch.Format ( FileNameFormat(FileNameFormatDisplay) )
 import Darcs.Patch.FromPrim ( PrimPatchBase(..) )
@@ -30,8 +31,6 @@ import Darcs.Util.Printer
     , ($$)
     , (<+>)
     , empty
-    , minus
-    , plus
     , text
     , vcat
     )
@@ -75,22 +74,8 @@ plainSummary = vcat . map (summChunkToLine False) . genSummary . conflictedEffec
 plainSummaryFL :: (Summary e, PrimDetails (PrimOf e)) => FL e wX wY -> Doc
 plainSummaryFL = vcat . map (summChunkToLine False) . genSummary . concat . mapFL conflictedEffect
 
-xmlSummary :: (Summary p, PrimDetails (PrimOf p)) => p wX wY -> Doc
-xmlSummary p = text "<summary>"
-             $$ (vcat . map summChunkToXML . genSummary . conflictedEffect $ p)
-             $$ text "</summary>"
-
--- Yuck duplicated code below...
-escapeXML :: String -> Doc
-escapeXML = text . strReplace '\'' "&apos;" . strReplace '"' "&quot;" .
-  strReplace '>' "&gt;" . strReplace '<' "&lt;" . strReplace '&' "&amp;"
-
-strReplace :: Char -> String -> String -> String
-strReplace _ _ [] = []
-strReplace x y (z:zs)
-  | x == z    = y ++ strReplace x y zs
-  | otherwise = z : strReplace x y zs
--- end yuck duplicated code.
+xmlSummary :: (Summary p, PrimDetails (PrimOf p)) => p wX wY -> XML.Element
+xmlSummary p = XML.unode "summary" (catMaybes . map summChunkToXML . genSummary . conflictedEffect $ p)
 
 -- | High-level representation of a piece of patch summary
 data SummChunk = SummChunk SummDetail ConflictState
@@ -128,37 +113,47 @@ genSummary p
           combineOp _ SummRm  = Just SummRm
           combineOp SummMod SummMod = Just SummMod
 
-summChunkToXML :: SummChunk -> Doc
+summChunkToXML :: SummChunk -> Maybe XML.Element
 summChunkToXML (SummChunk detail c) =
- case detail of
-   SummRmDir f  -> xconf c "remove_directory" (xfn f)
-   SummAddDir f -> xconf c "add_directory"    (xfn f)
-   SummFile SummRm  f _ _ _ -> xconf c "remove_file" (xfn f)
-   SummFile SummAdd f _ _ _ -> xconf c "add_file"    (xfn f)
-   SummFile SummMod f r a x -> xconf c "modify_file" $ xfn f <> xrm r <> xad a <> xrp x
-   SummMv f1 f2  -> text "<move from=\"" <> xfn f1
-                      <> text "\" to=\"" <> xfn f2 <> text"\"/>"
-   SummNone      -> empty
- where
-   xconf Okay t x       = text ('<':t++">") $$ x $$ text ("</"++t++">")
-   xconf Conflicted t x = text ('<':t++" conflict='true'>") $$ x $$ text ("</"++t++">")
-   xconf Duplicated t x = text ('<':t++" duplicate='true'>") $$ x $$ text ("</"++t++">")
-   xfn = escapeXML . anchorPath ""
-   --
-   xad 0 = empty
-   xad a = text "<added_lines num='" <> text (show a) <> text "'/>"
-   xrm 0 = empty
-   xrm a = text "<removed_lines num='" <> text (show a) <> text "'/>"
-   xrp 0 = empty
-   xrp a = text "<replaced_tokens num='" <> text (show a) <> text "'/>"
+  case detail of
+    SummRmDir f -> Just $ xconf c "remove_directory" [] [cdata (xfn f)]
+    SummAddDir f -> Just $ xconf c "add_directory" [] [cdata (xfn f)]
+    SummFile SummRm f _ _ _ -> Just $ xconf c "remove_file" [] [cdata (xfn f)]
+    SummFile SummAdd f _ _ _ -> Just $ xconf c "add_file" [] [cdata (xfn f)]
+    SummFile SummMod f r a x ->
+      Just $ xconf c "modify_file" [] ([cdata (xfn f)] <> xrm r <> xad a <> xrp x)
+    SummMv f1 f2 ->
+      Just $
+        xconf c "move"
+          [XML.Attr (XML.unqual "from") (xfn f1), XML.Attr (XML.unqual "to") (xfn f2)] []
+    SummNone -> Nothing
+  where
+    xconf :: ConflictState -> String -> [XML.Attr] -> [XML.Content] -> XML.Element
+    xconf Okay t as cs = XML.unode t (as, cs)
+    xconf Conflicted t as cs =
+      XML.unode t (XML.Attr (XML.unqual "conflict") "true":as, cs)
+    xconf Duplicated t as cs =
+      XML.unode t (XML.Attr (XML.unqual "suplicate") "true":as, cs)
+    xfn = anchorPath ""
+    cdata s = XML.Text (XML.blank_cdata {XML.cdData = s})
+    xad 0 = []
+    xad a = [XML.Elem $ XML.unode "added_lines" (XML.Attr (XML.unqual "num") (show a))]
+    xrm 0 = []
+    xrm a = [XML.Elem $ XML.unode "removed_lines" (XML.Attr (XML.unqual "num") (show a))]
+    xrp 0 = []
+    xrp a = [XML.Elem $ XML.unode "replaced_tokens" (XML.Attr (XML.unqual "num") (show a))]
 
 summChunkToLine :: Bool -> SummChunk -> Doc
 summChunkToLine machineReadable (SummChunk detail c) =
   case detail of
    SummRmDir f   -> lconf c "R" $ formatFileName FileNameFormatDisplay f <> text "/"
    SummAddDir f  -> lconf c "A" $ formatFileName FileNameFormatDisplay f <> text "/"
-   SummFile SummRm  f _ _ _ -> lconf c "R" $ formatFileName FileNameFormatDisplay f
-   SummFile SummAdd f _ _ _ -> lconf c "A" $ formatFileName FileNameFormatDisplay f
+   SummFile SummRm  f r a x
+     | machineReadable -> lconf c "R" $ formatFileName FileNameFormatDisplay f
+     | otherwise       -> lconf c "R" $ formatFileName FileNameFormatDisplay f <+> rm r <+> ad a <+> rp x
+   SummFile SummAdd f r a x
+     | machineReadable -> lconf c "A" $ formatFileName FileNameFormatDisplay f
+     | otherwise       -> lconf c "A" $ formatFileName FileNameFormatDisplay f <+> rm r <+> ad a <+> rp x
    SummFile SummMod f r a x
      | machineReadable -> lconf c "M" $ formatFileName FileNameFormatDisplay f
      | otherwise       -> lconf c "M" $ formatFileName FileNameFormatDisplay f <+> rm r <+> ad a <+> rp x
@@ -178,8 +173,8 @@ summChunkToLine machineReadable (SummChunk detail c) =
      | otherwise       = text t <+> x <+> text "duplicate"
    --
    ad 0 = empty
-   ad a = plus <> text (show a)
+   ad a = text "+" <> text (show a)
    rm 0 = empty
-   rm a = minus <> text (show a)
+   rm a = text "-" <> text (show a)
    rp 0 = empty
    rp a = text "r" <> text (show a)

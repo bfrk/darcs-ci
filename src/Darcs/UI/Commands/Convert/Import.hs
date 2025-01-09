@@ -80,6 +80,7 @@ import Darcs.Repository.State (readPristine)
 import Darcs.UI.Commands
     ( DarcsCommand(..)
     , nodefaults
+    , noPrereq
     , withStdOpts
     )
 import Darcs.UI.Commands.Convert.Util
@@ -162,7 +163,7 @@ convertImport = DarcsCommand
     , commandExtraArgs = -1
     , commandExtraArgHelp = ["[<DIRECTORY>]"]
     , commandCommand = fastImport
-    , commandPrereq = \_ -> return $ Right ()
+    , commandPrereq = noPrereq
     , commandCompleteArgs = noArgs
     , commandArgdefaults = nodefaults
     , commandOptions = opts

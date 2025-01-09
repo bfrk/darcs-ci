@@ -23,7 +23,7 @@ rm -rf $packagename
 cabal unpack $tarballpath
 cd $packagename
 
-cabal test --enable-tests --test-option="-j3"
+cabal test --enable-tests --test-option="-j3 --hidesuccesses"
 cabal install --disable-optimisation --install-method=copy --installdir=./bin
 
 ./bin/darcs --version

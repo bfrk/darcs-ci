@@ -39,7 +39,13 @@ module Darcs.Util.Tree.Monad
 
 import Darcs.Prelude hiding ( readFile, writeFile )
 
-import Darcs.Util.Path ( AnchoredPath, anchoredRoot, displayPath, movedirfilename )
+import Darcs.Util.Path
+    ( AnchoredPath
+    , anchoredRoot
+    , displayPath
+    , isPrefix
+    , movedirfilename
+    )
 import Darcs.Util.Tree
 
 import Data.List( sortBy )
@@ -269,6 +275,9 @@ rename from to = do
   unless (isNothing found_to) $
     throwM $
       mkIOError AlreadyExists "rename" Nothing (Just (displayPath to))
+  when (isPrefix from to) $
+    throwM $
+      mkIOError InvalidArgument "rename" Nothing (Just (displayPath to))
   modifyItem from Nothing
   modifyItem to item
   renameChanged from to

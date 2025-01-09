@@ -75,7 +75,13 @@ import Darcs.Repository.Format
 import Darcs.Repository.Hashed ( UpdatePristine(..), tentativelyAddPatch_ )
 import Darcs.Repository.Prefs ( showMotd, prefsFilePath )
 
-import Darcs.UI.Commands ( DarcsCommand(..), nodefaults, putFinished, withStdOpts )
+import Darcs.UI.Commands
+    ( DarcsCommand(..)
+    , noPrereq
+    , nodefaults
+    , putFinished
+    , withStdOpts
+    )
 import Darcs.UI.Commands.Convert.Util ( updatePending )
 import Darcs.UI.Commands.Util ( commonHelpWithPrefsTemplates )
 import Darcs.UI.Completion ( noArgs )
@@ -134,7 +140,7 @@ convertDarcs2 = DarcsCommand
     , commandExtraArgs = -1
     , commandExtraArgHelp = ["<SOURCE>", "[<DESTINATION>]"]
     , commandCommand = toDarcs2
-    , commandPrereq = \_ -> return $ Right ()
+    , commandPrereq = noPrereq
     , commandCompleteArgs = noArgs
     , commandArgdefaults = nodefaults
     , commandOptions = opts

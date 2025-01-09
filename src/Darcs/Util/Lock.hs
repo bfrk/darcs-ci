@@ -26,8 +26,6 @@ module Darcs.Util.Lock
     , writeBinFile
     , writeTextFile
     , writeDocBinFile
-    , appendBinFile
-    , appendTextFile
     , appendDocBinFile
     , readBinFile
     , readTextFile
@@ -303,12 +301,6 @@ readTextFile f = do
 readDocBinFile :: FilePathLike p => p -> IO Doc
 readDocBinFile fp = do ps <- B.readFile $ toFilePath fp
                        return $ if B.null ps then empty else packedString ps
-
-appendBinFile :: FilePathLike p => p -> B.ByteString -> IO ()
-appendBinFile f s = appendToFile Binary f $ \h -> B.hPut h s
-
-appendTextFile :: FilePathLike p => p -> String -> IO ()
-appendTextFile f s = appendToFile Text f $ \h -> hPutStr h s
 
 appendDocBinFile :: FilePathLike p => p -> Doc -> IO ()
 appendDocBinFile f d = appendToFile Binary f $ \h -> hPutDoc h d

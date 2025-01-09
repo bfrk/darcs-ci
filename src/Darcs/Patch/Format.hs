@@ -21,7 +21,7 @@ class PatchListFormat p where
 -- | This type is used to tweak the way that lists of 'p' are shown for a given
 -- 'Patch' type 'p'. It is needed to maintain backwards compatibility for V1
 -- and V2 patches.
-data ListFormat (p :: (* -> * -> *))
+data ListFormat (p :: Type -> Type -> Type)
     = ListFormatDefault -- ^ Show and read lists without braces.
     | ListFormatV1      -- ^ Show lists with a single layer of braces around
                         -- the outside, except for singletons which have no

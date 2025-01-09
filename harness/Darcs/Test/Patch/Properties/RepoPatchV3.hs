@@ -95,9 +95,9 @@ prop_conflictsCommutePastConflictor ps p
   = failed
       $ text "conflicting patches not found in repo:"
       $$ vcat (mapRL displayPatch (ps :<: p))
-  | not (revertedIds p `S.isSubsetOf` rids)
+  | not (revertedIds p `S.isSubsetOf` xids)
   = failed
-      $ text "undone patches not found in repo:"
+      $ text "undone patches not a subset of conflicting patches:"
       $$ vcat (mapRL displayPatch (ps :<: p))
   | otherwise =
       case partitionRL' ((`S.member` xids) . ident) ps of

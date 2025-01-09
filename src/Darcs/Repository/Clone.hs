@@ -24,7 +24,6 @@ import Darcs.Repository.Identify ( identifyRepositoryFor, ReadingOrWriting(..) )
 import Darcs.Repository.Pristine
     ( applyToTentativePristine
     , createPristineDirectoryTree
-    , writePristine
     )
 import Darcs.Repository.Hashed
     ( copyHashedInventory
@@ -67,7 +66,6 @@ import Darcs.Repository.Format
     , formatHas
     )
 import Darcs.Repository.Prefs ( addRepoSource, deleteSources )
-import Darcs.Repository.Match ( getOnePatchset )
 import Darcs.Util.File
     ( copyFileOrUrl
     , Cachable(..)
@@ -121,7 +119,7 @@ import Darcs.Patch.Set
     , patchSetInventoryHashes
     , progressPatchSet
     )
-import Darcs.Patch.Match ( MatchFlag(..), patchSetMatch )
+import Darcs.Patch.Match ( MatchFlag(..), patchSetMatch, matchOnePatchset )
 import Darcs.Patch.Progress ( progressRLShowTags, progressFL )
 import Darcs.Patch.Apply ( Apply(..) )
 import Darcs.Patch.Witnesses.Sealed ( Sealed(..) )
@@ -136,7 +134,7 @@ import Darcs.Patch.Witnesses.Ordered
     )
 import Darcs.Patch.PatchInfoAnd ( PatchInfoAnd, extractHash )
 
-import Darcs.Util.Tree( Tree, emptyTree )
+import Darcs.Util.Tree( Tree )
 
 import Darcs.Util.Exception ( catchall )
 import Darcs.Util.English ( englishNum, Noun(..) )
@@ -229,7 +227,7 @@ cloneRepository repourl mysimplename v useCache cloneKind um rdarcs sse
         -- the following is necessary to be able to read _toRepo's patches
         _toRepo <- revertRepositoryChanges _toRepo
         patches <- readPatches _toRepo
-        Sealed context <- getOnePatchset _toRepo psm
+        Sealed context <- matchOnePatchset patches psm
         to_remove :\/: only_in_context <- return $ findUncommon patches context
         case only_in_context of
           NilFL -> do
@@ -252,7 +250,11 @@ cloneRepository repourl mysimplename v useCache cloneKind um rdarcs sse
               $ text "Missing patches from context:"
               $$ description only_in_context
       when (forget == YesForgetParent) deleteSources
-      -- check for unresolved conflicts
+      -- TODO Checking for unresolved conflicts means we have to download
+      -- at least all the patches referenced by hashed_inventory, even if
+      -- --lazy is in effect. This can take a long time, and in extreme
+      -- cases can even result in --lazy being slower than --complete.
+      putVerbose v $ text "Checking for unresolved conflicts..."
       patches <- readPatches _toRepo
       let conflicts = patchsetConflictResolutions patches
       _ <- announceConflicts "clone" (YesAllowConflicts MarkConflicts) conflicts
@@ -389,7 +391,6 @@ copyRepoOldFashioned :: forall p wU wR. (RepoPatch p, ApplyState p ~ Tree)
                         -> IO ()
 copyRepoOldFashioned fromRepo _toRepo verb withWorkingDir = do
   _toRepo <- revertRepositoryChanges _toRepo
-  _ <- writePristine _toRepo emptyTree
   patches <- readPatches fromRepo
   let k = "Copying patch"
   beginTedious k
