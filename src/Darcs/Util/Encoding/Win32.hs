@@ -34,9 +34,11 @@ import qualified Data.ByteString as B
 import Foreign ( castPtr, allocaArray0 )
 import Foreign.C
     ( CInt(..), peekCWStringLen, withCWStringLen )
-import System.Win32
-    ( CodePage, nullPtr, getCurrentCodePage
-    , wideCharToMultiByte, multiByteToWideChar
+import System.Win32 ( CodePage, nullPtr )
+import System.Win32.Encoding
+    ( getCurrentCodePage
+    , multiByteToWideChar
+    , wideCharToMultiByte
     )
 
 #include <windows_cconv.h>
