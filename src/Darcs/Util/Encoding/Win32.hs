@@ -41,8 +41,6 @@ import System.Win32.Encoding
     , wideCharToMultiByte
     )
 
-#include <windows_cconv.h>
-
 -- | Encode a Unicode 'String' into a 'ByteString' suitable for the current
 -- console.
 encode :: String -> IO B.ByteString
