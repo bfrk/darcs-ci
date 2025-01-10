@@ -21,19 +21,16 @@
 -- CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 -- OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 -- USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-{-# LANGUAGE CPP, ForeignFunctionInterface #-}
 module Darcs.Util.Encoding.Win32
     ( encode, decode
     ) where
 
 import Darcs.Prelude
 
+import qualified Data.ByteString as B ( ByteString, useAsCStringLen )
 import Data.ByteString.Internal ( createAndTrim )
-import qualified Data.ByteString as B
-    ( ByteString, useAsCStringLen )
-import Foreign ( castPtr, allocaArray0 )
-import Foreign.C
-    ( CInt(..), peekCWStringLen, withCWStringLen )
+import Foreign ( allocaArray0, castPtr )
+import Foreign.C ( peekCWStringLen, withCWStringLen )
 import System.Win32 ( CodePage, nullPtr )
 import System.Win32.Encoding
     ( getCurrentCodePage
