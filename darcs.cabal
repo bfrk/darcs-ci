@@ -406,7 +406,7 @@ Library
                       System.Posix.IO
       cpp-options:    -DWIN32
       c-sources:      src/win32/send_email.c
-      build-depends:  Win32             >= 2.4.0 && < 2.14,
+      build-depends:  Win32             >= 2.5.0 && < 2.15,
                       -- exclude 1.3.8 .. 1.3.8.4 due to bug on windows
                       directory         >= 1.2.7 && < 1.3.8 || >= 1.3.8.5 && < 1.4
     else

@@ -35,26 +35,23 @@ import Foreign ( castPtr, allocaArray0 )
 import Foreign.C
     ( CInt(..), peekCWStringLen, withCWStringLen )
 import System.Win32
-    ( CodePage, nullPtr, getConsoleCP, getACP
-    , LPCSTR, LPWSTR, LPCWSTR, LPBOOL, DWORD )
+    ( CodePage, nullPtr, getCurrentCodePage
+    , wideCharToMultiByte, multiByteToWideChar
+    )
 
 #include <windows_cconv.h>
 
 -- | Encode a Unicode 'String' into a 'ByteString' suitable for the current
 -- console.
 encode :: String -> IO B.ByteString
-encode str = getCodePage >>= flip unicodeToCodePage str
+encode str = getCurrentCodePage >>= flip unicodeToCodePage str
 
 -- | Convert a 'ByteString' from the console's encoding into a Unicode 'String'.
 decode :: B.ByteString -> IO String
-decode str = getCodePage >>= flip codePageToUnicode str
+decode str = getCurrentCodePage >>= flip codePageToUnicode str
 
 ------------------------
 -- Multi-byte conversion
-
-foreign import WINDOWS_CCONV "WideCharToMultiByte" wideCharToMultiByte
-        :: CodePage -> DWORD -> LPCWSTR -> CInt -> LPCSTR -> CInt
-                -> LPCSTR -> LPBOOL -> IO CInt
 
 unicodeToCodePage :: CodePage -> String -> IO B.ByteString
 unicodeToCodePage cp wideStr = withCWStringLen wideStr $ \(wideBuff, wideLen) -> do
@@ -66,9 +63,6 @@ unicodeToCodePage cp wideStr = withCWStringLen wideStr $ \(wideBuff, wideLen) ->
         fmap fromEnum $ wideCharToMultiByte cp 0 wideBuff (toEnum wideLen)
                     (castPtr outBuff) outSize nullPtr nullPtr
 
-foreign import WINDOWS_CCONV "MultiByteToWideChar" multiByteToWideChar
-        :: CodePage -> DWORD -> LPCSTR -> CInt -> LPWSTR -> CInt -> IO CInt
-
 codePageToUnicode :: CodePage -> B.ByteString -> IO String
 codePageToUnicode cp bs = B.useAsCStringLen bs $ \(inBuff, inLen) -> do
     -- first ask for the size without filling the buffer.
@@ -77,11 +71,3 @@ codePageToUnicode cp bs = B.useAsCStringLen bs $ \(inBuff, inLen) -> do
     allocaArray0 (fromEnum outSize) $ \outBuff -> do
         outSize' <- multiByteToWideChar cp 0 inBuff (toEnum inLen) outBuff outSize
         peekCWStringLen (outBuff, fromEnum outSize')
-
-getCodePage :: IO CodePage
-getCodePage = do
-    conCP <- getConsoleCP
-    if conCP > 0
-        then return conCP
-        else getACP
-
