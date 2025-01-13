@@ -21,7 +21,6 @@ module Darcs.Util.Printer
     , userchunk, packedString
     , prefix
     , hiddenPrefix
-    , prefixLines
     , invisiblePS, userchunkPS
     , fromXml
     -- * Rendering to 'String'
@@ -59,7 +58,7 @@ import qualified Data.ByteString as B ( ByteString, hPut, concat )
 import qualified Data.ByteString.Char8 as BC ( singleton )
 import qualified Text.XML.Light as XML
 
-import Darcs.Util.ByteString ( linesPS, decodeLocale, encodeLocale, gzWriteHandle )
+import Darcs.Util.ByteString ( decodeLocale, encodeLocale, gzWriteHandle )
 import Darcs.Util.Global ( debugMessage )
 
 -- | A 'Printable' is either a String, a packed string, or a chunk of
@@ -233,12 +232,6 @@ prefix s (Doc d) = Doc $ \st ->
                    case d st' of
                      Document d'' -> Document $ (p:) . d''
                      Empty -> Empty
-
--- TODO try to find another way to do this, it's rather a violation
--- of the Doc abstraction
-prefixLines :: Doc -> Doc -> Doc
-prefixLines prefixer prefixee =
-  vcat $ map (prefixer <+>) $ map packedString $ linesPS $ renderPS prefixee
 
 lineColor :: Color -> Doc -> Doc
 lineColor c d = Doc $ \st -> case lineColorT (printers st) c d of

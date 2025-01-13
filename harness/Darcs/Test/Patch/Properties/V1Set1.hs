@@ -1,27 +1,18 @@
 module Darcs.Test.Patch.Properties.V1Set1
        ( checkMerge, checkMergeEquiv, checkMergeSwap, checkCanon
        , checkCommute, checkCantCommute
-       , tShowRead
        , tTestCheck ) where
 
 import Darcs.Prelude
 
-import Darcs.Patch
-     ( commute, invert, merge, effect
-     , readPatch, showPatch
-     , canonizeFL )
+import Darcs.Patch ( canonizeFL, commute, effect, invert, merge )
 import Darcs.Patch.FromPrim ( fromAnonymousPrim )
 import Darcs.Patch.Merge ( Merge )
-import Darcs.Patch.Read ( ReadPatch )
-import Darcs.Patch.Show ( ShowPatchBasic, ShowPatchFor(..) )
 import qualified Darcs.Patch.V1 as V1 ( RepoPatchV1 )
 import qualified Darcs.Patch.V1.Prim as V1 ( Prim(..) )
 import Darcs.Test.Patch.Properties.Check ( checkAPatch )
-import Darcs.Util.Printer ( renderPS )
 import Darcs.Patch.Witnesses.Eq
 import Darcs.Patch.Witnesses.Ordered
-import Darcs.Patch.Witnesses.Show
-import Darcs.Patch.Witnesses.Sealed ( Sealed(Sealed) )
 import Darcs.Patch.Witnesses.Unsafe( unsafeCoercePEnd )
 import Darcs.Test.Util.TestResult
 import qualified Darcs.Util.Diff as D (DiffAlgorithm(..))
@@ -127,14 +118,6 @@ checkCantCommute (p2 :> p1) =
 -- ----------------------------------------------------------------------------
 -- A few "test" properties, doing things with input patches and giving a OK/not
 -- OK type of answer.
-
-tShowRead :: (Show2 p, ReadPatch p, ShowPatchBasic p)
-          => (forall wX wY wW wZ . p wX wY -> p wW wZ -> Bool) -> forall wX wY . p wX wY -> TestResult
-tShowRead eq p =
-    case readPatch $ renderPS $ showPatch ForStorage p of
-    Right (Sealed p') -> if p' `eq` p then succeeded
-                        else failed $ text $ "Failed to read shown:  "++(show2 p)++"\n"
-    Left e -> failed $ text $ unlines ["Failed to read at all:  "++show2 p, e]
 
 tTestCheck :: forall wX wY . FL Patch wX wY -> TestResult
 tTestCheck p = if checkAPatch p

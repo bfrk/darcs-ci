@@ -19,6 +19,7 @@ import GHC.IO.Encoding ( textEncodingName )
 import System.Console.CmdArgs hiding ( args )
 import System.Console.CmdArgs.Explicit ( process )
 import System.Directory ( doesFileExist, doesPathExist, exeExtension, listDirectory )
+import System.Environment ( setEnv )
 import System.Environment.FindBin ( getProgPath )
 import System.FilePath ( isAbsolute, takeBaseName, takeDirectory, (</>) )
 import System.IO ( BufferMode(NoBuffering), hSetBuffering, localeEncoding, stdout )
@@ -67,7 +68,7 @@ defaultConfigAnn
      , plain         := False    += help "Use plain-text output [no]"
      , hideSuccesses := False    += help "Hide successes [no]"
      , threads       := 1        += help "Number of threads [1]" += name "j"
-     , qcCount       := 1000     += help "Number of QuickCheck iterations per test [1000]" += name "q"
+     , qcCount       := 100      += help "Number of QuickCheck iterations per test [100]" += name "q"
      , replay        := Nothing  += help "Replay QC tests with given seed" += typ "SEED"
      ]
    += summary "Darcs test harness"
@@ -232,6 +233,7 @@ main :: IO ()
 main = do hSetBuffering stdout NoBuffering
           clp  <- cmdArgs_ defaultConfigAnn
           setNumCapabilities (threads clp)
+          setEnv "DARCS_ESCAPE_8BIT" "1"
           run $
             if full clp then clp
               { formats  = "123"

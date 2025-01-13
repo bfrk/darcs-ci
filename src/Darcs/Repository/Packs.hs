@@ -33,7 +33,7 @@ import Control.Monad ( forM_, when )
 import System.IO.Error ( isAlreadyExistsError )
 import System.IO.Unsafe ( unsafeInterleaveIO )
 
-import qualified Data.ByteString.Lazy.Char8 as BLC
+import qualified Data.ByteString.Lazy as BL
 import Data.List ( isPrefixOf, sort )
 
 import System.Directory ( createDirectoryIfMissing
@@ -129,7 +129,7 @@ unpackTar c (Tar.Next e es) = case Tar.entryContent e of
   _ -> fail "Unexpected non-file tar entry"
  where
   writeFile' Nothing path content = withTemp $ \tmp -> do
-    BLC.writeFile tmp content
+    BL.writeFile tmp content
     renameFile tmp path
   writeFile' (Just ca) path content = do
     let fileFullPath = case splitPath path of
@@ -166,14 +166,14 @@ createPacks repo =
   -- Note: tinkering with zlib's compression parameters does not make
   -- any noticeable difference in generated archive size;
   -- switching to bzip2 would provide ~25% gain OTOH.
-  BLC.writeFile (patchesTar <.> "part") . GZ.compress . Tar.write =<<
+  BL.writeFile (patchesTar <.> "part") . GZ.compress . Tar.write =<<
     mapM fileEntry' ((darcsdir </> "meta-filelist-inventories") : ps ++ reverse is)
   renameFile (patchesTar <.> "part") patchesTar
   -- pack basicTar
   pr <- sortByMTime =<< dirContents pristineDirPath
   writeFile (darcsdir </> "meta-filelist-pristine") . unlines $
     map takeFileName pr
-  BLC.writeFile (basicTar <.> "part") . GZ.compress . Tar.write =<< mapM fileEntry' (
+  BL.writeFile (basicTar <.> "part") . GZ.compress . Tar.write =<< mapM fileEntry' (
     [ darcsdir </> "meta-filelist-pristine"
     -- unclean: we should not access the non-tentative version here;
     -- will work because we do not modify the tentative state
@@ -184,7 +184,7 @@ createPacks repo =
   basicTar = darcsdir </> packsDir </> basicPack
   patchesTar = darcsdir </> packsDir </> patchesPack
   fileEntry' x = unsafeInterleaveIO $ do
-    content <- BLC.fromChunks . return <$> gzReadFilePS x
+    content <- BL.fromChunks . return <$> gzReadFilePS x
     tp <- either fail return $ toTarPath False x
     return $ fileEntry tp content
   dirContents dir = map (dir </>) <$> listDirectory dir

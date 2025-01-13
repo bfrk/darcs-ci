@@ -18,7 +18,6 @@ module Darcs.Repository.Inventory.Format
     , pokePristineHash
     , peekPristineHash
     , skipPristineHash
-    , pristineName
     -- properties
     , prop_inventoryParseShow
     , prop_peekPokePristineHash
@@ -85,7 +84,7 @@ pHeadInv = (,) <$> pPristineHash <*> pInv
 
 pPristineHash :: Parser PristineHash
 pPristineHash = do
-  string pristineName
+  string kwPristine
   skipSpace
   pHash
 
@@ -94,7 +93,7 @@ pInv = Inventory <$> pInvParent <*> pInvPatches
 
 pInvParent :: Parser (Maybe InventoryHash)
 pInvParent = optional $ do
-  string parentName
+  string kwParent
   skipSpace
   pHash
 
@@ -108,7 +107,7 @@ pInvEntry :: Parser InventoryEntry
 pInvEntry = do
   info <- readPatchInfo
   skipSpace
-  string hashName
+  string kwHash
   skipSpace
   hash <- pHash
   return (info, hash)
@@ -126,11 +125,11 @@ showInventoryPatches = hcat . map showInventoryEntry
 showInventoryEntry :: InventoryEntry -> Doc
 showInventoryEntry (pinf, hash) =
   showPatchInfo ForStorage pinf $$
-  packedString hashName <+> text (encodeValidHash hash) <> packedString newline
+  packedString kwHash <+> text (encodeValidHash hash) <> packedString newline
 
 showParent :: Maybe InventoryHash -> Doc
 showParent (Just hash) =
-  packedString parentName $$ text (encodeValidHash hash) <> packedString newline
+  packedString kwParent $$ text (encodeValidHash hash) <> packedString newline
 showParent Nothing = mempty
 
 -- * Accessing the pristine hash
@@ -139,7 +138,7 @@ showParent Nothing = mempty
 -- or add it if none is present.
 pokePristineHash :: PristineHash -> B.ByteString -> Doc
 pokePristineHash hash inv =
-  invisiblePS pristineName <> text (encodeValidHash hash) $$ invisiblePS (skipPristineHash inv)
+  invisiblePS kwPristine <> text (encodeValidHash hash) $$ invisiblePS (skipPristineHash inv)
 
 takeHash :: B.ByteString -> Maybe (PristineHash, B.ByteString)
 takeHash input = do
@@ -165,20 +164,20 @@ skipPristineHash ps =
 
 tryDropPristineName :: B.ByteString -> Maybe B.ByteString
 tryDropPristineName input =
-    if prefix == pristineName then Just rest else Nothing
+    if prefix == kwPristine then Just rest else Nothing
   where
-    (prefix, rest) = B.splitAt (B.length pristineName) input
+    (prefix, rest) = B.splitAt (B.length kwPristine) input
 
 -- * Key phrases
 
-pristineName :: B.ByteString
-pristineName = BC.pack "pristine:"
+kwPristine :: B.ByteString
+kwPristine = BC.pack "pristine:"
 
-parentName :: B.ByteString
-parentName = BC.pack "Starting with inventory:"
+kwParent :: B.ByteString
+kwParent = BC.pack "Starting with inventory:"
 
-hashName :: B.ByteString
-hashName = BC.pack "hash:"
+kwHash :: B.ByteString
+kwHash = BC.pack "hash:"
 
 newline :: B.ByteString
 newline = BC.pack "\n"

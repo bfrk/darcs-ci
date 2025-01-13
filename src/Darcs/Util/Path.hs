@@ -125,33 +125,35 @@ displayPath p
 realPath :: AnchoredPath -> FilePath
 realPath = anchorPath ""
 
--- | Encode whitespace and backslashes in filenames to a darcs-specific
--- format (numerical representation according to 'ord' surrounded by
--- backslashes).
+-- | 'encodeWhite' translates whitespace in filenames to a darcs-specific
+--   format (numerical representation according to 'ord' surrounded by
+--   backslashes).  Note that backslashes are also escaped since they are used
+--   in the encoding.
 --
 --   > encodeWhite "hello there" == "hello\32\there"
 --   > encodeWhite "hello\there" == "hello\92\there"
 encodeWhite :: FilePath -> String
-encodeWhite = foldr encodesWhiteChar [] where
-  encodesWhiteChar c acc
-    | isSpace c || c == '\\' = '\\' : show (ord c) ++ '\\' : acc
-    | otherwise = c : acc
+encodeWhite (c:cs) | isSpace c || c == '\\' =
+    '\\' : show (ord c) ++ "\\" ++ encodeWhite cs
+encodeWhite (c:cs) = c : encodeWhite cs
+encodeWhite [] = []
 
--- | Decode filenames from the darcs-specific encoding produced by
--- 'encodeWhite'.
+-- | 'decodeWhite' interprets the Darcs-specific \"encoded\" filenames
+--   produced by 'encodeWhite'
 --
 --   > decodeWhite "hello\32\there"  == Right "hello there"
 --   > decodeWhite "hello\92\there"  == Right "hello\there"
 --   > decodeWhite "hello\there"   == Left "malformed filename"
 decodeWhite :: String -> Either String FilePath
-decodeWhite s = go s where
-  go [] = return []
-  go (c:cs)
-    | c == '\\' =
-      case break (== '\\') cs of
-        (theord, '\\':rest) -> (chr (read theord) :) <$> go rest
-        _ -> Left $ "malformed filename: " ++ s
-    | otherwise = (c :) <$> go cs
+decodeWhite cs_ = go cs_ [] False
+ where go "" acc True  = Right (reverse acc) -- if there was a replace, use new string
+       go "" _   False = Right cs_         -- if not, use input string
+       go ('\\':cs) acc _ =
+         case break (=='\\') cs of
+           (theord, '\\':rest) ->
+             go rest (chr (read theord) :acc) True
+           _ -> Left $ "malformed filename: " ++ cs_
+       go (c:cs) acc modified = go cs (c:acc) modified
 
 class FilePathOrURL a where
   toPath :: a -> String

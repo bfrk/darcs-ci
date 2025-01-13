@@ -98,6 +98,9 @@ unsigned :: Integral a => Parser a
 unsigned = lex decimal
 
 {-# INLINE takeTillChar #-}
+-- | This function as well as 'takeTill' (on which it is based) both
+-- succeed when we hit end-of-input. So a more correct name would
+-- be 'takeTillCharOrEOF' (and 'takeTillOrEOF', respectively).
 takeTillChar :: Char -> Parser B.ByteString
 takeTillChar c = takeTill (== c)
 

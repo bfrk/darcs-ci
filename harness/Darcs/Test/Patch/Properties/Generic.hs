@@ -231,7 +231,7 @@ commuteInverses c (Pair (x :> y)) =
                     NotEq -> failed $ redText "y' /= invert iy'" $$ displayPatch iy' $$ displayPatch y'
                     IsEq -> succeeded
 
--- | effect preserving  AB <--> B'A' then effect(AB) = effect(B'A')
+-- | effect preserving: @AB <--> B'A' => apply(AB) = apply(B'A')@
 effectPreserving
   :: ( MightBeEmptyHunk p
      , RepoModel model
@@ -463,7 +463,7 @@ mergeEitherWay (x :\/: y) =
               redText "##y''" $$ displayPatch y'' $$
               redText "##x'' /= x' or y'' /= y'"
 
--- merge (A\/B) = B'/\A' ==> AB' <--> BA'
+-- | @merge (A\/B) = B'/\A' ==> AB' <--> BA'@
 mergeCommute :: (Eq2 p, ShowPatchBasic p, Commute p, Merge p, MightHaveDuplicate p)
              => (p :\/: p) wX wY -> TestResult
 mergeCommute (x :\/: y) =
@@ -509,7 +509,7 @@ mergeCommute (x :\/: y) =
                                     redText "y_" $$ displayPatch y_
 
 
--- | coalesce effect preserving
+-- | Coalescing is effect preserving
 coalesceEffectPreserving
   :: (TestablePrim prim, RepoApply prim)
   => (forall wX wY . (prim :> prim) wX wY -> Maybe (FL prim wX wY))
@@ -539,6 +539,9 @@ coalesceEffectPreserving j (WithState r (Pair (a :> b)) r') =
                                         $$ redText "r_x="
                                         $$ text (showModel r_x)
 
+-- | Just X = coalesce (BC), A(BC) <--> (B'C')A', AX <--> X'A''
+--   ==>
+--   A' = A'', coalesce (B'C') = Just X'
 coalesceCommute
           :: (TestablePrim prim, MightBeEmptyHunk prim)
           => (forall wX wY . (prim :> prim) wX wY -> Maybe (FL prim wX wY))

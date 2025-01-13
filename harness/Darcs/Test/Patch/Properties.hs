@@ -52,7 +52,7 @@ import Darcs.Test.Patch.Utils
 import Darcs.Patch.Witnesses.Maybe
 import Darcs.Patch.Witnesses.Ordered
 import Darcs.Patch.Witnesses.Sealed
-import Darcs.Patch.Witnesses.Eq ( Eq2, unsafeCompare )
+import Darcs.Patch.Witnesses.Eq ( Eq2 )
 import Darcs.Patch.Witnesses.Show
 import Darcs.Patch.FromPrim ( PrimOf, FromPrim(..) )
 import Darcs.Patch.Prim ( PrimPatch, coalesce )
@@ -127,9 +127,9 @@ unit_V1P1 =
   , testCases "commute/recommute" (PropG.recommute commute) Ex1.commutePairs
   , testCases "merge properties: merge either way valid" PropG.mergeEitherWayValid Ex1.mergePairs
   , testCases "merge properties: merge swap" PropG.mergeEitherWay Ex1.mergePairs
-  , testCases "primitive patch IO functions" (Prop1.tShowRead unsafeCompare) Ex1.primitiveTestPatches
-  , testCases "IO functions (test patches)" (Prop1.tShowRead unsafeCompare) Ex1.testPatches
-  , testCases "IO functions (named test patches)" (Prop1.tShowRead unsafeCompare) Ex1.testPatchesNamed
+  , testCases "primitive patch IO functions" PropG.showRead Ex1.primitiveTestPatches
+  , testCases "IO functions (test patches)" PropG.showRead Ex1.testPatches
+  , testCases "IO functions (named test patches)" PropG.showRead Ex1.testPatchesNamed
   , testCases "primitive commute/recommute" (PropG.recommute commute) Ex1.primitiveCommutePairs
   ]
 

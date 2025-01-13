@@ -10,11 +10,11 @@ import Darcs.Patch.Merge ( Merge(..), mergerFLFL )
 
 -- | A witness type that makes the result witness of merging explicit:
 --
---  wB    ----> Merged wA wB
+--  wA    ----> Merged wA wB
 --   ^           ^
 --   |           |
 --   |           |
---  wBase ----> wA
+--  wBase ----> wB
 --
 -- It's quite ad hoc, for example we don't define a type for 'wBase'.
 data Merged wA wB
@@ -28,4 +28,3 @@ typedMerge
 typedMerge (p :\/: q) =
   case mergerFLFL (checkedMerger merge) (p :\/: q) of
     (q' :/\: p') -> (unsafeCoercePEnd q', unsafeCoercePEnd p')
-

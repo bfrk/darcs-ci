@@ -50,7 +50,7 @@ import Darcs.Util.English ( capitalize )
 import Darcs.Util.Global ( darcsLastMessage )
 import Darcs.Util.Path ( FilePathLike, toFilePath )
 import Darcs.Util.Prompt ( PromptConfig(..), askUser, promptChar )
-import Darcs.Util.Printer ( Doc, text, ($+$), vcat, prefixLines, renderString )
+import Darcs.Util.Printer ( Doc, text, ($+$), vcat, prefix, renderString )
 import qualified Darcs.Util.Ratified as Ratified ( hGetContents )
 
 import Darcs.Util.Tree ( Tree )
@@ -224,7 +224,7 @@ getLog m_name has_pipe log_file ask_long m_old chs =
         , text "#"
         , text "# Summary of selected changes:"
         , text "#"
-        , prefixLines (text "#") chs
+        , prefix "# " chs
         ]
 
 editLog :: Named prim wX wY -> IO (Named prim wX wY)

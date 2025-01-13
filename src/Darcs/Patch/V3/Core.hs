@@ -426,7 +426,11 @@ instance PatchInspect prim => PatchInspect (RepoPatchV3 name prim) where
 instance (SignedId name, Eq2 prim, Commute prim) => Eq2 (RepoPatchV3 name prim) where
     (Prim p) =\/= (Prim q) = p =\/= q
     (Conflictor r x cp) =\/= (Conflictor s y cq)
-        | IsEq <- r =\^/= s -- more efficient than IsEq <- r =\/= s
+        | IsEq <- r =\^/= s
+        -- =\^/= is not only more efficient than r =\/= s but also
+        -- semantically correct, since we want to treat different
+        -- orderings of the effect as equal here, same as we do for
+        -- the contexts in cp and cq.
         , x == y
         , cp == cq = IsEq
     _ =\/= _ = NotEq

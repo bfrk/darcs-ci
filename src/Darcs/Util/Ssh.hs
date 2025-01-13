@@ -40,8 +40,7 @@ import Control.Exception ( throwIO, catch, catchJust, SomeException )
 import Control.Monad ( forM_, unless, void, (>=>) )
 
 import qualified Data.ByteString as B (ByteString, hGet, writeFile )
-
-import Data.Map ( Map, empty, insert, lookup )
+import qualified Data.Map as M
 
 import System.IO ( Handle, hSetBinaryMode, hPutStrLn, hGetLine, hFlush )
 import System.IO.Unsafe ( unsafePerformIO )
@@ -145,8 +144,8 @@ type RepoId = (String, String) -- (user@host,repodir)
 -- (the repoid is not in the map). Once a connection fails,
 -- either when trying to establish it or during usage, it will not
 -- be tried again.
-sshConnections :: MVar (Map RepoId (Maybe (MVar Connection)))
-sshConnections = unsafePerformIO $ newMVar empty
+sshConnections :: MVar (M.Map RepoId (Maybe (MVar Connection)))
+sshConnections = unsafePerformIO $ newMVar M.empty
 {-# NOINLINE sshConnections #-}
 
 -- | Wait for an existing connection to become available or, if none
@@ -156,18 +155,18 @@ getSshConnection :: String                       -- ^ remote darcs command
                  -> IO (Maybe (MVar Connection)) -- ^ wrapper for the action
 getSshConnection rdarcs sshfp = modifyMVar sshConnections $ \cmap -> do
   let key = repoid sshfp
-  case lookup key cmap of
+  case M.lookup key cmap of
     Nothing -> do
       -- we have not yet tried with this key, do it now
       mc <- newSshConnection rdarcs sshfp
       case mc of
         Nothing ->
           -- failed, remember it, so we don't try again
-          return (insert key Nothing cmap, Nothing)
+          return (M.insert key Nothing cmap, Nothing)
         Just c -> do
           -- success, remember and use
           v <- newMVar c
-          return (insert key (Just v) cmap, Just v)
+          return (M.insert key (Just v) cmap, Just v)
     Just Nothing ->
       -- we have tried to connect before, don't do it again
       return (cmap, Nothing)
@@ -214,14 +213,14 @@ resetSshConnections =
           terminateProcess ph
           void $ waitForProcess ph
       Nothing -> return ()
-    return empty
+    return M.empty
 
 -- | Mark any connection associated with the given ssh file path
 -- as failed, so it won't be tried again.
 dropSshConnection :: RepoId -> IO ()
 dropSshConnection key = do
   debugMessage $ "Dropping ssh failed connection to " ++ fst key ++ ":" ++ snd key
-  modifyMVar_ sshConnections (return . insert key Nothing)
+  modifyMVar_ sshConnections (return . M.insert key Nothing)
 
 repoid :: SshFilePath -> RepoId
 repoid sshfp = (sshUhost sshfp, sshRepo sshfp)
